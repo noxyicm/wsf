@@ -28,7 +28,9 @@ type Interface interface {
 	Get(key string) interface{}
 	GetString(key string) string
 	GetInt(key string) int
+	GetFloat(key string) float64
 	GetBool(key string) bool
+	GetTime(key string) time.Time
 	Unmarshal(output interface{}) error
 	Prepare(row []sql.RawBytes, columns []*sql.ColumnType) error
 	SetTable(table string) error
@@ -71,18 +73,37 @@ func (r *Row) GetInt(key string) int {
 		switch v.(type) {
 		case int:
 			return v.(int)
+
 		case int8:
 			return int(v.(int8))
+
 		case int16:
 			return int(v.(int16))
+
 		case int32:
 			return int(v.(int32))
+
 		case int64:
 			return int(v.(int64))
 		}
 	}
 
 	return 0
+}
+
+// GetFloat returns a value by its key as float64
+func (r *Row) GetFloat(key string) float64 {
+	if v, ok := r.Data[key]; ok {
+		switch v.(type) {
+		case float64:
+			return v.(float64)
+
+		case float32:
+			return float64(v.(float32))
+		}
+	}
+
+	return 0.0
 }
 
 // GetBool returns a value by its key as bool
@@ -94,6 +115,17 @@ func (r *Row) GetBool(key string) bool {
 	}
 
 	return false
+}
+
+// GetTime returns a value by its key as time
+func (r *Row) GetTime(key string) time.Time {
+	if v, ok := r.Data[key]; ok {
+		if v, ok := v.(time.Time); ok {
+			return v
+		}
+	}
+
+	return time.Time{}
 }
 
 // Unmarshal unmarshals data into struct
@@ -195,7 +227,7 @@ func (r *Row) Prepare(row []sql.RawBytes, columns []*sql.ColumnType) (err error)
 			}
 		} else if columns[i].ScanType() == reflect.TypeOf(time.Time{}) {
 			if string(col) == "" {
-				r.Data[columns[i].Name()] = nil
+				r.Data[columns[i].Name()] = time.Time{}
 			} else {
 				var t time.Time
 				t, err = time.Parse("2006-01-02T15:04:05Z", string(col))

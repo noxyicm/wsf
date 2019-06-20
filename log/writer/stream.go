@@ -3,6 +3,8 @@ package writer
 import (
 	"log"
 	"os"
+	"path/filepath"
+	"wsf/errors"
 	"wsf/log/event"
 	"wsf/log/filter"
 	"wsf/log/formatter"
@@ -63,7 +65,19 @@ func NewStreamWriter(options *Config) (Interface, error) {
 		if err != nil {
 			file, err = os.OpenFile(v.(string), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
-				return nil, err
+				dir, err := filepath.Abs(v.(string))
+				if err != nil {
+					return nil, errors.Wrap(err, "Failed to create log stream writer")
+				}
+
+				if err := os.MkdirAll(dir, 0775); err != nil {
+					return nil, errors.Wrap(err, "Failed to create log stream writer")
+				}
+
+				file, err = os.OpenFile(v.(string), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err != nil {
+					return nil, errors.Wrap(err, "Failed to create log stream writer")
+				}
 			}
 		}
 

@@ -1,7 +1,6 @@
 package resource
 
 import (
-	"fmt"
 	"reflect"
 	"sync"
 	"wsf/config"
@@ -106,7 +105,7 @@ func (r *resourceregistry) Init(cfg config.Config) error {
 				continue
 			}
 
-			return errors.Wrap(err, fmt.Sprintf("[%s]", rs.name))
+			return err
 		} else if ok {
 			rs.setStatus(StatusOK)
 		} else {

@@ -209,7 +209,9 @@ func NewFileBackendCache(options config.Config) (bi Interface, err error) {
 	}
 
 	if _, err := os.Stat(b.Options.Dir); err != nil {
-		return nil, errors.Wrap(err, "Failed to create file backend cache object")
+		if err := os.MkdirAll(b.Options.Dir, 0775); err != nil {
+			return nil, errors.Wrap(err, "Failed to create file backend cache object")
+		}
 	}
 
 	return b, nil

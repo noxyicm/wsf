@@ -14,7 +14,6 @@ import (
 	"wsf/controller/response"
 	"wsf/crypt"
 	"wsf/errors"
-	"wsf/registry"
 )
 
 // Public constants
@@ -283,63 +282,6 @@ func CreateRequestToken(appID int, appSecret string) string {
 	mac.Write([]byte(strconv.Itoa(appID)))
 	hashhmac := mac.Sum(nil)
 	return base64.URLEncoding.EncodeToString(append([]byte(strconv.Itoa(appID)+":"), hashhmac...))
-}
-
-// NewTokenFromRequest creates a new token from request token or loads existsing
-func NewTokenFromRequest(requestToken string, storage backend.Interface) (*Token, error) {
-	//decoded, err := base64.StdEncoding.DecodeString(requestToken)
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	//parts := strings.Split(string(decoded), ":")
-
-	//applicantsMD := applicants
-	//auditor, err := applicantsMD.Get(parts[0])
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	//if (empty($auditor))
-	//	return self::error(self::TOKEN_INVALID_AUDIENCE);
-
-	//mac := hmac.New(sha256.New, []byte(auditor.Secret))
-	//mac.Write([]byte(auditor.ID))
-	//hashhmac := mac.Sum(nil)
-	//if !hmac.Equal([]byte(parts[1]), hashhmac) {
-	//	return nil, ErrorInvalidHash
-	//}
-
-	t := new(Token)
-	t.params = make(map[string]interface{})
-
-	//t.SetToken(auditor.ID)
-	//t.SetTokenSecret(auditor.Secret)
-	t.SetParams(map[string]interface{}{
-		"issuer": config.App.GetString("Domain"),
-		//"audience"; auditor.ID,
-		"expire": time.Now().Unix() + TokenLifeTime,
-		//"applicant": session.ID,
-	})
-
-	if _, err := t.CreateTokenID(); err != nil {
-		return nil, err
-	}
-
-	if storage != nil {
-		t.storage = storage
-	} else {
-		var err error
-		t.storage, err = backend.NewBackendCache("backend", nil)
-		if err != nil {
-			return nil, err
-		}
-
-		//t.storage.SetDirectives()
-		registry.Set(StorageName, t.storage)
-	}
-
-	return t, nil
 }
 
 // NewToken creates a new token from request token or loads existsing

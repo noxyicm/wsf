@@ -109,7 +109,7 @@ func (s *server) Init(cfg config.Config) error {
 				continue
 			}
 
-			return errors.Wrap(err, fmt.Sprintf("[%s]", b.name))
+			return err
 		} else if ok {
 			b.setStatus(StatusOK)
 		} else {

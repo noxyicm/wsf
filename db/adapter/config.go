@@ -5,6 +5,7 @@ import (
 	"wsf/config"
 	"wsf/db/connection"
 	"wsf/db/dbselect"
+	"wsf/db/table/row"
 	"wsf/db/table/rowset"
 	"wsf/db/transaction"
 )
@@ -30,6 +31,7 @@ type Config struct {
 	Transaction           *transaction.Config
 	Select                *dbselect.Config
 	Rowset                *rowset.Config
+	Row                   *row.Config
 }
 
 // Populate populates Config values using given Config source

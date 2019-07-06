@@ -23,9 +23,9 @@ func init() {
 type Interface interface {
 	Load(id string, testCacheValidity bool) ([]byte, error)
 	Test(id string) bool
-	Save(data []byte, id string, tags []string, specificLifetime int) error
+	Save(data []byte, id string, tags []string, specificLifetime int64) error
 	Remove(id string) error
-	Clean(mode int, tags []string) error
+	Clear(mode int64, tags []string) error
 }
 
 // NewBackendCache creates a new backend cache specified by type
@@ -65,7 +65,7 @@ func (b *Backend) Test(id string) bool {
 }
 
 // Save data by key
-func (b *Backend) Save(data []byte, id string, tags []string, specificLifetime int) error {
+func (b *Backend) Save(data []byte, id string, tags []string, specificLifetime int64) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -81,7 +81,7 @@ func (b *Backend) Remove(id string) error {
 }
 
 // Clean stored data by tags
-func (b *Backend) Clean(mode int, tags []string) error {
+func (b *Backend) Clear(mode int64, tags []string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 

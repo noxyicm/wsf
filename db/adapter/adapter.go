@@ -11,6 +11,7 @@ import (
 	"wsf/config"
 	"wsf/db/connection"
 	"wsf/db/dbselect"
+	"wsf/db/table/row"
 	"wsf/db/table/rowset"
 	"wsf/db/transaction"
 	"wsf/errors"
@@ -46,19 +47,20 @@ type Interface interface {
 	Connection() (connection.Interface, error)
 	Select() (dbselect.Interface, error)
 	Query(sql dbselect.Interface) (rowset.Interface, error)
+	QueryRow(sql dbselect.Interface) (row.Interface, error)
 	//Profiler()
 	Insert(table string, data map[string]interface{}) (int, error)
 	Update(table string, data map[string]interface{}, cond map[string]interface{}) (bool, error)
 	//Delete
 	//Select
 	//FetchAll
-	//FetchRow
 	//FetchAssoc
 	//FetchCol
 	//FetchPairs
 	//FetchOne
 	LastInsertID() int
 	BeginTransaction() (transaction.Interface, error)
+	DescribeTable(table string, schema string) (map[string]*ColumnMetadata, error)
 	Quote(interface{}) string
 	QuoteIdentifier(interface{}, bool) string
 	QuoteIdentifierAs(ident interface{}, alias string, auto bool) string
@@ -69,6 +71,8 @@ type Interface interface {
 	SupportsParameters(param string) bool
 	Options() *Config
 	SetOptions(options *Config) Interface
+	FormatDSN() string
+	Limit(sql string, count int, offset int) string
 }
 
 type adapter struct {
@@ -121,17 +125,6 @@ func (a *adapter) Connection() (conn connection.Interface, err error) {
 	return conn, nil
 }
 
-// Select creates a new adapter specific select object
-func (a *adapter) Select() (dbselect.Interface, error) {
-	sel, err := dbselect.NewSelect(a.options.Select.Type, a.options.Select)
-	if err != nil {
-		return nil, err
-	}
-
-	sel.SetAdapter(a)
-	return sel, nil
-}
-
 // Query runs a query
 func (a *adapter) Query(sql dbselect.Interface) (rowset.Interface, error) {
 	if a.db == nil {
@@ -161,6 +154,61 @@ func (a *adapter) Query(sql dbselect.Interface) (rowset.Interface, error) {
 	}
 
 	return rst, nil
+}
+
+// QueryRow runs a query
+func (a *adapter) QueryRow(dbs dbselect.Interface) (row.Interface, error) {
+	if a.db == nil {
+		return nil, errors.New("Database is not initialized")
+	}
+
+	ctx, cancel := context.WithTimeout(a.ctx, time.Duration(a.queryTimeout)*time.Second)
+	defer cancel()
+
+	if err := dbs.Err(); err != nil {
+		return nil, errors.Wrap(err, "Database query Error")
+	}
+
+	rows, err := a.db.QueryContext(ctx, dbs.Assemble(), dbs.Binds()...)
+	if err != nil {
+		return nil, errors.Wrap(err, "Database query Error")
+	}
+	defer rows.Close()
+
+	columns, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, errors.Wrap(err, "Database query Error")
+	}
+
+	values := make([]sql.RawBytes, len(columns))
+	scanArgs := make([]interface{}, len(values))
+	for i := range values {
+		scanArgs[i] = &values[i]
+	}
+
+	for rows.Next() {
+		err = rows.Scan(scanArgs...)
+		if err != nil {
+			return nil, err
+		}
+
+		rw, err := row.NewRow(a.options.Row.Type, a.options.Row)
+		if err != nil {
+			return nil, errors.Wrap(err, "Database query Error")
+		}
+
+		if err := rw.Prepare(values, columns); err != nil {
+			return nil, err
+		}
+
+		return rw, nil
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "Database query Error")
+	}
+
+	return nil, nil
 }
 
 // LastInsertID returns the last insert query ID
@@ -272,7 +320,7 @@ func (a *adapter) QuoteIdentifierAs(ident interface{}, alias string, auto bool) 
 		}
 
 		matches := []string{}
-		reg, err := regexp.Compile(`(` + strings.ToLower(strings.Join(a.UnquoteableFunctions, "|")) + `)\((.+?)\)`)
+		reg, err := regexp.Compile(`(?i)(` + strings.ToLower(strings.Join(a.UnquoteableFunctions, "|")) + `)[\s]*\((.+?)\)`)
 		if err == nil {
 			matches = reg.FindStringSubmatch(v)
 		}
@@ -303,7 +351,7 @@ func (a *adapter) QuoteIdentifierAs(ident interface{}, alias string, auto bool) 
 						spliters = append(spliters, regexp.QuoteMeta(spliter))
 					}
 
-					reg, err := regexp.Compile(`(.+?)([` + strings.Join(spliters, "|") + `]+)(.+)`)
+					reg, err := regexp.Compile(`(?i)([^` + strings.Join(spliters, "") + `]*)([` + strings.Join(spliters, "]|[") + `]+)([^` + strings.Join(spliters, "") + `]*)`)
 					if err == nil {
 						subsplit = reg.FindAllStringSubmatch(segment.(string), -1)
 						for _, subsplitmatch := range subsplit {
@@ -314,7 +362,7 @@ func (a *adapter) QuoteIdentifierAs(ident interface{}, alias string, auto bool) 
 
 								split = append(split, match)
 							}
-							break
+							//break
 						}
 					}
 
@@ -406,7 +454,7 @@ func (a *adapter) quoteIdentifier(ident string, auto bool) string {
 func (a *adapter) quoteIdentifierSpec(idents []string, auto bool) string {
 	if !auto || a.autoQuoteIdentifiers {
 		for key, segment := range idents {
-			if !utils.InSSlice(strings.Trim(segment, " "), a.Unquoteable) && segment != "" && segment != " " {
+			if !utils.InSSlice(strings.TrimSpace(segment), a.Unquoteable) && segment != "" && segment != " " {
 				segment = strings.ReplaceAll(segment, a.QuoteIdentifierSymbol(), "")
 				if segment[0:1] == `:` || segment[0:1] == `'` || segment[0:1] == `\\` || segment[0:1] == `{` || utils.InSSlice(segment[0:1], []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}) {
 					idents[key] = segment

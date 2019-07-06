@@ -130,6 +130,7 @@ type AdapterInterface interface {
 	QuoteInto(text string, value interface{}, count int) string
 	QuoteColumnAs(ident interface{}, alias string, auto bool) string
 	QuoteTableAs(ident interface{}, alias string, auto bool) string
+	Limit(sql string, count int, offset int) string
 	SupportsParameters(param string) bool
 }
 
@@ -278,6 +279,13 @@ func (s *Select) OrWhere(cond string, value interface{}) *Select {
 	return s
 }
 
+// Limit sets a limit count and offset to the query
+func (s *Select) Limit(count int, offset int) *Select {
+	s.parts.LimitCount = count
+	s.parts.LimitOffset = offset
+	return s
+}
+
 // Binds returns binds
 func (s *Select) Binds() []interface{} {
 	binds := make([]interface{}, len(s.bind))
@@ -317,7 +325,7 @@ func (s *Select) Assemble() string {
 	//sql = s.renderGroup(sql)
 	//sql = s.renderHaving(sql)
 	//sql = s.renderOrder(sql)
-	//sql = s.renderFLimitCount(sql)
+	sql = s.renderLimit(sql)
 	//sql = s.renderLimitOffset(sql)
 	//sql = s.renderForupdate(sql)
 
@@ -657,6 +665,27 @@ func (s *Select) renderFrom(sql string) string {
 func (s *Select) renderWhere(sql string) string {
 	if len(s.parts.From) > 0 && len(s.parts.Where) > 0 {
 		sql = sql + " " + SQLWhere + " " + strings.Join(s.parts.Where, " ")
+	}
+
+	return sql
+}
+
+// Render LIMIT clause
+func (s *Select) renderLimit(sql string) string {
+	count := 0
+	offset := 0
+
+	if s.parts.LimitOffset != nil && s.parts.LimitOffset.(int) > 0 {
+		offset = s.parts.LimitOffset.(int)
+		count = 100000000000000
+	}
+
+	if s.parts.LimitCount != nil && s.parts.LimitCount.(int) > 0 {
+		count = s.parts.LimitCount.(int)
+	}
+
+	if count > 0 {
+		sql = strings.TrimSpace(s.adapter.Limit(sql, count, offset))
 	}
 
 	return sql

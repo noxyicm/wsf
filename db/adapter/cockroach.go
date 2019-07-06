@@ -73,6 +73,17 @@ func (a *Cockroach) Options() *Config {
 	return a.options
 }
 
+// Select creates a new adapter specific select object
+func (a *Cockroach) Select() (dbselect.Interface, error) {
+	sel, err := dbselect.NewSelect(a.options.Select.Type, a.options.Select)
+	if err != nil {
+		return nil, err
+	}
+
+	sel.SetAdapter(a)
+	return sel, nil
+}
+
 // Insert inserts new row into table
 func (a *Cockroach) Insert(table string, data map[string]interface{}) (int, error) {
 	cols := []string{}
@@ -185,6 +196,121 @@ func (a *Cockroach) Update(table string, data map[string]interface{}, cond map[s
 	}
 
 	return true, nil
+}
+
+// DescribeTable returns information about columns in table
+func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*ColumnMetadata, error) {
+	var sql string
+	if schema != "" {
+		sql = "SELECT * FROM information_schema.columns WHERE table_name = " + a.QuoteIdentifier(table, true) + " AND table_schema = " + a.QuoteIdentifier(schema, true) + "; SELECT constraint_name, table_schema, table_name, column_name FROM information_schema.key_column_usage WHERE table_name = " + a.QuoteIdentifier(table, true) + " AND table_schema = " + a.QuoteIdentifier(schema, true) + ";"
+	} else {
+		sql = "SELECT * FROM information_schema.columns WHERE table_name = " + a.QuoteIdentifier(table, true) + "; SELECT constraint_name, table_schema, table_name, column_name FROM information_schema.key_column_usage WHERE table_name = " + a.QuoteIdentifier(table, true) + ";"
+	}
+
+	ctx, cancel := context.WithTimeout(a.ctx, time.Duration(a.pingTimeout)*time.Second)
+	defer cancel()
+
+	stmt, err := a.db.PrepareContext(ctx, sql)
+	if err != nil {
+		return nil, err
+	}
+	defer stmt.Close()
+
+	ctx, cancel = context.WithTimeout(a.ctx, time.Duration(a.queryTimeout)*time.Second)
+	defer cancel()
+
+	rows, err := stmt.QueryContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	desc := make(map[string]*ColumnMetadata)
+	for rows.Next() {
+		def := map[string]interface{}{
+			"table_catalog":            "",
+			"table_schema":             "",
+			"table_name":               "",
+			"column_name":              "",
+			"ordinal_position":         0,
+			"column_default":           nil,
+			"is_nullable":              "NO",
+			"data_type":                "",
+			"character_maximum_length": 0,
+			"character_octet_length":   0,
+			"numeric_precision":        0,
+			"numeric_scale":            0,
+			"datetime_precision":       0,
+			"character_set_name":       "",
+		}
+
+		if err := rows.Scan(&def); err != nil {
+			return nil, err
+		}
+
+		row := &ColumnMetadata{
+			TableSchema:  def["TABLE_CATALOG"].(string),
+			TableName:    def["TABLE_NAME"].(string),
+			Name:         def["COLUMN_NAME"].(string),
+			Default:      def["COLUMN_DEFAULT"],
+			Position:     def["ORDINAL_POSITION"].(int64),
+			Type:         def["DATA_TYPE"].(string),
+			Length:       def["CHARACTER_MAXIMUM_LENGTH"].(int64),
+			Precision:    def["NUMERIC_PRECISION"].(int64),
+			Scale:        def["NUMERIC_SCALE"].(int64),
+			CharacterSet: def["CHARACTER_SET_NAME"].(string),
+			Collation:    def["COLLATION_NAME"].(string),
+			ColumnType:   def["COLUMN_TYPE"].(string),
+			ColumnKey:    def["COLUMN_KEY"].(string),
+			Extra:        def["EXTRA"].(string),
+		}
+
+		if def["IS_NULLABLE"].(string) == "YES" {
+			row.IsNullable = true
+		}
+
+		desc[def["COLUMN_NAME"].(string)] = row
+	}
+
+	if !rows.NextResultSet() {
+		return nil, errors.Errorf("Expected more result sets: %v", rows.Err())
+	}
+
+	var i int64
+	for rows.Next() {
+		def := map[string]string{
+			"constraint_name": "",
+			"table_schema":    "",
+			"table_name":      "",
+			"column_name":     "",
+		}
+
+		if err := rows.Scan(&def); err != nil {
+			return nil, err
+		}
+
+		if def["constraint_name"] == "primary" {
+			desc[def["column_name"]].Primary = true
+			desc[def["column_name"]].PrimaryPosition = i
+			i++
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return desc, nil
+}
+
+// Limit is
+func (a *Cockroach) Limit(sql string, count int, offset int) string {
+	return sql
+}
+
+// FormatDSN returns a formated dsn string
+func (a *Cockroach) FormatDSN() string {
+	return a.driverConfig.FormatDSN()
 }
 
 // NewCockroachAdapter creates a new CockroachDB adapter

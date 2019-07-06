@@ -13,7 +13,7 @@ type ManagerConfig struct {
 	SessionIDLength         int                 `json:"sessionIDLength"`
 	SessionIDPrefix         string              `json:"sessionIDPrefix"`
 	SessionNameInHTTPHeader string              `json:"SessionNameInHTTPHeader"`
-	SessionLifeTime         int                 `json:"sessionLifeTime"`
+	SessionLifeTime         int64               `json:"sessionLifeTime"`
 	HTTPOnly                bool                `json:"HTTPOnly"`
 	Secure                  bool                `json:"secure"`
 	EnableSetCookie         bool                `json:"enableSetCookie,omitempty"`

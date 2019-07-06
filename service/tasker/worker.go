@@ -252,7 +252,8 @@ Mainloop:
 							} else {
 								s.Logger.Debugf("[Tasker] Task #%d scheduled for %s. Ignoring", nil, task.ID, exectime.Format("15:04:05"))
 							}
-						} else if task.Date.Equal(now.Round(time.Second)) {
+							//} else if task.Date.Equal(now.Round(time.Second)) {
+						} else if now.After(task.Date) {
 							go handlers[task.Handler].StartRoutine(s.ctx, task, s.OutChan)
 							tasksInRoutines = append(tasksInRoutines, task.ID)
 						} else {

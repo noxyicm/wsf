@@ -1,4 +1,4 @@
-package backend
+package cache
 
 import (
 	"wsf/config"
@@ -6,12 +6,23 @@ import (
 
 // Config represents dispatcher configuration
 type Config struct {
-	Type          string
-	Serialization bool
+	Priority                int
+	Enable                  bool
+	AutomaticSerialization  bool
+	AutomaticCleaningFactor int64
+	ExtendedBackend         bool
+	WriteControl            bool
+	CacheIDPrefix           string
+	Backend                 config.Config
+	Logger                  config.Config
+	//Frontend         map[string]*frontend.Config
 }
 
 // Populate populates Config values using given Config source
 func (c *Config) Populate(cfg config.Config) error {
+	c.Backend = cfg.Get("backend")
+	c.Logger = cfg.Get("log")
+
 	if err := cfg.Unmarshal(c); err != nil {
 		return err
 	}
@@ -21,8 +32,9 @@ func (c *Config) Populate(cfg config.Config) error {
 
 // Defaults sets configuration default values
 func (c *Config) Defaults() error {
-	c.Type = "default"
-	c.Serialization = true
+	c.Priority = 20
+	c.Enable = true
+
 	return nil
 }
 

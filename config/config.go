@@ -37,6 +37,8 @@ var (
 // Config is general config interface
 type Config interface {
 	Get(name string) Config
+	GetInt(name string) int
+	GetIntDefault(name string, def int) int
 	GetString(name string) string
 	GetStringDefault(name string, def string) string
 	GetBool(key string) bool
@@ -76,6 +78,21 @@ func (c *Bridge) Get(key string) Config {
 	}
 
 	return &Bridge{sub}
+}
+
+// GetInt returns an int value
+func (c *Bridge) GetInt(key string) int {
+	return c.v.GetInt(key)
+}
+
+// GetIntDefault returns a n int value or default value if empty
+func (c *Bridge) GetIntDefault(key string, def int) int {
+	v := c.v.Get(key)
+	if v == nil {
+		return def
+	}
+
+	return v.(int)
 }
 
 // GetString returns a string value

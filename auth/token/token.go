@@ -32,7 +32,7 @@ const (
 	StateInvalidApplicantHost
 	StateInvalidHash
 
-	TokenLifeTime = 864000
+	TokenLifeTime int64 = 864000
 )
 
 // Public variables

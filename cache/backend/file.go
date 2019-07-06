@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 	"wsf/config"
 	"wsf/errors"
 	"wsf/utils"
@@ -50,10 +51,23 @@ func (b *File) Load(id string, testCacheValidity bool) ([]byte, error) {
 	}
 
 	if n == 0 {
-		return nil, errors.New("Load failed. File is empty")
+		return []byte{}, nil
 	}
 
-	return d, nil
+	fdt := FileData{}
+	if err := json.Unmarshal(d, &fdt); err != nil {
+		return nil, errors.Wrap(err, "Unable to deserialize data")
+	}
+
+	if fdt.Expires != 0 && time.Now().After(time.Unix(fdt.Expires, 0)) {
+		if err := b.Remove(id); err != nil {
+			return nil, err
+		}
+
+		return []byte{}, nil
+	}
+
+	return fdt.Data, nil
 }
 
 // Test if key exists
@@ -70,9 +84,24 @@ func (b *File) Test(id string) bool {
 }
 
 // Save data by key
-func (b *File) Save(data []byte, id string, tags []string, specificLifetime int) error {
+func (b *File) Save(data []byte, id string, tags []string, specificLifetime int64) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	var expires int64
+	if specificLifetime != 0 {
+		expires = time.Now().Unix() + specificLifetime
+	}
+
+	fdt := FileData{
+		Expires: expires,
+		Data:    data,
+	}
+
+	serialized, err := json.Marshal(fdt)
+	if err != nil {
+		return errors.Wrap(err, "Unable to serialize data")
+	}
 
 	filePath := b.Options.Dir + "/" + id + b.Options.Suffix
 	fd, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0664)
@@ -82,7 +111,7 @@ func (b *File) Save(data []byte, id string, tags []string, specificLifetime int)
 	defer fd.Close()
 
 	fd.Truncate(0)
-	if _, err := fd.WriteAt(data, 0); err != nil {
+	if _, err := fd.WriteAt(serialized, 0); err != nil {
 		return errors.Wrap(err, "Save failed")
 	}
 
@@ -187,8 +216,8 @@ func (b *File) Remove(id string) error {
 	return nil
 }
 
-// Clean stored data by tags
-func (b *File) Clean(mode int, tags []string) error {
+// Clear stored data by tags
+func (b *File) Clear(mode int64, tags []string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -215,4 +244,10 @@ func NewFileBackendCache(options config.Config) (bi Interface, err error) {
 	}
 
 	return b, nil
+}
+
+// FileData holds a stored cache data
+type FileData struct {
+	Expires int64
+	Data    []byte
 }

@@ -169,7 +169,7 @@ func (s *server) Serve() error {
 			defer b.setStatus(StatusStopped)
 
 			if err := b.service.Serve(); err != nil {
-				done <- errors.Wrap(err, fmt.Sprintf("[%s]", b.name))
+				done <- err
 			} else {
 				done <- nil
 			}

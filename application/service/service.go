@@ -3,9 +3,8 @@ package service
 import (
 	"sync"
 	"wsf/config"
+	"wsf/errors"
 	"wsf/service"
-
-	"github.com/pkg/errors"
 )
 
 const (

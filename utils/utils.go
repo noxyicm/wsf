@@ -299,6 +299,17 @@ func InISlice(s int, sl []int) bool {
 	return false
 }
 
+// InI64Slice returns true if slice contains provided int64
+func InI64Slice(s int64, sl []int64) bool {
+	for _, v := range sl {
+		if v == s {
+			return true
+		}
+	}
+
+	return false
+}
+
 // ShiftISlice pops first element of slice and returns it
 func ShiftISlice(sl *[]int) (int, bool) {
 	s := *sl
@@ -390,6 +401,67 @@ func SKey(value string, sl []string) (int, bool) {
 	}
 
 	return 0, false
+}
+
+// EqualISlice tells whether a and b contain the same elements
+func EqualISlice(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// EqualSSlice tells whether a and b contain the same elements
+func EqualSSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// EqualBSlice tells whether a and b contain the same elements
+func EqualBSlice(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// IntersectSSlice computes slice intersections
+func IntersectSSlice(a, b []string) ([]string, bool) {
+	s := []string{}
+	has := false
+	for _, aV := range a {
+		for _, bV := range b {
+			if aV == bV {
+				s = append(s, aV)
+				has = true
+			}
+		}
+	}
+
+	return s, has
 }
 
 // Addslashes quote string with slashes

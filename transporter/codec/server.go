@@ -1,13 +1,12 @@
 package codec
 
 import (
-	"docus/transporter"
 	"encoding/json"
 	"io"
 	"net/rpc"
 	"reflect"
-
-	"github.com/pkg/errors"
+	"wsf/errors"
+	"wsf/transporter"
 )
 
 // Server is a request handler for socket transporter

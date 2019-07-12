@@ -1,19 +1,19 @@
-package transaction
+package db
 
 import (
 	"database/sql"
 	"wsf/config"
 )
 
-// Config represents transaction configuration
-type Config struct {
+// TransactionConfig represents transaction configuration
+type TransactionConfig struct {
 	Type           string
 	IsolationLevel sql.IsolationLevel
 	ReadOnly       bool
 }
 
 // Populate populates Config values using given Config source
-func (c *Config) Populate(cfg config.Config) error {
+func (c *TransactionConfig) Populate(cfg config.Config) error {
 	if err := cfg.Unmarshal(c); err != nil {
 		return err
 	}
@@ -22,7 +22,7 @@ func (c *Config) Populate(cfg config.Config) error {
 }
 
 // Defaults sets configuration default values
-func (c *Config) Defaults() error {
+func (c *TransactionConfig) Defaults() error {
 	c.Type = "default"
 	c.IsolationLevel = sql.LevelDefault
 	c.ReadOnly = false
@@ -30,6 +30,6 @@ func (c *Config) Defaults() error {
 }
 
 // Valid validates the configuration
-func (c *Config) Valid() error {
+func (c *TransactionConfig) Valid() error {
 	return nil
 }

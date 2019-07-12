@@ -1,20 +1,26 @@
-package rowset
+package db
 
 import (
 	"wsf/config"
-	"wsf/db/table/row"
 )
 
-// Config defines set of statement variables
-type Config struct {
-	Type string
-	Row  *row.Config
+// RowsetConfig defines set of rowset variables
+type RowsetConfig struct {
+	Type      string
+	Tbl       string
+	Connected bool
+	Pointer   uint32
+	Cnt       uint32
+	Pointing  bool
+	Stored    bool
+	ReadOnly  bool
+	Row       *RowConfig
 }
 
 // Populate populates Config values using given Config source
-func (c *Config) Populate(cfg config.Config) error {
+func (c *RowsetConfig) Populate(cfg config.Config) error {
 	if c.Row == nil {
-		c.Row = &row.Config{}
+		c.Row = &RowConfig{}
 	}
 
 	c.Row.Defaults()
@@ -30,16 +36,16 @@ func (c *Config) Populate(cfg config.Config) error {
 }
 
 // Defaults sets configuration default values
-func (c *Config) Defaults() error {
+func (c *RowsetConfig) Defaults() error {
 	c.Type = "default"
 
-	c.Row = &row.Config{}
+	c.Row = &RowConfig{}
 	c.Row.Defaults()
 
 	return nil
 }
 
 // Valid validates the configuration
-func (c *Config) Valid() error {
+func (c *RowsetConfig) Valid() error {
 	return nil
 }

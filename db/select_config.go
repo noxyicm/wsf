@@ -1,14 +1,14 @@
-package row
+package db
 
 import "wsf/config"
 
-// Config defines set of statement variables
-type Config struct {
+// SelectConfig defines set of select variables
+type SelectConfig struct {
 	Type string
 }
 
 // Populate populates Config values using given Config source
-func (c *Config) Populate(cfg config.Config) error {
+func (c *SelectConfig) Populate(cfg config.Config) error {
 	if err := cfg.Unmarshal(c); err != nil {
 		return err
 	}
@@ -17,12 +17,12 @@ func (c *Config) Populate(cfg config.Config) error {
 }
 
 // Defaults sets configuration default values
-func (c *Config) Defaults() error {
+func (c *SelectConfig) Defaults() error {
 	c.Type = "default"
 	return nil
 }
 
 // Valid validates the configuration
-func (c *Config) Valid() error {
+func (c *SelectConfig) Valid() error {
 	return nil
 }

@@ -1,43 +1,42 @@
-package rowset
+package db
 
 import (
 	"database/sql"
 	"sync"
-	"wsf/db/table/row"
 	"wsf/errors"
 )
 
 const (
-	// TYPEDefault is a type id of rowset class
-	TYPEDefault = "default"
+	// TYPEDefaultRowset is a type id of rowset class
+	TYPEDefaultRowset = "default"
 )
 
 var (
-	buildHandlers = map[string]func(*Config) (Interface, error){}
+	buildRowsetHandlers = map[string]func(*RowsetConfig) (Rowset, error){}
 )
 
 func init() {
-	Register(TYPEDefault, NewDefaultRowset)
+	RegisterRowset(TYPEDefaultRowset, NewDefaultRowset)
 }
 
-// Interface represents rows interface
-type Interface interface {
-	Get() row.Interface
-	GetOffset(key int) row.Interface
+// Rowset represents rows interface
+type Rowset interface {
+	Get() Row
+	GetOffset(key int) Row
 	Next() bool
 	Prepare(rows *sql.Rows) error
 	SetRowType(typ string) error
-	SetTable(table string) error
-	Table() string
+	SetTable(table Table) error
+	Table() Table
 	Count() int
 	IsEmpty() bool
 }
 
-// Rowset holds and operates over rows
-type Rowset struct {
-	Options   *Config
-	Data      []row.Interface
-	Tbl       string
+// DefaultRowset holds and operates over rows
+type DefaultRowset struct {
+	Options   *RowsetConfig
+	Data      []Row
+	Tbl       Table
 	Connected bool
 	Pointer   uint32
 	Cnt       uint32
@@ -48,12 +47,12 @@ type Rowset struct {
 }
 
 // Get returns row
-func (r *Rowset) Get() row.Interface {
+func (r *DefaultRowset) Get() Row {
 	return r.Data[r.Pointer]
 }
 
 // GetOffset returns row in a specific offset
-func (r *Rowset) GetOffset(key int) row.Interface {
+func (r *DefaultRowset) GetOffset(key int) Row {
 	if key < 0 && key >= int(r.Cnt) {
 		return nil
 	}
@@ -62,7 +61,7 @@ func (r *Rowset) GetOffset(key int) row.Interface {
 }
 
 // Next moves pointer further
-func (r *Rowset) Next() bool {
+func (r *DefaultRowset) Next() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -90,7 +89,7 @@ func (r *Rowset) Next() bool {
 }
 
 // Prepare initializes rowset
-func (r *Rowset) Prepare(rows *sql.Rows) error {
+func (r *DefaultRowset) Prepare(rows *sql.Rows) error {
 	columns, err := rows.ColumnTypes()
 	if err != nil {
 		return errors.Wrap(err, "Database rowset result Error")
@@ -108,7 +107,7 @@ func (r *Rowset) Prepare(rows *sql.Rows) error {
 			return err
 		}
 
-		row, err := row.NewRow(r.Options.Row.Type, r.Options.Row)
+		row, err := NewRow(r.Options.Row.Type, r.Options.Row)
 		if err != nil {
 			return errors.Wrap(err, "Database rowset result Error")
 		}
@@ -129,37 +128,37 @@ func (r *Rowset) Prepare(rows *sql.Rows) error {
 }
 
 // SetRowType sets the this rowset row
-func (r *Rowset) SetRowType(typ string) error {
+func (r *DefaultRowset) SetRowType(typ string) error {
 	r.Options.Row.Type = typ
 	return nil
 }
 
 // SetTable sets the table object
-func (r *Rowset) SetTable(table string) error {
+func (r *DefaultRowset) SetTable(table Table) error {
 	r.Tbl = table
 	return nil
 }
 
 // Table returns table
-func (r *Rowset) Table() string {
+func (r *DefaultRowset) Table() Table {
 	return r.Tbl
 }
 
 // Count returns count of rows
-func (r *Rowset) Count() int {
+func (r *DefaultRowset) Count() int {
 	return int(r.Cnt)
 }
 
 // IsEmpty returns true if rowset is empty
-func (r *Rowset) IsEmpty() bool {
+func (r *DefaultRowset) IsEmpty() bool {
 	return r.Cnt == 0
 }
 
 // NewDefaultRowset creates default rowset
-func NewDefaultRowset(options *Config) (Interface, error) {
-	return &Rowset{
+func NewDefaultRowset(options *RowsetConfig) (Rowset, error) {
+	return &DefaultRowset{
 		Options:   options,
-		Data:      make([]row.Interface, 0),
+		Data:      make([]Row, 0),
 		Connected: false,
 		Pointer:   0,
 		Cnt:       0,
@@ -168,15 +167,30 @@ func NewDefaultRowset(options *Config) (Interface, error) {
 }
 
 // NewRowset creates a new rowset
-func NewRowset(rowsetType string, options *Config) (Interface, error) {
-	if f, ok := buildHandlers[rowsetType]; ok {
+func NewRowset(rowsetType string, options *RowsetConfig) (Rowset, error) {
+	if f, ok := buildRowsetHandlers[rowsetType]; ok {
 		return f(options)
 	}
 
 	return nil, errors.Errorf("Unrecognized database rowset type \"%v\"", rowsetType)
 }
 
-// Register registers a handler for database rowset creation
-func Register(rowsetType string, handler func(*Config) (Interface, error)) {
-	buildHandlers[rowsetType] = handler
+// NewEmptyRowset creates a new empty rowset
+func NewEmptyRowset(rowsetType string) Rowset {
+	options := &RowsetConfig{}
+	options.Defaults()
+
+	if f, ok := buildRowsetHandlers[rowsetType]; ok {
+		if rowset, err := f(options); err == nil {
+			return rowset
+		}
+	}
+
+	rowset, _ := NewDefaultRowset(options)
+	return rowset
+}
+
+// RegisterRowset registers a handler for database rowset creation
+func RegisterRowset(rowsetType string, handler func(*RowsetConfig) (Rowset, error)) {
+	buildRowsetHandlers[rowsetType] = handler
 }

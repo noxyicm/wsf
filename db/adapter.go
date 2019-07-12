@@ -1,4 +1,4 @@
-package adapter
+package db
 
 import (
 	"context"
@@ -9,22 +9,12 @@ import (
 	"strings"
 	"time"
 	"wsf/config"
-	"wsf/db/connection"
-	"wsf/db/dbselect"
-	"wsf/db/table/row"
-	"wsf/db/table/rowset"
-	"wsf/db/transaction"
 	"wsf/errors"
 	"wsf/utils"
 )
 
 // Public constants
 const (
-	SQLAs      = "as"
-	SQLAnd     = "and"
-	SQLOr      = "or"
-	SQLBetween = "between"
-
 	LOGInsert     = "insert"
 	LOGPreUpdate  = "preupdate"
 	LOGPostUpdate = "preupdate"
@@ -33,25 +23,25 @@ const (
 )
 
 var (
-	buildHandlers = map[string]func(*Config) (Interface, error){}
+	buildAdapterHandlers = map[string]func(*AdapterConfig) (Adapter, error){}
 
 	// RegexpSingleQuote matches single quote in column name
 	RegexpSingleQuote = regexp.MustCompile(`('.+?')`)
 )
 
-// Interface database adapter
-type Interface interface {
+// Adapter database adapter
+type Adapter interface {
 	Init(ctx context.Context) error
 	Context() context.Context
 	SetContext(ctx context.Context) error
-	Connection() (connection.Interface, error)
-	Select() (dbselect.Interface, error)
-	Query(sql dbselect.Interface) (rowset.Interface, error)
-	QueryRow(sql dbselect.Interface) (row.Interface, error)
+	Connection() (Connection, error)
+	Select() (Select, error)
+	Query(sql Select) (Rowset, error)
+	QueryRow(sql Select) (Row, error)
 	//Profiler()
 	Insert(table string, data map[string]interface{}) (int, error)
 	Update(table string, data map[string]interface{}, cond map[string]interface{}) (bool, error)
-	//Delete
+	Delete(table string, cond map[string]interface{}) (bool, error)
 	//Select
 	//FetchAll
 	//FetchAssoc
@@ -59,8 +49,9 @@ type Interface interface {
 	//FetchPairs
 	//FetchOne
 	LastInsertID() int
-	BeginTransaction() (transaction.Interface, error)
-	DescribeTable(table string, schema string) (map[string]*ColumnMetadata, error)
+	NextSequenceID(sequence string) int
+	BeginTransaction() (Transaction, error)
+	DescribeTable(table string, schema string) (map[string]*TableColumn, error)
 	Quote(interface{}) string
 	QuoteIdentifier(interface{}, bool) string
 	QuoteIdentifierAs(ident interface{}, alias string, auto bool) string
@@ -69,28 +60,48 @@ type Interface interface {
 	QuoteColumnAs(ident interface{}, alias string, auto bool) string
 	QuoteTableAs(ident interface{}, alias string, auto bool) string
 	SupportsParameters(param string) bool
-	Options() *Config
-	SetOptions(options *Config) Interface
+	SetOptions(options *AdapterConfig) Adapter
+	GetOptions() *AdapterConfig
 	FormatDSN() string
 	Limit(sql string, count int, offset int) string
+	FoldCase(s string) string
 }
 
-type adapter struct {
-	options                    *Config
-	db                         *sql.DB
-	ctx                        context.Context
-	params                     map[string]interface{}
-	defaultStatementType       string
-	pingTimeout                time.Duration
-	queryTimeout               time.Duration
-	connectionMaxLifeTime      int
-	maxIdleConnections         int
-	maxOpenConnections         int
+// NewAdapter creates a new adapter from given type and options
+func NewAdapter(adapterType string, options config.Config) (ai Adapter, err error) {
+	cfg := &AdapterConfig{}
+	cfg.Defaults()
+	cfg.Populate(options)
+
+	if f, ok := buildAdapterHandlers[adapterType]; ok {
+		return f(cfg)
+	}
+
+	return nil, errors.Errorf("Unrecognized database adapter type \"%v\"", adapterType)
+}
+
+// RegisterAdapter registers a handler for database adapter creation
+func RegisterAdapter(adapterType string, handler func(*AdapterConfig) (Adapter, error)) {
+	buildAdapterHandlers[adapterType] = handler
+}
+
+// DefaultAdapter is a base object for adapters
+type DefaultAdapter struct {
+	Options                    *AdapterConfig
+	Db                         *sql.DB
+	Ctx                        context.Context
+	Params                     map[string]interface{}
+	DefaultStatementType       string
+	PingTimeout                time.Duration
+	QueryTimeout               time.Duration
+	ConnectionMaxLifeTime      int
+	MaxIdleConnections         int
+	MaxOpenConnections         int
 	inTransaction              bool
 	identifierSymbol           string
-	autoQuoteIdentifiers       bool
-	allowSerialization         bool
-	autoReconnectOnUnserialize bool
+	AutoQuoteIdentifiers       bool
+	AllowSerialization         bool
+	AutoReconnectOnUnserialize bool
 	lastInsertID               int
 	lastInsertUUID             string
 
@@ -100,51 +111,51 @@ type adapter struct {
 }
 
 // Context returns adapter specific context
-func (a *adapter) Context() context.Context {
-	return a.ctx
+func (a *DefaultAdapter) Context() context.Context {
+	return a.Ctx
 }
 
 // SetContext sets adapter specific context
-func (a *adapter) SetContext(ctx context.Context) error {
-	a.ctx = ctx
+func (a *DefaultAdapter) SetContext(ctx context.Context) error {
+	a.Ctx = ctx
 	return nil
 }
 
 // Connection returns a connection to database
-func (a *adapter) Connection() (conn connection.Interface, err error) {
-	if a.db == nil {
+func (a *DefaultAdapter) Connection() (conn Connection, err error) {
+	if a.Db == nil {
 		return nil, errors.New("Database is not initialized")
 	}
 
-	conn, err = connection.NewConnectionFromConfig(a.options.Connection.Type, a.options.Connection)
+	conn, err = NewConnectionFromConfig(a.Options.Connection.Type, a.Options.Connection)
 	if err != nil {
 		return nil, err
 	}
 
-	conn.SetContext(a.ctx)
+	conn.SetContext(a.Ctx)
 	return conn, nil
 }
 
 // Query runs a query
-func (a *adapter) Query(sql dbselect.Interface) (rowset.Interface, error) {
-	if a.db == nil {
+func (a *DefaultAdapter) Query(sql Select) (Rowset, error) {
+	if a.Db == nil {
 		return nil, errors.New("Database is not initialized")
 	}
 
-	ctx, cancel := context.WithTimeout(a.ctx, time.Duration(a.queryTimeout)*time.Second)
+	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	if err := sql.Err(); err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
 
-	rows, err := a.db.QueryContext(ctx, sql.Assemble(), sql.Binds()...)
+	rows, err := a.Db.QueryContext(ctx, sql.Assemble(), sql.Binds()...)
 	if err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
 	defer rows.Close()
 
-	rst, err := rowset.NewRowset(a.options.Rowset.Type, a.options.Rowset)
+	rst, err := NewRowset(Options().Rowset.Type, Options().Rowset)
 	if err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
@@ -157,19 +168,19 @@ func (a *adapter) Query(sql dbselect.Interface) (rowset.Interface, error) {
 }
 
 // QueryRow runs a query
-func (a *adapter) QueryRow(dbs dbselect.Interface) (row.Interface, error) {
-	if a.db == nil {
+func (a *DefaultAdapter) QueryRow(dbs Select) (Row, error) {
+	if a.Db == nil {
 		return nil, errors.New("Database is not initialized")
 	}
 
-	ctx, cancel := context.WithTimeout(a.ctx, time.Duration(a.queryTimeout)*time.Second)
+	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	if err := dbs.Err(); err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
 
-	rows, err := a.db.QueryContext(ctx, dbs.Assemble(), dbs.Binds()...)
+	rows, err := a.Db.QueryContext(ctx, dbs.Assemble(), dbs.Binds()...)
 	if err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
@@ -192,7 +203,7 @@ func (a *adapter) QueryRow(dbs dbselect.Interface) (row.Interface, error) {
 			return nil, err
 		}
 
-		rw, err := row.NewRow(a.options.Row.Type, a.options.Row)
+		rw, err := NewRow(Options().Row.Type, Options().Row)
 		if err != nil {
 			return nil, errors.Wrap(err, "Database query Error")
 		}
@@ -212,43 +223,190 @@ func (a *adapter) QueryRow(dbs dbselect.Interface) (row.Interface, error) {
 }
 
 // LastInsertID returns the last insert query ID
-func (a *adapter) LastInsertID() int {
+func (a *DefaultAdapter) LastInsertID() int {
 	return a.lastInsertID
 }
 
 // LastInsertUUID returns the last insert query UUID
-func (a *adapter) LastInsertUUID() string {
+func (a *DefaultAdapter) LastInsertUUID() string {
 	return a.lastInsertUUID
 }
 
+// Insert inserts new row into table
+func (a *DefaultAdapter) Insert(table string, data map[string]interface{}) (int, error) {
+	cols := []string{}
+	vals := []string{}
+	binds := []interface{}{}
+	i := 0
+	for col, val := range data {
+		cols = append(cols, a.QuoteIdentifier(col, true))
+
+		switch val.(type) {
+		case *SQLExpr:
+			vals = append(vals, val.(*SQLExpr).ToString())
+
+		default:
+			if a.SupportsParameters("positional") {
+				vals = append(vals, "?")
+				binds = append(binds, val)
+			} else if a.SupportsParameters("named") {
+				vals = append(vals, ":col"+strconv.Itoa(i))
+				binds = append(binds, sql.Named("col"+strconv.Itoa(i), val))
+				i++
+			} else {
+				return 0, errors.New("Adapter doesn't support positional or named binding")
+			}
+		}
+	}
+
+	sql := "INSERT INTO " + a.QuoteIdentifier(table, true) + " (" + strings.Join(cols, ", ") + ") VALUES (" + strings.Join(vals, ", ") + ")"
+
+	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	defer cancel()
+
+	stmt, err := a.Db.PrepareContext(ctx, sql)
+	if err != nil {
+		return 0, errors.Wrap(err, "Database insert Error")
+	}
+
+	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	defer cancel()
+
+	result, err := stmt.ExecContext(ctx, binds...)
+	if err != nil {
+		return 0, errors.Wrap(err, "Database insert Error")
+	}
+
+	lastInsertID, err := result.LastInsertId()
+	if err == nil {
+		a.lastInsertID = int(lastInsertID)
+	}
+
+	return a.lastInsertID, nil
+}
+
+// Update updates rows into table be condition
+func (a *DefaultAdapter) Update(table string, data map[string]interface{}, cond map[string]interface{}) (bool, error) {
+	set := []string{}
+	binds := []interface{}{}
+	i := 1
+	for col, val := range data {
+		var value string
+
+		switch val.(type) {
+		case *SQLExpr:
+			value = val.(*SQLExpr).ToString()
+
+		default:
+			if a.SupportsParameters("positional") {
+				value = "?"
+				binds = append(binds, val)
+				i++
+			} else if a.SupportsParameters("named") {
+				value = ":col" + strconv.Itoa(i)
+				binds = append(binds, sql.Named("col"+strconv.Itoa(i), val))
+				i++
+			} else {
+				return false, errors.New("Adapter doesn't support positional or named binding")
+			}
+		}
+
+		set = append(set, a.QuoteIdentifier(col, true)+" = "+value)
+	}
+
+	where := a.whereExpr(cond)
+
+	sql := "UPDATE " + a.QuoteIdentifier(table, true) + " SET (" + strings.Join(set, ", ") + ")"
+	if where != "" {
+		sql = sql + " WHERE " + where
+	}
+
+	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	defer cancel()
+
+	stmt, err := a.Db.PrepareContext(ctx, sql)
+	if err != nil {
+		return false, err
+	}
+	defer stmt.Close()
+
+	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	defer cancel()
+
+	rows, err := stmt.QueryContext(ctx, binds...)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var updatedID int
+		if err := rows.Scan(&updatedID); err != nil {
+			return true, err
+		}
+	}
+
+	return true, nil
+}
+
+// Delete removes rows from table
+func (a *DefaultAdapter) Delete(table string, cond map[string]interface{}) (bool, error) {
+	where := a.whereExpr(cond)
+
+	sql := "DELETE FROM " + a.QuoteIdentifier(table, true)
+	if where != "" {
+		sql = sql + " WHERE " + where
+	}
+
+	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	defer cancel()
+
+	stmt, err := a.Db.PrepareContext(ctx, sql)
+	if err != nil {
+		return false, err
+	}
+	defer stmt.Close()
+
+	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	defer cancel()
+
+	rows, err := stmt.QueryContext(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	return true, nil
+}
+
 // BeginTransaction creates a new database transaction
-func (a *adapter) BeginTransaction() (transaction.Interface, error) {
-	if a.db == nil {
+func (a *DefaultAdapter) BeginTransaction() (Transaction, error) {
+	if a.Db == nil {
 		return nil, errors.New("Database is not initialized")
 	}
 
-	tx, err := a.db.BeginTx(a.ctx, &sql.TxOptions{Isolation: a.options.Transaction.IsolationLevel, ReadOnly: a.options.Transaction.ReadOnly})
+	tx, err := a.Db.BeginTx(a.Ctx, &sql.TxOptions{Isolation: a.Options.Transaction.IsolationLevel, ReadOnly: a.Options.Transaction.ReadOnly})
 	if err != nil {
 		return nil, err
 	}
 
-	trns, err := transaction.NewTransaction(a.options.Transaction.Type, tx)
+	trns, err := NewTransaction(a.Options.Transaction.Type, tx)
 	if err != nil {
 		return nil, err
 	}
 
-	trns.SetContext(a.ctx)
+	trns.SetContext(a.Ctx)
 	return trns, err
 }
 
 // Quote a string
-func (a *adapter) Quote(value interface{}) string {
+func (a *DefaultAdapter) Quote(value interface{}) string {
 	switch value.(type) {
-	case dbselect.Interface:
-		return "(" + value.(dbselect.Interface).Assemble() + ")"
+	case Select:
+		return "(" + value.(Select).Assemble() + ")"
 
-	case *dbselect.Expr:
-		return value.(*dbselect.Expr).ToString()
+	case *SQLExpr:
+		return value.(*SQLExpr).ToString()
 
 	case map[string]interface{}:
 		sl := make([]string, 0)
@@ -283,28 +441,28 @@ func (a *adapter) Quote(value interface{}) string {
 }
 
 // QuoteInto quotes a value and places into a piece of text at a placeholder
-func (a *adapter) QuoteInto(text string, value interface{}, count int) string {
+func (a *DefaultAdapter) QuoteInto(text string, value interface{}, count int) string {
 	return strings.Replace(text, "?", a.Quote(value), count)
 }
 
 // QuoteIdentifier re
-func (a *adapter) QuoteIdentifier(ident interface{}, auto bool) string {
+func (a *DefaultAdapter) QuoteIdentifier(ident interface{}, auto bool) string {
 	return a.QuoteIdentifierAs(ident, "", auto)
 }
 
 // QuoteIdentifierAs a
-func (a *adapter) QuoteIdentifierAs(ident interface{}, alias string, auto bool) string {
+func (a *DefaultAdapter) QuoteIdentifierAs(ident interface{}, alias string, auto bool) string {
 	as := " " + strings.ToUpper(SQLAs) + " "
 	quoted := ""
 	literals := make([]string, 0)
 	idents := make([]interface{}, 0)
 
 	switch ident.(type) {
-	case dbselect.Interface:
-		quoted = "(" + ident.(dbselect.Interface).Assemble() + ")"
+	case Select:
+		quoted = "(" + ident.(Select).Assemble() + ")"
 
-	case *dbselect.Expr:
-		quoted = ident.(*dbselect.Expr).ToString()
+	case *SQLExpr:
+		quoted = ident.(*SQLExpr).ToString()
 
 	case string:
 		functions := make([]string, 0)
@@ -337,11 +495,11 @@ func (a *adapter) QuoteIdentifierAs(ident interface{}, alias string, auto bool) 
 			segments := make([]string, 0)
 			for _, segment := range idents {
 				switch segment.(type) {
-				case dbselect.Interface:
-					segments = append(segments, "("+segment.(dbselect.Interface).Assemble()+")")
+				case Select:
+					segments = append(segments, "("+segment.(Select).Assemble()+")")
 
-				case *dbselect.Expr:
-					segments = append(segments, segment.(*dbselect.Expr).ToString())
+				case *SQLExpr:
+					segments = append(segments, segment.(*SQLExpr).ToString())
 
 				case string:
 					split := []string{}
@@ -417,32 +575,37 @@ func (a *adapter) QuoteIdentifierAs(ident interface{}, alias string, auto bool) 
 }
 
 // QuoteIdentifierSymbol returns symbol of identifier quote
-func (a *adapter) QuoteIdentifierSymbol() string {
+func (a *DefaultAdapter) QuoteIdentifierSymbol() string {
 	return a.identifierSymbol
 }
 
 // QuoteColumnAs quote a column identifier and alias
-func (a *adapter) QuoteColumnAs(ident interface{}, alias string, auto bool) string {
+func (a *DefaultAdapter) QuoteColumnAs(ident interface{}, alias string, auto bool) string {
 	return a.QuoteIdentifierAs(ident, alias, auto)
 }
 
-// Quote a table identifier and alias
-func (a *adapter) QuoteTableAs(ident interface{}, alias string, auto bool) string {
+// QuoteTableAs quotes a table identifier and alias
+func (a *DefaultAdapter) QuoteTableAs(ident interface{}, alias string, auto bool) string {
 	return a.QuoteIdentifierAs(ident, alias, auto)
 }
 
 // SupportsParameters returns true if adapter supports
-func (a *adapter) SupportsParameters(param string) bool {
-	if v, ok := a.params[param]; ok {
+func (a *DefaultAdapter) SupportsParameters(param string) bool {
+	if v, ok := a.Params[param]; ok {
 		return v.(bool)
 	}
 
 	return false
 }
 
+// FoldCase folds a case
+func (a *DefaultAdapter) FoldCase(s string) string {
+	return s
+}
+
 // quotes identifier
-func (a *adapter) quoteIdentifier(ident string, auto bool) string {
-	if !auto || a.autoQuoteIdentifiers {
+func (a *DefaultAdapter) quoteIdentifier(ident string, auto bool) string {
+	if !auto || a.AutoQuoteIdentifiers {
 		q := a.QuoteIdentifierSymbol()
 		return q + strings.ReplaceAll(ident, q, q+q) + q
 	}
@@ -451,8 +614,8 @@ func (a *adapter) quoteIdentifier(ident string, auto bool) string {
 }
 
 // quotes specifics
-func (a *adapter) quoteIdentifierSpec(idents []string, auto bool) string {
-	if !auto || a.autoQuoteIdentifiers {
+func (a *DefaultAdapter) quoteIdentifierSpec(idents []string, auto bool) string {
+	if !auto || a.AutoQuoteIdentifiers {
 		for key, segment := range idents {
 			if !utils.InSSlice(strings.TrimSpace(segment), a.Unquoteable) && segment != "" && segment != " " {
 				segment = strings.ReplaceAll(segment, a.QuoteIdentifierSymbol(), "")
@@ -471,12 +634,12 @@ func (a *adapter) quoteIdentifierSpec(idents []string, auto bool) string {
 }
 
 // quoteString qoutes string value
-func (a *adapter) quoteString(value string) string {
+func (a *DefaultAdapter) quoteString(value string) string {
 	return `'` + utils.Addslashes(value) + `'`
 }
 
 // Convert an array, string, or Expr object into a string to put in a WHERE clause
-func (a *adapter) whereExpr(cond interface{}) string {
+func (a *DefaultAdapter) whereExpr(cond interface{}) string {
 	if cond == nil {
 		return ""
 	}
@@ -499,11 +662,11 @@ func (a *adapter) whereExpr(cond interface{}) string {
 	case []interface{}:
 		for _, term := range cond.([]interface{}) {
 			switch term.(type) {
-			case *dbselect.Expr:
-				where = append(where, "( "+term.(*dbselect.Expr).ToString()+" )")
+			case *SQLExpr:
+				where = append(where, "( "+term.(*SQLExpr).ToString()+" )")
 
-			case dbselect.Interface:
-				where = append(where, "( "+term.(dbselect.Interface).Assemble()+" )")
+			case Select:
+				where = append(where, "( "+term.(Select).Assemble()+" )")
 
 			case string:
 				where = append(where, "( "+term.(string)+" )")
@@ -512,22 +675,4 @@ func (a *adapter) whereExpr(cond interface{}) string {
 	}
 
 	return strings.Join(where, " AND ")
-}
-
-// NewAdapter creates a new adapter from given type and options
-func NewAdapter(adapterType string, options config.Config) (ai Interface, err error) {
-	cfg := &Config{}
-	cfg.Defaults()
-	cfg.Populate(options)
-
-	if f, ok := buildHandlers[adapterType]; ok {
-		return f(cfg)
-	}
-
-	return nil, errors.Errorf("Unrecognized database adapter type \"%v\"", adapterType)
-}
-
-// Register registers a handler for database adapter creation
-func Register(adapterType string, handler func(*Config) (Interface, error)) {
-	buildHandlers[adapterType] = handler
 }

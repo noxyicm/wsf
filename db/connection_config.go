@@ -1,22 +1,21 @@
-package connection
+package db
 
 import (
 	"wsf/config"
-	"wsf/db/transaction"
 )
 
-// Config represents connection configuration
-type Config struct {
+// ConnectionConfig represents connection configuration
+type ConnectionConfig struct {
 	Type         string
 	PingTimeout  int
 	QueryTimeout int
-	Transaction  *transaction.Config
+	Transaction  *TransactionConfig
 }
 
 // Populate populates Config values using given Config source
-func (c *Config) Populate(cfg config.Config) error {
+func (c *ConnectionConfig) Populate(cfg config.Config) error {
 	if c.Transaction == nil {
-		c.Transaction = &transaction.Config{}
+		c.Transaction = &TransactionConfig{}
 	}
 
 	c.Transaction.Defaults()
@@ -32,18 +31,18 @@ func (c *Config) Populate(cfg config.Config) error {
 }
 
 // Defaults sets configuration default values
-func (c *Config) Defaults() error {
+func (c *ConnectionConfig) Defaults() error {
 	c.Type = "default"
 	c.PingTimeout = 1
 	c.QueryTimeout = 0
 
-	c.Transaction = &transaction.Config{}
+	c.Transaction = &TransactionConfig{}
 	c.Transaction.Defaults()
 
 	return nil
 }
 
 // Valid validates the configuration
-func (c *Config) Valid() error {
+func (c *ConnectionConfig) Valid() error {
 	return nil
 }

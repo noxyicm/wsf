@@ -1,4 +1,4 @@
-package adapter
+package db
 
 import (
 	"bytes"
@@ -11,25 +11,23 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"wsf/db/dbselect"
-	"wsf/db/statement"
 	"wsf/errors"
 
 	_ "github.com/lib/pq"
 )
 
 const (
-	// TYPECockroach represents cockroach db adapter
-	TYPECockroach = "CockroachDB"
+	// TYPEAdapterCockroach represents cockroach db adapter
+	TYPEAdapterCockroach = "CockroachDB"
 )
 
 func init() {
-	Register(TYPECockroach, NewCockroachAdapter)
+	RegisterAdapter(TYPEAdapterCockroach, NewCockroachAdapter)
 }
 
 // Cockroach adapter for CockroachDB databeses
 type Cockroach struct {
-	adapter
+	DefaultAdapter
 	driverConfig *cockroachConfig
 }
 
@@ -40,12 +38,12 @@ func (a *Cockroach) Init(ctx context.Context) (err error) {
 		return errors.Wrap(err, "CockroachDB Error")
 	}
 
-	db.SetConnMaxLifetime(time.Duration(a.options.ConnectionMaxLifeTime) * time.Second)
-	db.SetMaxIdleConns(a.options.MaxIdleConnections)
-	db.SetMaxOpenConns(a.options.MaxOpenConnections)
+	db.SetConnMaxLifetime(time.Duration(a.Options.ConnectionMaxLifeTime) * time.Second)
+	db.SetMaxIdleConns(a.Options.MaxIdleConnections)
+	db.SetMaxOpenConns(a.Options.MaxOpenConnections)
 
-	if a.pingTimeout > 0 {
-		tctx, cancel := context.WithTimeout(ctx, a.pingTimeout*time.Second)
+	if a.PingTimeout > 0 {
+		tctx, cancel := context.WithTimeout(ctx, a.PingTimeout*time.Second)
 		defer cancel()
 
 		if err = db.PingContext(tctx); err != nil {
@@ -57,25 +55,25 @@ func (a *Cockroach) Init(ctx context.Context) (err error) {
 		}
 	}
 
-	a.db = db
-	a.ctx = ctx
+	a.Db = db
+	a.Ctx = ctx
 	return nil
 }
 
 // SetOptions sets new options for CockroachDB adapter
-func (a *Cockroach) SetOptions(options *Config) Interface {
-	a.options = options
+func (a *Cockroach) SetOptions(options *AdapterConfig) Adapter {
+	a.Options = options
 	return a
 }
 
-// Options returns CockroachDB adapter options
-func (a *Cockroach) Options() *Config {
-	return a.options
+// GetOptions returns CockroachDB adapter options
+func (a *Cockroach) GetOptions() *AdapterConfig {
+	return a.Options
 }
 
 // Select creates a new adapter specific select object
-func (a *Cockroach) Select() (dbselect.Interface, error) {
-	sel, err := dbselect.NewSelect(a.options.Select.Type, a.options.Select)
+func (a *Cockroach) Select() (Select, error) {
+	sel, err := NewSelectFromConfig(Options().Select)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +92,8 @@ func (a *Cockroach) Insert(table string, data map[string]interface{}) (int, erro
 		cols = append(cols, a.QuoteIdentifier(col, true))
 
 		switch val.(type) {
-		case *dbselect.Expr:
-			vals = append(vals, val.(*dbselect.Expr).ToString())
+		case *SQLExpr:
+			vals = append(vals, val.(*SQLExpr).ToString())
 
 		default:
 			if a.SupportsParameters("positional") {
@@ -114,16 +112,16 @@ func (a *Cockroach) Insert(table string, data map[string]interface{}) (int, erro
 
 	sql := "INSERT INTO " + a.QuoteIdentifier(table, true) + " (" + strings.Join(cols, ", ") + ") VALUES (" + strings.Join(vals, ", ") + ") RETURNING \"id\""
 
-	ctx, cancel := context.WithTimeout(a.ctx, time.Duration(a.pingTimeout)*time.Second)
+	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
-	stmt, err := a.db.PrepareContext(ctx, sql)
+	stmt, err := a.Db.PrepareContext(ctx, sql)
 	if err != nil {
 		return 0, errors.Wrap(err, "CockroachDB insert Error")
 	}
 	defer stmt.Close()
 
-	ctx, cancel = context.WithTimeout(a.ctx, time.Duration(a.queryTimeout)*time.Second)
+	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	err = stmt.QueryRowContext(ctx, binds...).Scan(&a.lastInsertID)
@@ -143,8 +141,8 @@ func (a *Cockroach) Update(table string, data map[string]interface{}, cond map[s
 		var value string
 
 		switch val.(type) {
-		case *dbselect.Expr:
-			value = val.(*dbselect.Expr).ToString()
+		case *SQLExpr:
+			value = val.(*SQLExpr).ToString()
 
 		default:
 			if a.SupportsParameters("positional") {
@@ -165,21 +163,22 @@ func (a *Cockroach) Update(table string, data map[string]interface{}, cond map[s
 
 	where := a.whereExpr(cond)
 
-	sql := "UPDATE " + a.QuoteIdentifier(table, true) + " SET (" + strings.Join(set, ", ") + ") RETURNING \"id\""
+	sql := "UPDATE " + a.QuoteIdentifier(table, true) + " SET (" + strings.Join(set, ", ") + ")"
 	if where != "" {
 		sql = sql + " WHERE " + where
 	}
+	sql = sql + " RETURNING \"id\""
 
-	ctx, cancel := context.WithTimeout(a.ctx, time.Duration(a.pingTimeout)*time.Second)
+	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
-	stmt, err := a.db.PrepareContext(ctx, sql)
+	stmt, err := a.Db.PrepareContext(ctx, sql)
 	if err != nil {
 		return false, errors.Wrap(err, "CockroachDB update Error")
 	}
 	defer stmt.Close()
 
-	ctx, cancel = context.WithTimeout(a.ctx, time.Duration(a.queryTimeout)*time.Second)
+	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	rows, err := stmt.QueryContext(ctx, binds...)
@@ -198,106 +197,183 @@ func (a *Cockroach) Update(table string, data map[string]interface{}, cond map[s
 	return true, nil
 }
 
-// DescribeTable returns information about columns in table
-func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*ColumnMetadata, error) {
-	var sql string
-	if schema != "" {
-		sql = "SELECT * FROM information_schema.columns WHERE table_name = " + a.QuoteIdentifier(table, true) + " AND table_schema = " + a.QuoteIdentifier(schema, true) + "; SELECT constraint_name, table_schema, table_name, column_name FROM information_schema.key_column_usage WHERE table_name = " + a.QuoteIdentifier(table, true) + " AND table_schema = " + a.QuoteIdentifier(schema, true) + ";"
-	} else {
-		sql = "SELECT * FROM information_schema.columns WHERE table_name = " + a.QuoteIdentifier(table, true) + "; SELECT constraint_name, table_schema, table_name, column_name FROM information_schema.key_column_usage WHERE table_name = " + a.QuoteIdentifier(table, true) + ";"
-	}
+// Delete removes rows from table
+func (a *Cockroach) Delete(table string, cond map[string]interface{}) (bool, error) {
+	where := a.whereExpr(cond)
 
-	ctx, cancel := context.WithTimeout(a.ctx, time.Duration(a.pingTimeout)*time.Second)
+	sql := "DELETE FROM " + a.QuoteIdentifier(table, true)
+	if where != "" {
+		sql = sql + " WHERE " + where
+	}
+	sql = sql + " RETURNING \"id\""
+
+	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
-	stmt, err := a.db.PrepareContext(ctx, sql)
+	stmt, err := a.Db.PrepareContext(ctx, sql)
 	if err != nil {
-		return nil, err
+		return false, errors.Wrap(err, "CockroachDB Error")
 	}
 	defer stmt.Close()
 
-	ctx, cancel = context.WithTimeout(a.ctx, time.Duration(a.queryTimeout)*time.Second)
+	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	rows, err := stmt.QueryContext(ctx)
 	if err != nil {
-		return nil, err
+		return false, errors.Wrap(err, "CockroachDB Error")
 	}
 	defer rows.Close()
 
-	desc := make(map[string]*ColumnMetadata)
+	deletedIDs := make([]int, 0)
 	for rows.Next() {
-		def := map[string]interface{}{
-			"table_catalog":            "",
-			"table_schema":             "",
-			"table_name":               "",
-			"column_name":              "",
-			"ordinal_position":         0,
-			"column_default":           nil,
-			"is_nullable":              "NO",
-			"data_type":                "",
-			"character_maximum_length": 0,
-			"character_octet_length":   0,
-			"numeric_precision":        0,
-			"numeric_scale":            0,
-			"datetime_precision":       0,
-			"character_set_name":       "",
+		var deletedID int
+		if err := rows.Scan(&deletedID); err != nil {
+			return true, errors.Wrap(err, "CockroachDB delete Error")
 		}
 
-		if err := rows.Scan(&def); err != nil {
-			return nil, err
+		deletedIDs = append(deletedIDs, deletedID)
+	}
+
+	if len(deletedIDs) > 0 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// DescribeTable returns information about columns in table
+func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*TableColumn, error) {
+	var sqlstr string
+	if schema != "" {
+		sqlstr = "SELECT * FROM information_schema.columns WHERE " + a.QuoteInto("table_name = ?", table, -1) + " AND " + a.QuoteInto("table_schema = ?", schema, -1)
+	} else {
+		sqlstr = "SELECT * FROM information_schema.columns WHERE " + a.QuoteInto("table_name = ?", table, -1)
+	}
+
+	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	defer cancel()
+
+	stmt, err := a.Db.PrepareContext(ctx, sqlstr)
+	if err != nil {
+		return nil, errors.Wrap(err, "CockroachDB Error")
+	}
+	defer stmt.Close()
+
+	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	defer cancel()
+
+	rows, err := stmt.QueryContext(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "CockroachDB Error")
+	}
+	defer rows.Close()
+
+	columns, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, errors.Wrap(err, "CockroachDB Error")
+	}
+
+	values := make([]sql.RawBytes, len(columns))
+	scanArgs := make([]interface{}, len(values))
+	for i := range values {
+		scanArgs[i] = &values[i]
+	}
+
+	desc := make(map[string]*TableColumn)
+	for rows.Next() {
+		if err := rows.Scan(scanArgs...); err != nil {
+			return nil, errors.Wrap(err, "CockroachDB Error")
 		}
 
-		row := &ColumnMetadata{
-			TableSchema:  def["TABLE_CATALOG"].(string),
-			TableName:    def["TABLE_NAME"].(string),
-			Name:         def["COLUMN_NAME"].(string),
-			Default:      def["COLUMN_DEFAULT"],
-			Position:     def["ORDINAL_POSITION"].(int64),
-			Type:         def["DATA_TYPE"].(string),
-			Length:       def["CHARACTER_MAXIMUM_LENGTH"].(int64),
-			Precision:    def["NUMERIC_PRECISION"].(int64),
-			Scale:        def["NUMERIC_SCALE"].(int64),
-			CharacterSet: def["CHARACTER_SET_NAME"].(string),
-			Collation:    def["COLLATION_NAME"].(string),
-			ColumnType:   def["COLUMN_TYPE"].(string),
-			ColumnKey:    def["COLUMN_KEY"].(string),
-			Extra:        def["EXTRA"].(string),
+		d, err := PrepareRow(values, columns)
+		if err != nil {
+			return nil, errors.Wrap(err, "CockroachDB Error")
 		}
 
-		if def["IS_NULLABLE"].(string) == "YES" {
+		row := &TableColumn{
+			TableSchema:  d["table_schema"].(string),
+			TableName:    d["table_name"].(string),
+			Name:         d["column_name"].(string),
+			Default:      d["column_default"],
+			Position:     d["ordinal_position"].(int64),
+			DataType:     d["data_type"].(string),
+			Length:       d["character_maximum_length"].(int64),
+			Precision:    d["numeric_precision"].(int64),
+			Scale:        d["numeric_scale"].(int64),
+			CharacterSet: d["character_set_name"].(string),
+			Collation:    d["collation_name"].(string),
+			//ColumnType:   values["COLUMN_TYPE"].(string),
+			//ColumnKey:    values["COLUMN_KEY"].(string),
+			//Extra:        values["EXTRA"].(string),
+		}
+
+		if d["is_nullable"] == "YES" {
 			row.IsNullable = true
 		}
 
-		desc[def["COLUMN_NAME"].(string)] = row
+		desc[row.Name] = row
 	}
 
-	if !rows.NextResultSet() {
-		return nil, errors.Errorf("Expected more result sets: %v", rows.Err())
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "CockroachDB Error")
+	}
+
+	if schema != "" {
+		sqlstr = "SELECT constraint_name, table_schema, table_name, column_name FROM information_schema.key_column_usage WHERE " + a.QuoteInto("table_name = ?", table, -1) + " AND " + a.QuoteInto("table_schema = ?", schema, -1)
+	} else {
+		sqlstr = "SELECT constraint_name, table_schema, table_name, column_name FROM information_schema.key_column_usage WHERE " + a.QuoteInto("table_name = ?", table, -1)
+	}
+
+	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	defer cancel()
+
+	stmt2, err := a.Db.PrepareContext(ctx, sqlstr)
+	if err != nil {
+		return nil, errors.Wrap(err, "CockroachDB Error")
+	}
+	defer stmt2.Close()
+
+	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	defer cancel()
+
+	rows2, err := stmt2.QueryContext(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "CockroachDB Error")
+	}
+	defer rows2.Close()
+
+	columns, err = rows2.ColumnTypes()
+	if err != nil {
+		return nil, errors.Wrap(err, "CockroachDB Error")
+	}
+
+	values = make([]sql.RawBytes, len(columns))
+	scanArgs = make([]interface{}, len(values))
+	for i := range values {
+		scanArgs[i] = &values[i]
 	}
 
 	var i int64
-	for rows.Next() {
-		def := map[string]string{
-			"constraint_name": "",
-			"table_schema":    "",
-			"table_name":      "",
-			"column_name":     "",
+	for rows2.Next() {
+		if err := rows2.Scan(scanArgs...); err != nil {
+			return nil, errors.Wrap(err, "CockroachDB Error")
 		}
 
-		if err := rows.Scan(&def); err != nil {
-			return nil, err
+		d, err := PrepareRow(values, columns)
+		if err != nil {
+			return nil, errors.Wrap(err, "CockroachDB Error")
 		}
 
-		if def["constraint_name"] == "primary" {
-			desc[def["column_name"]].Primary = true
-			desc[def["column_name"]].PrimaryPosition = i
+		if d["constraint_name"].(string) == "primary" {
+			desc[d["column_name"].(string)].Primary = true
+			desc[d["column_name"].(string)].PrimaryPosition = i
 			i++
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
+	if err := rows2.Err(); err != nil {
+		return nil, errors.Wrap(err, "CockroachDB Error")
 	}
 
 	return desc, nil
@@ -308,19 +384,23 @@ func (a *Cockroach) Limit(sql string, count int, offset int) string {
 	return sql
 }
 
+// NextSequenceID returns nex value from sequence
+func (a *Cockroach) NextSequenceID(sequence string) int {
+	return 0
+}
+
 // FormatDSN returns a formated dsn string
 func (a *Cockroach) FormatDSN() string {
 	return a.driverConfig.FormatDSN()
 }
 
 // NewCockroachAdapter creates a new CockroachDB adapter
-func NewCockroachAdapter(options *Config) (ai Interface, err error) {
+func NewCockroachAdapter(options *AdapterConfig) (ai Adapter, err error) {
 	adp := &Cockroach{}
 	adp.identifierSymbol = `"`
-	adp.autoQuoteIdentifiers = true
-	adp.defaultStatementType = statement.TYPEDefault
-	adp.pingTimeout = time.Duration(options.PingTimeout) * time.Second
-	adp.queryTimeout = time.Duration(options.QueryTimeout) * time.Second
+	adp.AutoQuoteIdentifiers = true
+	adp.PingTimeout = time.Duration(options.PingTimeout) * time.Second
+	adp.QueryTimeout = time.Duration(options.QueryTimeout) * time.Second
 
 	//sql.Register(name string, driver driver.Driver)
 	adp.driverConfig = &cockroachConfig{AllowNativePasswords: true}
@@ -410,8 +490,8 @@ func NewCockroachAdapter(options *Config) (ai Interface, err error) {
 		"NULLIF",
 	}
 
-	adp.options = options
-	adp.params = map[string]interface{}{
+	adp.Options = options
+	adp.Params = map[string]interface{}{
 		"positional": true,
 		"named":      false,
 	}

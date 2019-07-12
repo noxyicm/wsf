@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"wsf/cache/backend"
+	"wsf/cache"
 	"wsf/config"
 	"wsf/controller/response"
 	"wsf/crypt"
@@ -52,7 +52,7 @@ var (
 type Token struct {
 	params      map[string]interface{}
 	response    response.Interface
-	storage     backend.Interface
+	storage     cache.Interface
 	token       string
 	tokenID     string
 	tokenSecret string
@@ -61,12 +61,12 @@ type Token struct {
 }
 
 // SetStorage sets a token storage
-func (t *Token) SetStorage(strg backend.Interface) {
+func (t *Token) SetStorage(strg cache.Interface) {
 	t.storage = strg
 }
 
 // Storage returns token storage
-func (t *Token) Storage() backend.Interface {
+func (t *Token) Storage() cache.Interface {
 	return t.storage
 }
 
@@ -194,9 +194,9 @@ func (t *Token) Load() error {
 		return errors.New("Storage is undefined")
 	}
 
-	packed, err := t.storage.Load(t.tokenID, false)
-	if err != nil {
-		return err
+	packed, _ := t.storage.Load(t.tokenID, false)
+	if t.storage.Error() != nil {
+		return t.storage.Error()
 	}
 
 	return t.unpack(packed)
@@ -213,7 +213,11 @@ func (t *Token) Save() error {
 		return err
 	}
 
-	return t.storage.Save(packed, t.tokenID, []string{t.tokenID}, TokenLifeTime)
+	if t.storage.Save(packed, t.tokenID, []string{t.tokenID}, TokenLifeTime) {
+		return nil
+	}
+
+	return t.storage.Error()
 }
 
 // Invalidate renders token invalid
@@ -222,7 +226,11 @@ func (t *Token) Invalidate() error {
 		return errors.New("No storage")
 	}
 
-	return t.storage.Remove(t.tokenID)
+	if t.storage.Remove(t.tokenID) {
+		return nil
+	}
+
+	return t.storage.Error()
 }
 
 func (t *Token) parseParameters(rsp response.Interface) map[string]interface{} {
@@ -285,7 +293,7 @@ func CreateRequestToken(appID int, appSecret string) string {
 }
 
 // NewToken creates a new token from request token or loads existsing
-func NewToken(appID int, appSecret string, storage backend.Interface) (*Token, error) {
+func NewToken(appID int, appSecret string, storage cache.Interface) (*Token, error) {
 	t := new(Token)
 	t.params = make(map[string]interface{})
 

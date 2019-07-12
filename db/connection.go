@@ -1,43 +1,42 @@
-package connection
+package db
 
 import (
 	"context"
 	"database/sql"
 	"time"
 	"wsf/config"
-	"wsf/db/transaction"
 	"wsf/errors"
 )
 
 const (
-	// TYPEDefault is a type id of connection class
-	TYPEDefault = "default"
+	// TYPEDefaultConnection is a type id of connection class
+	TYPEDefaultConnection = "default"
 )
 
 var (
-	buildHandlers = map[string]func(*Config) (Interface, error){}
+	buildConnectionHandlers = map[string]func(*ConnectionConfig) (Connection, error){}
 )
 
 func init() {
-	Register(TYPEDefault, NewDefaultConnection)
+	RegisterConnection(TYPEDefaultConnection, NewDefaultConnection)
 }
 
-// Interface represents connection interface
-type Interface interface {
+// Connection represents connection interface
+type Connection interface {
 	Context() context.Context
 	SetContext(ctx context.Context) error
 	Query(sql string, bind ...interface{}) (map[int]map[string]interface{}, error)
-	BeginTransaction() (transaction.Interface, error)
+	BeginTransaction() (Transaction, error)
 	Close()
 }
 
 // NewConnection creates a new connection
-func NewConnection(connectionType string, options config.Config) (Interface, error) {
-	cfg := &Config{}
+func NewConnection(connectionType string, options config.Config) (Connection, error) {
+	cfg := &ConnectionConfig{}
 	cfg.Defaults()
 	cfg.Populate(options)
 
-	if f, ok := buildHandlers[connectionType]; ok {
+	if f, ok := buildConnectionHandlers[connectionType]; ok {
 		return f(cfg)
 	}
 
@@ -45,48 +44,48 @@ func NewConnection(connectionType string, options config.Config) (Interface, err
 }
 
 // NewConnectionFromConfig creates a new connection from connection.Config
-func NewConnectionFromConfig(connectionType string, options *Config) (Interface, error) {
-	if f, ok := buildHandlers[connectionType]; ok {
+func NewConnectionFromConfig(connectionType string, options *ConnectionConfig) (Connection, error) {
+	if f, ok := buildConnectionHandlers[connectionType]; ok {
 		return f(options)
 	}
 
 	return nil, errors.Errorf("Unrecognized database connection type \"%v\"", connectionType)
 }
 
-// Register registers a handler for database rowset creation
-func Register(connectionType string, handler func(*Config) (Interface, error)) {
-	buildHandlers[connectionType] = handler
+// RegisterConnection registers a handler for database rowset creation
+func RegisterConnection(connectionType string, handler func(*ConnectionConfig) (Connection, error)) {
+	buildConnectionHandlers[connectionType] = handler
 }
 
-// Connection represents database connection
-type Connection struct {
-	options      *Config
-	conn         *sql.Conn
-	ctx          context.Context
-	pingTimeout  time.Duration
-	queryTimeout time.Duration
+// DefaultConnection represents database connection
+type DefaultConnection struct {
+	Options      *ConnectionConfig
+	Conn         *sql.Conn
+	Ctx          context.Context
+	PingTimeout  time.Duration
+	QueryTimeout time.Duration
 }
 
 // Context returns connection specific context
-func (c *Connection) Context() context.Context {
-	return c.ctx
+func (c *DefaultConnection) Context() context.Context {
+	return c.Ctx
 }
 
 // SetContext sets connection specific context
-func (c *Connection) SetContext(ctx context.Context) error {
-	c.ctx = ctx
+func (c *DefaultConnection) SetContext(ctx context.Context) error {
+	c.Ctx = ctx
 	return nil
 }
 
 // Query runs the query
-func (c *Connection) Query(sql string, bind ...interface{}) (map[int]map[string]interface{}, error) {
-	stmt, err := c.conn.PrepareContext(c.ctx, sql)
+func (c *DefaultConnection) Query(sql string, bind ...interface{}) (map[int]map[string]interface{}, error) {
+	stmt, err := c.Conn.PrepareContext(c.Ctx, sql)
 	if err != nil {
 		return nil, errors.Wrap(err, "Database connection Error")
 	}
 	defer stmt.Close()
 
-	ctx, cancel := context.WithTimeout(c.ctx, c.queryTimeout*time.Second)
+	ctx, cancel := context.WithTimeout(c.Ctx, c.QueryTimeout*time.Second)
 	defer cancel()
 
 	rows, err := stmt.QueryContext(ctx, bind)
@@ -107,31 +106,31 @@ func (c *Connection) Query(sql string, bind ...interface{}) (map[int]map[string]
 }
 
 // BeginTransaction creates a new transaction
-func (c *Connection) BeginTransaction() (transaction.Interface, error) {
-	if c.conn == nil {
+func (c *DefaultConnection) BeginTransaction() (Transaction, error) {
+	if c.Conn == nil {
 		return nil, errors.New("Database connection is not initialized")
 	}
 
-	tx, err := c.conn.BeginTx(c.ctx, &sql.TxOptions{Isolation: c.options.Transaction.IsolationLevel, ReadOnly: c.options.Transaction.ReadOnly})
+	tx, err := c.Conn.BeginTx(c.Ctx, &sql.TxOptions{Isolation: c.Options.Transaction.IsolationLevel, ReadOnly: c.Options.Transaction.ReadOnly})
 	if err != nil {
 		return nil, err
 	}
 
-	trns, err := transaction.NewTransaction(c.options.Transaction.Type, tx)
+	trns, err := NewTransaction(c.Options.Transaction.Type, tx)
 	if err != nil {
 		return nil, err
 	}
 
-	trns.SetContext(c.ctx)
+	trns.SetContext(c.Ctx)
 	return trns, nil
 }
 
 // Close closes the connection
-func (c *Connection) Close() {
-	c.conn.Close()
+func (c *DefaultConnection) Close() {
+	c.Conn.Close()
 }
 
-func (c *Connection) processRows(rows *sql.Rows) (map[int]map[string]interface{}, error) {
+func (c *DefaultConnection) processRows(rows *sql.Rows) (map[int]map[string]interface{}, error) {
 	columns, err := rows.ColumnTypes()
 	if err != nil {
 		return nil, errors.Wrap(err, "Database connection Error")
@@ -168,11 +167,11 @@ func (c *Connection) processRows(rows *sql.Rows) (map[int]map[string]interface{}
 }
 
 // NewDefaultConnection creates default connection
-func NewDefaultConnection(options *Config) (Interface, error) {
-	return &Connection{
-		options:      options,
-		ctx:          context.Background(),
-		pingTimeout:  time.Duration(options.PingTimeout) * time.Second,
-		queryTimeout: time.Duration(options.QueryTimeout) * time.Second,
+func NewDefaultConnection(options *ConnectionConfig) (Connection, error) {
+	return &DefaultConnection{
+		Options:      options,
+		Ctx:          context.Background(),
+		PingTimeout:  time.Duration(options.PingTimeout) * time.Second,
+		QueryTimeout: time.Duration(options.QueryTimeout) * time.Second,
 	}, nil
 }

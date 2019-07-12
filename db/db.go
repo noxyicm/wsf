@@ -3,19 +3,20 @@ package db
 import (
 	"context"
 	"wsf/config"
-	"wsf/db/adapter"
-	"wsf/db/connection"
-	"wsf/db/dbselect"
-	"wsf/db/table/rowset"
-	"wsf/db/transaction"
+	"wsf/errors"
+	"wsf/registry"
 )
 
-var ins *Db
+var (
+	ins *Db
+
+	defaultAdapter Adapter
+)
 
 // Db type resource
 type Db struct {
 	options        *Config
-	adapter        adapter.Interface
+	adapter        Adapter
 	db             string
 	defaultAdapter string
 }
@@ -42,12 +43,12 @@ func (d *Db) Context() context.Context {
 }
 
 // Connection returns a connection to database
-func (d *Db) Connection() (connection.Interface, error) {
+func (d *Db) Connection() (Connection, error) {
 	return d.adapter.Connection()
 }
 
 // Select returns a new select object
-func (d *Db) Select() (dbselect.Interface, error) {
+func (d *Db) Select() (Select, error) {
 	return d.adapter.Select()
 }
 
@@ -62,12 +63,12 @@ func (d *Db) Update(table string, data map[string]interface{}, cond map[string]i
 }
 
 // Query runs a query
-func (d *Db) Query(sql dbselect.Interface) (rowset.Interface, error) {
+func (d *Db) Query(sql Select) (Rowset, error) {
 	return d.adapter.Query(sql)
 }
 
 // BeginTransaction creates a new database transaction
-func (d *Db) BeginTransaction() (transaction.Interface, error) {
+func (d *Db) BeginTransaction() (Transaction, error) {
 	return d.adapter.BeginTransaction()
 }
 
@@ -96,17 +97,22 @@ func (d *Db) SupportsParameters(param string) bool {
 	return d.adapter.SupportsParameters(param)
 }
 
+// GetOrCreateTable gets from registry or creates a new table object
+func (d *Db) GetOrCreateTable(table string) Table {
+	return nil
+}
+
 // NewDB creates new Db handler
 func NewDB(options config.Config) (db *Db, err error) {
 	cfg := &Config{}
 	cfg.Defaults()
 	cfg.Populate(options)
 
-	var a adapter.Interface
+	var a Adapter
 	acfg := options.Get("adapter")
 	if acfg != nil {
 		adapterType := acfg.GetString("type")
-		a, err = adapter.NewAdapter(adapterType, acfg)
+		a, err = NewAdapter(adapterType, acfg)
 		if err != nil {
 			return nil, err
 		}
@@ -135,8 +141,8 @@ func Instance() *Db {
 	return ins
 }
 
-// Select returns a new select object
-func Select() (dbselect.Interface, error) {
+// CreateSelect returns a select configured by db instance
+func CreateSelect() (Select, error) {
 	return ins.Select()
 }
 
@@ -151,6 +157,40 @@ func Update(table string, data map[string]interface{}, cond map[string]interface
 }
 
 // Query runs a query
-func Query(sql dbselect.Interface) (rowset.Interface, error) {
+func Query(sql Select) (Rowset, error) {
 	return ins.Query(sql)
+}
+
+// SetDefaultAdapter sets the default db.Adapter
+func SetDefaultAdapter(db interface{}) {
+	defaultAdapter, _ = SetupAdapter(db)
+}
+
+// GetDefaultAdapter gets the default db.Adapter
+func GetDefaultAdapter() Adapter {
+	return defaultAdapter
+}
+
+// SetupAdapter checks if db is a valid database adapter
+func SetupAdapter(db interface{}) (Adapter, error) {
+	if db == nil {
+		return nil, errors.New("Argument must be of type db.adapter.Interface, or a Registry key where a db.adapter.Interface object is stored")
+	}
+
+	switch db.(type) {
+	case string:
+		if dba := registry.Get(db.(string)); dba != nil {
+			return dba.(Adapter), nil
+		}
+
+	case Adapter:
+		return db.(Adapter), nil
+	}
+
+	return nil, errors.New("Argument must be of type db.adapter.Interface, or a Registry key where a db.adapter.Interface object is stored")
+}
+
+// Options return db options
+func Options() *Config {
+	return ins.Options()
 }

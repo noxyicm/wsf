@@ -1,12 +1,13 @@
-package table
+package db
 
 import (
 	"wsf/config"
 )
 
-// Config defines set of table variables
-type Config struct {
+// TableConfig defines set of table variables
+type TableConfig struct {
 	Type            string
+	Adapter         string
 	Definition      map[string]interface{}
 	DefinitionName  string
 	Primary         []string
@@ -22,7 +23,7 @@ type Config struct {
 }
 
 // Populate populates Config values using given Config source
-func (c *Config) Populate(cfg config.Config) error {
+func (c *TableConfig) Populate(cfg config.Config) error {
 	if err := cfg.Unmarshal(c); err != nil {
 		return err
 	}
@@ -31,12 +32,17 @@ func (c *Config) Populate(cfg config.Config) error {
 }
 
 // Defaults sets configuration default values
-func (c *Config) Defaults() error {
+func (c *TableConfig) Defaults() error {
 	c.Type = ""
+	c.DefaultSource = DefaultNone
+	c.Definition = make(map[string]interface{})
+	c.ReferenceMap = make(map[string]interface{})
+	c.DependentTables = make(map[string]interface{})
+	c.DefaultValues = make(map[string]interface{})
 	return nil
 }
 
 // Valid validates the configuration
-func (c *Config) Valid() error {
+func (c *TableConfig) Valid() error {
 	return nil
 }

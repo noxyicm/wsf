@@ -1,9 +1,12 @@
 package db
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"wsf/cache"
@@ -57,9 +60,9 @@ var (
 // Table is an interface for db table
 type Table interface {
 	SetOptions(options *TableConfig) Table
-	SetRowType(tp string) Table
+	SetRowType(typ string) Table
 	GetRowType() string
-	SetRowsetType(tp string) Table
+	SetRowsetType(typ string) Table
 	GetRowsetType() string
 	SetAdapter(db interface{}) Table
 	GetAdapter() Adapter
@@ -76,13 +79,13 @@ type Table interface {
 	Init() error
 	Info() TableInfo
 	Select(withFromPart bool) (Select, error)
-	Insert(data map[string]interface{}) (int, error)
+	Insert(ctx context.Context, data map[string]interface{}) (int, error)
 	IsIdentity(column string) bool
-	Update(data map[string]interface{}, cond map[string]interface{}) (bool, error)
+	Update(ctx context.Context, data map[string]interface{}, cond map[string]interface{}) (bool, error)
 	//CascadeUpdate(parentTable string, oldPrimaryKey map[string]string, newPrimaryKey map[string]string) (int, error)
-	Delete(cond map[string]interface{}) (bool, error)
+	Delete(ctx context.Context, cond map[string]interface{}) (bool, error)
 	//CascadeDelete(parentTable string, primaryKey map[string]interface{}) (int, error)
-	Find(args ...interface{}) (Rowset, error)
+	Find(ctx context.Context, args ...interface{}) (Rowset, error)
 }
 
 // NewTable creates a new table from given type and options
@@ -101,6 +104,17 @@ func NewTable(tableType string, options config.Config) (ti Table, err error) {
 // RegisterTable registers a handler for database table creation
 func RegisterTable(tableType string, handler func(*TableConfig) (Table, error)) {
 	buildTableHandlers[tableType] = handler
+}
+
+// IsRegisteredTable returns true if handler registered for provided type
+func IsRegisteredTable(tableType string) bool {
+	for k := range buildTableHandlers {
+		if k == tableType {
+			return true
+		}
+	}
+
+	return false
 }
 
 // SetDefaultMetadataCache sets the default metadata cache for information returned by adapter.DescribeTable()
@@ -460,7 +474,7 @@ func (t *DefaultTable) Select(withFromPart bool) (Select, error) {
 }
 
 // Insert inserts a new row
-func (t *DefaultTable) Insert(data map[string]interface{}) (int, error) {
+func (t *DefaultTable) Insert(ctx context.Context, data map[string]interface{}) (int, error) {
 	if err := t.SetupPrimaryKey(); err != nil {
 		return 0, err
 	}
@@ -483,14 +497,14 @@ func (t *DefaultTable) Insert(data map[string]interface{}) (int, error) {
 		tableSpec = t.Schema + "." + tableSpec
 	}
 
-	_, err := t.Adapter.Insert(tableSpec, data)
+	_, err := t.Adapter.Insert(ctx, tableSpec, data)
 	if err != nil {
 		return 0, err
 	}
 
-	if _, ok := data[pkIdentity]; !ok && t.Sequence != "" {
-		data[pkIdentity] = t.Adapter.LastInsertID()
-	}
+	//if _, ok := data[pkIdentity]; !ok && t.Sequence != "" {
+	//	data[pkIdentity] = t.Adapter.LastInsertID()
+	//}
 
 	return data[pkIdentity].(int), nil
 }
@@ -509,17 +523,17 @@ func (t *DefaultTable) IsIdentity(column string) bool {
 }
 
 // Update updates existing rows
-func (t *DefaultTable) Update(data map[string]interface{}, cond map[string]interface{}) (bool, error) {
+func (t *DefaultTable) Update(ctx context.Context, data map[string]interface{}, cond map[string]interface{}) (bool, error) {
 	tableSpec := t.Name
 	if t.Schema != "" {
 		tableSpec = t.Schema + "." + tableSpec
 	}
 
-	return t.Adapter.Update(tableSpec, data, cond)
+	return t.Adapter.Update(ctx, tableSpec, data, cond)
 }
 
 // CascadeUpdate called by a row object for the parent table's class during save() method
-func (t *DefaultTable) CascadeUpdate(parentTable string, oldPrimaryKey map[string]string, newPrimaryKey map[string]string) (int, error) {
+func (t *DefaultTable) CascadeUpdate(ctx context.Context, parentTable string, oldPrimaryKey map[string]string, newPrimaryKey map[string]string) (int, error) {
 	t.SetupMetadata()
 	rowsAffected := 0
 	for _, ref := range t.getReferenceMapNormalized() {
@@ -538,7 +552,7 @@ func (t *DefaultTable) CascadeUpdate(parentTable string, oldPrimaryKey map[strin
 					where[t.Adapter.QuoteIdentifier(col, true)+" = ?"] = oldPrimaryKey[refCol]
 				}
 
-				ok, err := t.Adapter.Update(ref.Table, newRefs, where)
+				ok, err := t.Adapter.Update(ctx, ref.Table, newRefs, where)
 				if err == nil {
 					return rowsAffected, err
 				}
@@ -554,10 +568,10 @@ func (t *DefaultTable) CascadeUpdate(parentTable string, oldPrimaryKey map[strin
 }
 
 // Delete deletes existing rows
-func (t *DefaultTable) Delete(cond map[string]interface{}) (bool, error) {
+func (t *DefaultTable) Delete(ctx context.Context, cond map[string]interface{}) (bool, error) {
 	depTables := t.GetDependentTables()
 	if len(depTables) > 0 {
-		resultSet, err := t.FetchAll(cond)
+		resultSet, err := t.FetchAll(ctx, cond)
 		if err != nil {
 			return false, err
 		}
@@ -578,11 +592,11 @@ func (t *DefaultTable) Delete(cond map[string]interface{}) (bool, error) {
 		tableSpec = t.Schema + "." + tableSpec
 	}
 
-	return t.Adapter.Delete(tableSpec, cond)
+	return t.Adapter.Delete(ctx, tableSpec, cond)
 }
 
 // CascadeDelete called by parent table's object during delete() method
-func (t *DefaultTable) CascadeDelete(parentTable string, primaryKey map[string]interface{}) (int, error) {
+func (t *DefaultTable) CascadeDelete(ctx context.Context, parentTable string, primaryKey map[string]interface{}) (int, error) {
 	t.SetupMetadata()
 
 	rowsAffected := 0
@@ -621,7 +635,7 @@ func (t *DefaultTable) CascadeDelete(parentTable string, primaryKey map[string]i
 			}
 
 			if ref.OnDelete == Cascade || ref.OnDelete == CascadeRecurse {
-				ok, err := t.Adapter.Delete(t.Name, cond)
+				ok, err := t.Adapter.Delete(ctx, t.Name, cond)
 				if err != nil {
 					return rowsAffected, err
 				}
@@ -648,7 +662,7 @@ func (t *DefaultTable) CascadeDelete(parentTable string, primaryKey map[string]i
 //
 // The Find() method always returns a rowset.Interface object, even if only one row
 // was found.
-func (t *DefaultTable) Find(args ...interface{}) (Rowset, error) {
+func (t *DefaultTable) Find(ctx context.Context, args ...interface{}) (Rowset, error) {
 	t.SetupPrimaryKey()
 
 	if len(args) < len(t.Primary) {
@@ -708,97 +722,30 @@ func (t *DefaultTable) Find(args ...interface{}) (Rowset, error) {
 		return NewEmptyRowset(t.GetRowsetType()), nil
 	}
 
-	return t.FetchAll(whereClause)
+	return t.FetchAll(ctx, whereClause)
 }
 
 // FetchAll fetches all rows
-func (t *DefaultTable) FetchAll(cond interface{}) (Rowset, error) {
-	var slct Select
-	var err error
-	switch cond.(type) {
-	case Select:
-		slct = cond.(Select)
-
-	case string:
-		slct, err = t.Select(true)
-		if err != nil {
-			return NewEmptyRowset(t.GetRowsetType()), err
-		}
-
-		t.where(slct, cond)
-	}
-
-	rows, err := t.Adapter.Query(slct)
-	if err != nil {
-		return NewEmptyRowset(t.GetRowsetType()), err
-	}
-
-	rows.SetTable(t)
-	return rows, nil
+func (t *DefaultTable) FetchAll(ctx context.Context, cond interface{}) (Rowset, error) {
+	return t.fetchAll(ctx, cond, nil, 0, 0)
 }
 
 // FetchAllOrder fetches all rows with specified order
-func (t *DefaultTable) FetchAllOrder(cond interface{}, order interface{}) (Rowset, error) {
-	var slct Select
-	var err error
-	switch cond.(type) {
-	case Select:
-		slct = cond.(Select)
-
-	case string:
-		slct, err = t.Select(true)
-		if err != nil {
-			return NewEmptyRowset(t.GetRowsetType()), err
-		}
-
-		t.where(slct, cond)
-	}
-
-	if order != nil {
-		t.order(slct, order)
-	}
-
-	rows, err := t.Adapter.Query(slct)
-	if err != nil {
-		return NewEmptyRowset(t.GetRowsetType()), err
-	}
-
-	rows.SetTable(t)
-	return rows, nil
+func (t *DefaultTable) FetchAllOrder(ctx context.Context, cond interface{}, order interface{}) (Rowset, error) {
+	return t.fetchAll(ctx, cond, order, 0, 0)
 }
 
 // FetchAllLimit fetches all rows with limit and offset
-func (t *DefaultTable) FetchAllLimit(cond interface{}, count int, offset int) (Rowset, error) {
-	var slct Select
-	var err error
-	switch cond.(type) {
-	case Select:
-		slct = cond.(Select)
-
-	case string:
-		slct, err = t.Select(true)
-		if err != nil {
-			return NewEmptyRowset(t.GetRowsetType()), err
-		}
-
-		t.where(slct, cond)
-	}
-
-	if count > 0 || offset > 0 {
-		slct.Limit(count, offset)
-	}
-
-	rows, err := t.Adapter.Query(slct)
-	if err != nil {
-		return NewEmptyRowset(t.GetRowsetType()), err
-	}
-
-	rows.SetTable(t)
-	return rows, nil
+func (t *DefaultTable) FetchAllLimit(ctx context.Context, cond interface{}, count int, offset int) (Rowset, error) {
+	return t.fetchAll(ctx, cond, nil, count, offset)
 }
 
 // FetchAllOrderLimit fetches all rows with with specified order, limit and offset
-func (t *DefaultTable) FetchAllOrderLimit(cond interface{}, order interface{}, count int, offset int) (Rowset, error) {
+func (t *DefaultTable) FetchAllOrderLimit(ctx context.Context, cond interface{}, order interface{}, count int, offset int) (Rowset, error) {
+	return t.fetchAll(ctx, cond, order, count, offset)
+}
+
+func (t *DefaultTable) fetchAll(ctx context.Context, cond interface{}, order interface{}, count int, offset int) (Rowset, error) {
 	var slct Select
 	var err error
 	switch cond.(type) {
@@ -822,7 +769,15 @@ func (t *DefaultTable) FetchAllOrderLimit(cond interface{}, order interface{}, c
 		slct.Limit(count, offset)
 	}
 
-	rows, err := t.Adapter.Query(slct)
+	rctx := RowsetConfigToContext(ctx, &RowsetConfig{
+		Type: t.GetRowsetType(),
+		Tbl:  t.Name,
+		Row: &RowConfig{
+			Type:  t.GetRowType(),
+			Table: t.Name,
+		},
+	})
+	rows, err := t.Adapter.Query(rctx, slct)
 	if err != nil {
 		return NewEmptyRowset(t.GetRowsetType()), err
 	}
@@ -833,7 +788,29 @@ func (t *DefaultTable) FetchAllOrderLimit(cond interface{}, order interface{}, c
 
 // FetchRow fetches one row in an object of type db.Row,
 // or returns nil if no row matches the specified criteria
-func (t *DefaultTable) FetchRow(cond interface{}, order interface{}, offset int) (Row, error) {
+func (t *DefaultTable) FetchRow(ctx context.Context, cond interface{}) (Row, error) {
+	return t.fetchRow(ctx, cond, nil, 0)
+}
+
+// FetchRowOrder fetches one row in an object of type db.Row,
+// or returns nil if no row matches the specified criteria
+func (t *DefaultTable) FetchRowOrder(ctx context.Context, cond interface{}, order interface{}) (Row, error) {
+	return t.fetchRow(ctx, cond, order, 0)
+}
+
+// FetchRowOffset fetches one row in an object of type db.Row,
+// or returns nil if no row matches the specified criteria
+func (t *DefaultTable) FetchRowOffset(ctx context.Context, cond interface{}, offset int) (Row, error) {
+	return t.fetchRow(ctx, cond, nil, offset)
+}
+
+// FetchRowOrderOffset fetches one row in an object of type db.Row,
+// or returns nil if no row matches the specified criteria
+func (t *DefaultTable) FetchRowOrderOffset(ctx context.Context, cond interface{}, order interface{}, offset int) (Row, error) {
+	return t.fetchRow(ctx, cond, order, offset)
+}
+
+func (t *DefaultTable) fetchRow(ctx context.Context, cond interface{}, order interface{}, offset int) (Row, error) {
 	var slct Select
 	var err error
 	switch cond.(type) {
@@ -843,7 +820,7 @@ func (t *DefaultTable) FetchRow(cond interface{}, order interface{}, offset int)
 	case string:
 		slct, err = t.Select(true)
 		if err != nil {
-			return NewEmptyRow(t.GetRowType()), err
+			return t.CreateRow(nil, DefaultNone), err
 		}
 
 		t.where(slct, cond)
@@ -858,15 +835,17 @@ func (t *DefaultTable) FetchRow(cond interface{}, order interface{}, offset int)
 	} else {
 		slct.Limit(1, 0)
 	}
-
-	rows, err := t.Adapter.Query(slct)
+	fmt.Println(t.GetRowType())
+	os.Exit(2)
+	rctx := RowConfigToContext(ctx, &RowConfig{
+		Type:  t.GetRowType(),
+		Table: t.Name,
+	})
+	row, err := t.Adapter.QueryRow(rctx, slct)
 	if err != nil {
-		return NewEmptyRow(t.GetRowType()), err
+		return t.CreateRow(nil, DefaultNone), err
 	}
 
-	rows.Next()
-	row := rows.Get()
-	row.SetTable(t)
 	return row, nil
 }
 
@@ -902,6 +881,7 @@ func (t *DefaultTable) CreateRow(data map[string]interface{}, defaultSource stri
 	}
 
 	config := &RowConfig{
+		Type:     t.GetRowType(),
 		Table:    t.Name,
 		Data:     defaults,
 		ReadOnly: false,
@@ -913,8 +893,49 @@ func (t *DefaultTable) CreateRow(data map[string]interface{}, defaultSource stri
 		return NewEmptyRow(t.GetRowType())
 	}
 
-	//row.SetData(data)
+	row.SetTable(t)
+	row.Populate(data)
 	return row
+}
+
+// CreateRowConfig creates a row config with default values from table
+func (t *DefaultTable) CreateRowConfig(defaultSource string) *RowConfig {
+	cols := t.GetCols()
+	defaults := make(map[string]interface{})
+	for _, col := range cols {
+		defaults[col] = nil
+	}
+
+	if defaultSource == "" {
+		defaultSource = t.DefaultSource
+	}
+
+	if !utils.InSSlice(defaultSource, []string{DefaultNone, DefaultObject, DefaultDb}) {
+		defaultSource = DefaultNone
+	}
+
+	if defaultSource == DefaultDb {
+		for columnName, metadata := range t.Metadata {
+			v, ok := t.DefaultValues[columnName]
+			if metadata.Default != nil && (!metadata.IsNullable || metadata.IsNullable && ok && v.(bool)) && (!ok && !v.(bool)) {
+				defaults[columnName] = metadata.Default
+			}
+		}
+	} else if defaultSource == DefaultObject && len(t.DefaultValues) > 0 {
+		for defaultName, defaultValue := range t.DefaultValues {
+			if _, ok := defaults[defaultName]; ok {
+				defaults[defaultName] = defaultValue
+			}
+		}
+	}
+
+	return &RowConfig{
+		Type:     t.GetRowType(),
+		Table:    t.Name,
+		Data:     defaults,
+		ReadOnly: false,
+		Stored:   false,
+	}
 }
 
 // Generate WHERE clause from user-supplied string or array

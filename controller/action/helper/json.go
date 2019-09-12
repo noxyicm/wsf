@@ -32,7 +32,7 @@ func (h *JSON) Name() string {
 }
 
 // Init the helper
-func (h *JSON) Init() error {
+func (h *JSON) Init(options map[string]interface{}) error {
 	return nil
 }
 
@@ -87,7 +87,7 @@ func (h *JSON) Send(data interface{}, keepLayouts bool, encodeData bool) error {
 	response.SetHeader("Content-Type", "application/json; charset=utf-8")
 
 	if !keepLayouts && h.Controller().HasHelper("viewRenderer") {
-		if vr, err := h.Controller().Helper("viewRenderer"); err == nil {
+		if vr := h.Controller().Helper("viewRenderer"); vr != nil {
 			vr.(*ViewRenderer).SetNoRender(true)
 		}
 	}

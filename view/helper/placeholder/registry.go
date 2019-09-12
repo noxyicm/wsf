@@ -14,7 +14,7 @@ type Registry struct {
 }
 
 // CreateContainer returns new placeholder container
-func (r *Registry) CreateContainer(key string, value []interface{}) (ci container.Interface, err error) {
+func (r *Registry) CreateContainer(key string, value map[string]interface{}) (ci container.Interface, err error) {
 	r.items[key], err = container.NewContainer(value)
 	if err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func (r *Registry) GetContainer(key string) container.Interface {
 		return v
 	}
 
-	container, _ := r.CreateContainer(key, []interface{}{})
+	container, _ := r.CreateContainer(key, map[string]interface{}{})
 	return container
 }
 

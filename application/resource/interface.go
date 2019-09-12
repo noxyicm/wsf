@@ -3,8 +3,7 @@ package resource
 import (
 	"sync"
 	"wsf/config"
-
-	"github.com/pkg/errors"
+	"wsf/errors"
 )
 
 const (
@@ -14,7 +13,10 @@ const (
 	// StatusRegistered when resource has been registered in registry
 	StatusRegistered
 
-	// StatusOK when resource has been properly configured
+	// StatusInit when resource has been properly configured
+	StatusInit
+
+	// StatusOK when resource has been properly configured and setuped
 	StatusOK
 
 	// StatusStopped when resource stopped
@@ -50,8 +52,8 @@ func (b *bus) getStatus() int {
 // setStatus sets resource bus in a specific status
 func (b *bus) setStatus(status int) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.status = status
+	b.mu.Unlock()
 }
 
 // hasStatus checks if resource bus in a specific status

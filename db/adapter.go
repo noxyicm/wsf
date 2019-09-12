@@ -29,28 +29,28 @@ var (
 	RegexpSingleQuote = regexp.MustCompile(`('.+?')`)
 )
 
-// Adapter database adapter
+// Adapter represents database adapter interface
 type Adapter interface {
+	Setup()
 	Init(ctx context.Context) error
 	Context() context.Context
 	SetContext(ctx context.Context) error
 	Connection() (Connection, error)
 	Select() (Select, error)
-	Query(sql Select) (Rowset, error)
-	QueryRow(sql Select) (Row, error)
+	Query(ctx context.Context, sql Select) (Rowset, error)
+	QueryRow(ctx context.Context, sql Select) (Row, error)
 	//Profiler()
-	Insert(table string, data map[string]interface{}) (int, error)
-	Update(table string, data map[string]interface{}, cond map[string]interface{}) (bool, error)
-	Delete(table string, cond map[string]interface{}) (bool, error)
+	Insert(ctx context.Context, table string, data map[string]interface{}) (int, error)
+	Update(ctx context.Context, table string, data map[string]interface{}, cond map[string]interface{}) (bool, error)
+	Delete(ctx context.Context, table string, cond map[string]interface{}) (bool, error)
 	//Select
 	//FetchAll
 	//FetchAssoc
 	//FetchCol
 	//FetchPairs
 	//FetchOne
-	LastInsertID() int
 	NextSequenceID(sequence string) int
-	BeginTransaction() (Transaction, error)
+	BeginTransaction(ctx context.Context) (Transaction, error)
 	DescribeTable(table string, schema string) (map[string]*TableColumn, error)
 	Quote(interface{}) string
 	QuoteIdentifier(interface{}, bool) string
@@ -60,7 +60,7 @@ type Adapter interface {
 	QuoteColumnAs(ident interface{}, alias string, auto bool) string
 	QuoteTableAs(ident interface{}, alias string, auto bool) string
 	SupportsParameters(param string) bool
-	SetOptions(options *AdapterConfig) Adapter
+	SetOptions(options *AdapterConfig) error
 	GetOptions() *AdapterConfig
 	FormatDSN() string
 	Limit(sql string, count int, offset int) string
@@ -137,25 +137,30 @@ func (a *DefaultAdapter) Connection() (conn Connection, err error) {
 }
 
 // Query runs a query
-func (a *DefaultAdapter) Query(sql Select) (Rowset, error) {
+func (a *DefaultAdapter) Query(ctx context.Context, dbs Select) (Rowset, error) {
 	if a.Db == nil {
 		return nil, errors.New("Database is not initialized")
 	}
 
-	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
-	if err := sql.Err(); err != nil {
+	if err := dbs.Err(); err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
 
-	rows, err := a.Db.QueryContext(ctx, sql.Assemble(), sql.Binds()...)
+	rows, err := a.Db.QueryContext(qctx, dbs.Assemble(), dbs.Binds()...)
 	if err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
 	defer rows.Close()
 
-	rst, err := NewRowset(Options().Rowset.Type, Options().Rowset)
+	rstConfig, ok := RowsetConfigFromContext(ctx)
+	if !ok {
+		rstConfig = Options().Rowset
+	}
+
+	rst, err := NewRowset(rstConfig.Type, rstConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
@@ -168,19 +173,19 @@ func (a *DefaultAdapter) Query(sql Select) (Rowset, error) {
 }
 
 // QueryRow runs a query
-func (a *DefaultAdapter) QueryRow(dbs Select) (Row, error) {
+func (a *DefaultAdapter) QueryRow(ctx context.Context, dbs Select) (Row, error) {
 	if a.Db == nil {
 		return nil, errors.New("Database is not initialized")
 	}
 
-	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	if err := dbs.Err(); err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
 
-	rows, err := a.Db.QueryContext(ctx, dbs.Assemble(), dbs.Binds()...)
+	rows, err := a.Db.QueryContext(qctx, dbs.Assemble(), dbs.Binds()...)
 	if err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
@@ -203,7 +208,12 @@ func (a *DefaultAdapter) QueryRow(dbs Select) (Row, error) {
 			return nil, err
 		}
 
-		rw, err := NewRow(Options().Row.Type, Options().Row)
+		rwConfig, ok := RowConfigFromContext(ctx)
+		if !ok {
+			rwConfig = Options().Row
+		}
+
+		rw, err := NewRow(rwConfig.Type, rwConfig)
 		if err != nil {
 			return nil, errors.Wrap(err, "Database query Error")
 		}
@@ -222,18 +232,8 @@ func (a *DefaultAdapter) QueryRow(dbs Select) (Row, error) {
 	return nil, nil
 }
 
-// LastInsertID returns the last insert query ID
-func (a *DefaultAdapter) LastInsertID() int {
-	return a.lastInsertID
-}
-
-// LastInsertUUID returns the last insert query UUID
-func (a *DefaultAdapter) LastInsertUUID() string {
-	return a.lastInsertUUID
-}
-
 // Insert inserts new row into table
-func (a *DefaultAdapter) Insert(table string, data map[string]interface{}) (int, error) {
+func (a *DefaultAdapter) Insert(ctx context.Context, table string, data map[string]interface{}) (int, error) {
 	cols := []string{}
 	vals := []string{}
 	binds := []interface{}{}
@@ -261,18 +261,18 @@ func (a *DefaultAdapter) Insert(table string, data map[string]interface{}) (int,
 
 	sql := "INSERT INTO " + a.QuoteIdentifier(table, true) + " (" + strings.Join(cols, ", ") + ") VALUES (" + strings.Join(vals, ", ") + ")"
 
-	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
-	stmt, err := a.Db.PrepareContext(ctx, sql)
+	stmt, err := a.Db.PrepareContext(pctx, sql)
 	if err != nil {
 		return 0, errors.Wrap(err, "Database insert Error")
 	}
 
-	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
-	result, err := stmt.ExecContext(ctx, binds...)
+	result, err := stmt.ExecContext(qctx, binds...)
 	if err != nil {
 		return 0, errors.Wrap(err, "Database insert Error")
 	}
@@ -286,7 +286,7 @@ func (a *DefaultAdapter) Insert(table string, data map[string]interface{}) (int,
 }
 
 // Update updates rows into table be condition
-func (a *DefaultAdapter) Update(table string, data map[string]interface{}, cond map[string]interface{}) (bool, error) {
+func (a *DefaultAdapter) Update(ctx context.Context, table string, data map[string]interface{}, cond map[string]interface{}) (bool, error) {
 	set := []string{}
 	binds := []interface{}{}
 	i := 1
@@ -321,19 +321,19 @@ func (a *DefaultAdapter) Update(table string, data map[string]interface{}, cond 
 		sql = sql + " WHERE " + where
 	}
 
-	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
-	stmt, err := a.Db.PrepareContext(ctx, sql)
+	stmt, err := a.Db.PrepareContext(pctx, sql)
 	if err != nil {
 		return false, err
 	}
 	defer stmt.Close()
 
-	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
-	rows, err := stmt.QueryContext(ctx, binds...)
+	rows, err := stmt.QueryContext(qctx, binds...)
 	if err != nil {
 		return false, err
 	}
@@ -350,7 +350,7 @@ func (a *DefaultAdapter) Update(table string, data map[string]interface{}, cond 
 }
 
 // Delete removes rows from table
-func (a *DefaultAdapter) Delete(table string, cond map[string]interface{}) (bool, error) {
+func (a *DefaultAdapter) Delete(ctx context.Context, table string, cond map[string]interface{}) (bool, error) {
 	where := a.whereExpr(cond)
 
 	sql := "DELETE FROM " + a.QuoteIdentifier(table, true)
@@ -358,19 +358,19 @@ func (a *DefaultAdapter) Delete(table string, cond map[string]interface{}) (bool
 		sql = sql + " WHERE " + where
 	}
 
-	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
-	stmt, err := a.Db.PrepareContext(ctx, sql)
+	stmt, err := a.Db.PrepareContext(pctx, sql)
 	if err != nil {
 		return false, err
 	}
 	defer stmt.Close()
 
-	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
-	rows, err := stmt.QueryContext(ctx)
+	rows, err := stmt.QueryContext(qctx)
 	if err != nil {
 		return false, err
 	}
@@ -380,12 +380,12 @@ func (a *DefaultAdapter) Delete(table string, cond map[string]interface{}) (bool
 }
 
 // BeginTransaction creates a new database transaction
-func (a *DefaultAdapter) BeginTransaction() (Transaction, error) {
+func (a *DefaultAdapter) BeginTransaction(ctx context.Context) (Transaction, error) {
 	if a.Db == nil {
 		return nil, errors.New("Database is not initialized")
 	}
 
-	tx, err := a.Db.BeginTx(a.Ctx, &sql.TxOptions{Isolation: a.Options.Transaction.IsolationLevel, ReadOnly: a.Options.Transaction.ReadOnly})
+	tx, err := a.Db.BeginTx(ctx, &sql.TxOptions{Isolation: a.Options.Transaction.IsolationLevel, ReadOnly: a.Options.Transaction.ReadOnly})
 	if err != nil {
 		return nil, err
 	}

@@ -10,8 +10,11 @@ import (
 )
 
 const (
+	// EventDebug thrown if there is something insegnificant to say
+	EventDebug = iota + 500
+
 	// EventInfo thrown if there is something to say
-	EventInfo = iota + 500
+	EventInfo
 
 	// EventError thrown on any non job error provided
 	EventError
@@ -23,8 +26,8 @@ var (
 
 // Interface Bootstrap interface
 type Interface interface {
-	Options() *Config
 	SetOptions(*Config) error
+	GetOptions() *Config
 	Init() error
 	Run() error
 	Stop()
@@ -33,23 +36,27 @@ type Interface interface {
 	HasResource(resource string) bool
 	Resource(resource string) (r interface{}, status int)
 	AddListener(l func(event int, ctx interface{}))
-	Listen(l func(event int, ctx interface{}))
 }
 
 // Bootstrap is an abstract bootstrap struct
 type Bootstrap struct {
-	options   *Config
+	Options   *Config
 	Resources resource.Registry
 	Services  service.Server
-	logger    *log.Log
+	Logger    *log.Log
 	lsns      []func(event int, ctx interface{})
-	lsn       func(event int, ctx interface{})
 	mu        sync.Mutex
 }
 
 // Init initializes the application
 func (b *Bootstrap) Init() error {
-	cfg := b.options.Get("resources")
+	b.Resources = resource.NewRegistry()
+	b.Resources.Listen(b.throw)
+
+	b.Services = service.NewServer()
+	b.Services.Listen(b.throw)
+
+	cfg := b.Options.Get("resources")
 	if cfg == nil {
 		return errors.New("[Application] Resources configuration undefined")
 	}
@@ -57,8 +64,9 @@ func (b *Bootstrap) Init() error {
 	if err := b.Resources.Init(cfg); err != nil {
 		return err
 	}
+	b.Resources.Listen(b.throw)
 
-	cfg = b.options.Get("services")
+	cfg = b.Options.Get("services")
 	if cfg == nil {
 		return errors.New("[Application] Services configuration undefined")
 	}
@@ -66,6 +74,7 @@ func (b *Bootstrap) Init() error {
 	if err := b.Services.Init(cfg); err != nil {
 		return err
 	}
+	b.Services.Listen(b.throw)
 
 	return nil
 }
@@ -80,19 +89,19 @@ func (b *Bootstrap) Stop() {
 	b.Services.Stop()
 }
 
-// Options returns configuration of the bootstrap struct
-func (b *Bootstrap) Options() *Config {
-	return b.options
-}
-
 // SetOptions Sets configuration for bootsrap struct
 func (b *Bootstrap) SetOptions(options *Config) error {
 	if options == nil {
 		return nil
 	}
 
-	b.options = options
+	b.Options = options
 	return nil
+}
+
+// GetOptions returns configuration of the bootstrap struct
+func (b *Bootstrap) GetOptions() *Config {
+	return b.Options
 }
 
 // HasResource returns true if resource is registered
@@ -120,21 +129,10 @@ func (b *Bootstrap) AddListener(l func(event int, ctx interface{})) {
 	b.lsns = append(b.lsns, l)
 }
 
-// Listen attaches handler event watcher
-func (b *Bootstrap) Listen(l func(event int, ctx interface{})) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.lsn = l
-}
-
 // throw invokes event handler if any
 func (b *Bootstrap) throw(event int, ctx interface{}) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.lsn != nil {
-		b.lsn(event, ctx)
+	for _, l := range b.lsns {
+		l(event, ctx)
 	}
 }
 

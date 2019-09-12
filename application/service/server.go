@@ -12,13 +12,16 @@ import (
 
 // InitMethod Worker initialization function
 const (
-	InitMethod = "Init"
+	// EventDebug thrown if there is something insegnificant to say
+	EventDebug = iota + 500
 
 	// EventInfo thrown if there is something to say
-	EventInfo = iota + 500
+	EventInfo
 
 	// EventError thrown on any non job error provided
 	EventError
+
+	InitMethod = "Init"
 )
 
 var errNoConfig = errors.New("No configuration has been provided")
@@ -81,6 +84,7 @@ func (s *server) Register(name string, typ string, svc service.Interface) {
 	}
 
 	registry.Set("service."+name, svc)
+	s.throw(EventDebug, fmt.Sprintf("Service '%s' registered", name))
 }
 
 // Init configures all underlying services with given configuration
@@ -105,15 +109,16 @@ func (s *server) Init(cfg config.Config) error {
 
 		if ok, err := s.initService(b.service, cfg.Get(b.typ).Get(b.name)); err != nil {
 			if err == errNoConfig {
-				s.throw(EventError, fmt.Sprintf("[%s]: disabled: %v\n", b.name, errNoConfig))
+				s.throw(EventError, fmt.Sprintf("Service '%s' disabled: %v\n", b.name, errNoConfig))
 				continue
 			}
 
 			return err
 		} else if ok {
 			b.setStatus(StatusOK)
+			b.service.AddListener(s.throw)
 		} else {
-			s.throw(EventError, "["+b.name+"]: disabled. No configuration has been provided")
+			s.throw(EventError, "Service '"+b.name+"' disabled. No configuration has been provided")
 		}
 	}
 
@@ -162,8 +167,7 @@ func (s *server) Serve() error {
 			continue
 		}
 
-		s.throw(EventError, fmt.Sprintf("[%s]: started", b.name))
-		//fmt.Printf("[%s]: started\n", b.name)
+		s.throw(EventDebug, fmt.Sprintf("Service '%s' started", b.name))
 		go func(b *bus) {
 			b.setStatus(StatusServing)
 			defer b.setStatus(StatusStopped)
@@ -200,7 +204,7 @@ func (s *server) Stop() {
 			b.service.Stop()
 			b.setStatus(StatusStopped)
 
-			fmt.Printf("[%s]: stopped\n", b.name)
+			s.throw(EventDebug, fmt.Sprintf("Service '%s' stopped", b.name))
 		}
 	}
 }
@@ -215,9 +219,6 @@ func (s *server) Listen(l func(event int, ctx interface{})) {
 
 // throw invokes event handler if any
 func (s *server) throw(event int, ctx interface{}) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.lsn != nil {
 		s.lsn(event, ctx)
 	}
@@ -242,7 +243,6 @@ func (s *server) initService(b interface{}, segment config.Config) (bool, error)
 	}
 
 	out := m.Func.Call(values)
-
 	if out[1].IsNil() {
 		return out[0].Bool(), nil
 	}

@@ -1,17 +1,24 @@
 package session
 
 import (
+	"context"
 	"wsf/config"
 	"wsf/errors"
 )
 
+// Public constants
 const (
 	// TYPESessionDefault is a type of controller
 	TYPESessionDefault = "default"
 )
 
+type contextKey int
+
 var (
 	buildSessionHandlers = map[string]func(*Config) (Interface, error){}
+
+	sessContextKey   contextKey
+	sessIDContextKey contextKey
 )
 
 func init() {
@@ -25,6 +32,10 @@ type Interface interface {
 	IsStarted() bool
 	IsWritable() bool
 	IsReadable() bool
+	Has(key string) bool
+	Get(key string) interface{}
+	Set(key string, data interface{}) error
+	Unset(key string) bool
 }
 
 // NewSession creates a new session from given type and options
@@ -97,10 +108,63 @@ func (s *Session) IsReadable() bool {
 	return s.Readable
 }
 
+// Has returns true if session contains provided key
+func (s *Session) Has(key string) bool {
+	if _, ok := s.Data[key]; ok {
+		return true
+	}
+
+	return false
+}
+
+// Get returns a session value by its key
+func (s *Session) Get(key string) interface{} {
+	if !s.Has(key) {
+		return nil
+	}
+
+	return s.Data[key]
+}
+
+// Set session value
+func (s *Session) Set(key string, data interface{}) error {
+	s.Data[key] = data
+	return nil
+}
+
+// Unset the value by its key
+func (s *Session) Unset(key string) bool {
+	if !s.Has(key) {
+		return false
+	}
+
+	delete(s.Data, key)
+	return true
+}
+
 // NewDefaultSession creates a new default session handler
 func NewDefaultSession(options *Config) (Interface, error) {
 	return &Session{
 		Options: options,
 		Data:    make(map[string]interface{}),
 	}, nil
+}
+
+// ToContext returns a new context with stored session
+func ToContext(ctx context.Context, sid string, sess Interface) context.Context {
+	ctx = context.WithValue(ctx, sessIDContextKey, sid)
+	ctx = context.WithValue(ctx, sessContextKey, sess)
+	return ctx
+}
+
+// FromContext returns a session stored in context
+func FromContext(ctx context.Context) (Interface, bool) {
+	v, ok := ctx.Value(sessContextKey).(Interface)
+	return v, ok
+}
+
+// SIDFromContext returns a session id stored in context
+func SIDFromContext(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(sessIDContextKey).(string)
+	return v, ok
 }

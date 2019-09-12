@@ -83,6 +83,148 @@ func (d DataTree) Mount(i []string, v []string) {
 	d[i[0]].(DataTree).Mount(i[1:], v)
 }
 
+// Less determines wherethere a is less than b
+func Less(a, b interface{}) bool {
+	switch a.(type) {
+	case int:
+		switch b.(type) {
+		case int:
+			return a.(int) < b.(int)
+
+		case int8:
+			return a.(int) < int(b.(int8))
+
+		case int16:
+			return a.(int) < int(b.(int16))
+
+		case int32:
+			return a.(int) < int(b.(int32))
+
+		case int64:
+			return a.(int) < int(b.(int64))
+
+		case string:
+			bi, _ := strconv.Atoi(b.(string))
+			return a.(int) < bi
+		}
+
+	case int8:
+		switch b.(type) {
+		case int:
+			return int(a.(int8)) < b.(int)
+
+		case int8:
+			return a.(int8) < b.(int8)
+
+		case int16:
+			return int(a.(int8)) < int(b.(int16))
+
+		case int32:
+			return int(a.(int8)) < int(b.(int32))
+
+		case int64:
+			return int(a.(int8)) < int(b.(int64))
+
+		case string:
+			bi, _ := strconv.Atoi(b.(string))
+			return int(a.(int8)) < bi
+		}
+
+	case int16:
+		switch b.(type) {
+		case int:
+			return int(a.(int16)) < b.(int)
+
+		case int8:
+			return int(a.(int16)) < int(b.(int8))
+
+		case int16:
+			return a.(int16) < b.(int16)
+
+		case int32:
+			return int(a.(int16)) < int(b.(int32))
+
+		case int64:
+			return int(a.(int16)) < int(b.(int64))
+
+		case string:
+			bi, _ := strconv.Atoi(b.(string))
+			return int(a.(int16)) < bi
+		}
+
+	case int32:
+		switch b.(type) {
+		case int:
+			return int(a.(int32)) < b.(int)
+
+		case int8:
+			return int(a.(int32)) < int(b.(int8))
+
+		case int16:
+			return int(a.(int32)) < int(b.(int16))
+
+		case int32:
+			return a.(int32) < b.(int32)
+
+		case int64:
+			return int(a.(int32)) < int(b.(int64))
+
+		case string:
+			bi, _ := strconv.Atoi(b.(string))
+			return int(a.(int32)) < bi
+		}
+
+	case int64:
+		ai := int(a.(int64))
+		switch b.(type) {
+		case int:
+			return ai < b.(int)
+
+		case int8:
+			return ai < int(b.(int8))
+
+		case int16:
+			return ai < int(b.(int16))
+
+		case int32:
+			return ai < int(b.(int32))
+
+		case int64:
+			return a.(int64) < b.(int64)
+
+		case string:
+			bi, _ := strconv.Atoi(b.(string))
+			return int(a.(int64)) < bi
+		}
+
+	case string:
+		ai, _ := strconv.Atoi(a.(string))
+		switch b.(type) {
+		case int:
+			return ai < b.(int)
+
+		case int8:
+			return ai < int(b.(int8))
+
+		case int16:
+			return ai < int(b.(int16))
+
+		case int32:
+			return ai < int(b.(int32))
+
+		case int64:
+
+			return ai < int(b.(int64))
+
+		case string:
+			bi, _ := strconv.Atoi(b.(string))
+			return ai < bi
+		}
+	}
+
+	return false
+}
+
 // ReverseSlice reverses the order of slice of integers
 func ReverseSlice(slice []int) []int {
 	s := make([]int, len(slice))
@@ -195,9 +337,13 @@ func MapSMerge(c interface{}, b interface{}) map[string]interface{} {
 			a[key] = value
 		}
 
-		a["0"] = b
+		a[strconv.Itoa(len(a))] = b
 	} else if bOk {
-		a = bV
+		a[strconv.Itoa(len(a))] = c
+
+		for key, value := range bV {
+			a[key] = value
+		}
 	}
 
 	return a

@@ -47,19 +47,6 @@ func (r *HTTP) SetContext(ctx context.Context) {
 	r.original = r.original.WithContext(ctx)
 }
 
-// Set sets request parameter
-func (r *HTTP) Set(key interface{}, value interface{}) error {
-	ctx := r.original.Context()
-	ctx = context.WithValue(ctx, key, value)
-	r.SetContext(ctx)
-	return nil
-}
-
-// Get returns request parameter
-func (r *HTTP) Get(key interface{}) interface{} {
-	return r.original.Context().Value(key)
-}
-
 // IsDispatched returns true if request was dispatched
 func (r *HTTP) IsDispatched() bool {
 	return r.Dispatched
@@ -279,21 +266,21 @@ func (r *HTTP) contentType() int {
 //
 // By default server will get http.Request's RemoteAddr
 func (r *HTTP) clientIP() string {
-	if r.Proxyed {
-		// Header X-Forwarded-For
-		if fwdFor := strings.TrimSpace(r.original.Header.Get(http.CanonicalHeaderKey("X-Forwarded-For"))); fwdFor != "" {
-			index := strings.Index(fwdFor, ",")
-			if index == -1 {
-				return fwdFor
-			}
-			return fwdFor[:index]
+	//if r.Proxyed {
+	// Header X-Forwarded-For
+	if fwdFor := strings.TrimSpace(r.original.Header.Get(http.CanonicalHeaderKey("X-Forwarded-For"))); fwdFor != "" {
+		index := strings.Index(fwdFor, ",")
+		if index == -1 {
+			return fwdFor
 		}
-
-		// Header X-Real-Ip
-		if realIP := strings.TrimSpace(r.original.Header.Get(http.CanonicalHeaderKey("X-Real-Ip"))); realIP != "" {
-			return realIP
-		}
+		return fwdFor[:index]
 	}
+
+	// Header X-Real-Ip
+	if realIP := strings.TrimSpace(r.original.Header.Get(http.CanonicalHeaderKey("X-Real-Ip"))); realIP != "" {
+		return realIP
+	}
+	//}
 
 	if remoteAddr, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return remoteAddr
@@ -325,8 +312,13 @@ func NewHTTPRequest(r *http.Request, cfg *file.Config, proxyed bool) (ri Interfa
 	req.Proxyed = proxyed
 	req.Prms = make(map[string]interface{})
 	req.RemoteAddr = req.clientIP()
-	req.Path = r.URL.Path
 	req.Secure = r.URL.Scheme == "https"
+
+	if r.URL.RawPath != "" {
+		req.Path = r.URL.RawPath
+	} else {
+		req.Path = r.URL.Path
+	}
 
 	for k, v := range r.URL.Query() {
 		req.Prms[k] = v[0]

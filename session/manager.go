@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"sync"
 	"time"
-	"wsf/cache/backend"
+	"wsf/cache"
 	"wsf/config"
 	"wsf/controller/request"
 	"wsf/controller/response"
@@ -16,9 +16,13 @@ import (
 	"wsf/session/validator"
 )
 
+// Public contants
 const (
 	// TYPEDefaultSessionManager is a type of session manager
 	TYPEDefaultSessionManager = "default"
+
+	IDKey = "sessionID"
+	Key   = "session"
 )
 
 var (
@@ -85,27 +89,26 @@ func Register(managerType string, handler func(*ManagerConfig) (ManagerInterface
 // Manager is a default session manager
 type Manager struct {
 	Options    *ManagerConfig
-	Prty       int
 	Started    bool
 	Secure     bool
 	Strict     bool
 	Sessions   sync.Map
-	Storage    backend.Interface
+	Storage    cache.Interface
 	Validators []validator.Interface
 	mu         sync.Mutex
 }
 
 // Priority returns a priority of resource
 func (m *Manager) Priority() int {
-	return m.Prty
+	return m.Options.Priority
 }
 
 // Init the session manager
 func (m *Manager) Init(options *ManagerConfig) (bool, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	m.Started = true
+	m.mu.Unlock()
+
 	return true, nil
 }
 
@@ -148,9 +151,6 @@ func (m *Manager) NewSID() (string, error) {
 
 // SessionStart starts a new session
 func (m *Manager) SessionStart(rqs request.Interface, rsp response.Interface) (Interface, string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if !m.Started {
 		return nil, "", errors.New("[Session] Manager is not initialized")
 	}
@@ -266,9 +266,9 @@ func (m *Manager) SessionExist(sid string) bool {
 
 // SessionLoad loads session from storage and populates its data to s
 func (m *Manager) SessionLoad(sid string, s Interface) error {
-	data, err := m.Storage.Load(sid, false)
-	if err != nil {
-		return err
+	data, ok := m.Storage.Load(sid, false)
+	if !ok {
+		return m.Storage.Error()
 	}
 
 	if err := json.Unmarshal(data, s); err != nil {
@@ -280,7 +280,7 @@ func (m *Manager) SessionLoad(sid string, s Interface) error {
 
 // SessionAll returns number of registered sessions
 func (m *Manager) SessionAll() int {
-	return 0
+	return -1
 }
 
 // RegisterValidator registers a session validator
@@ -293,7 +293,6 @@ func (m *Manager) RegisterValidator(v validator.Interface) error {
 func NewDefaultSessionManager(options *ManagerConfig) (ManagerInterface, error) {
 	sm := &Manager{
 		Options: options,
-		Prty:    10,
 	}
 
 	for _, vcfg := range options.Valds {
@@ -305,11 +304,11 @@ func NewDefaultSessionManager(options *ManagerConfig) (ManagerInterface, error) 
 		sm.Validators = append(sm.Validators, v)
 	}
 
-	if options.Store == nil {
+	if options.Storage == nil {
 		return nil, errors.New("[DefaultSessionManager] Storage is not configured")
 	}
 
-	str, err := backend.NewBackendCache(options.Store.GetString("type"), options.Store)
+	str, err := cache.NewCore(options.Storage.GetString("type"), options.Storage)
 	if err != nil {
 		return nil, errors.Wrap(err, "[DefaultSessionManager] Storage creation error")
 	}

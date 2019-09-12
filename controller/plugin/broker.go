@@ -1,10 +1,10 @@
 package plugin
 
 import (
+	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
-	"wsf/session"
 	"wsf/utils/stack"
 )
 
@@ -56,9 +56,9 @@ func (b *Broker) Plugins() []Interface {
 }
 
 // RouteStartup notifyes plugins of RouteStartup routine
-func (b *Broker) RouteStartup(rqs request.Interface, rsp response.Interface, s session.Interface) (ok bool, err error) {
+func (b *Broker) RouteStartup(ctx context.Context, rqs request.Interface, rsp response.Interface) (ok bool, err error) {
 	for _, plugin := range b.Plugins() {
-		if ok, err = plugin.RouteStartup(rqs, rsp, s); !ok {
+		if ok, err = plugin.RouteStartup(ctx, rqs, rsp); !ok {
 			return false, err
 		}
 	}
@@ -67,9 +67,9 @@ func (b *Broker) RouteStartup(rqs request.Interface, rsp response.Interface, s s
 }
 
 // RouteShutdown notifyes plugins of RouteShutdown routine
-func (b *Broker) RouteShutdown(rqs request.Interface, rsp response.Interface, s session.Interface) (ok bool, err error) {
+func (b *Broker) RouteShutdown(ctx context.Context, rqs request.Interface, rsp response.Interface) (ok bool, err error) {
 	for _, plugin := range b.Plugins() {
-		if ok, err = plugin.RouteShutdown(rqs, rsp, s); !ok {
+		if ok, err = plugin.RouteShutdown(ctx, rqs, rsp); !ok {
 			return false, err
 		}
 	}
@@ -78,9 +78,9 @@ func (b *Broker) RouteShutdown(rqs request.Interface, rsp response.Interface, s 
 }
 
 // DispatchLoopStartup notifyes plugins of DispatchLoopStartup routine
-func (b *Broker) DispatchLoopStartup(rqs request.Interface, rsp response.Interface, s session.Interface) (ok bool, err error) {
+func (b *Broker) DispatchLoopStartup(ctx context.Context, rqs request.Interface, rsp response.Interface) (ok bool, err error) {
 	for _, plugin := range b.Plugins() {
-		if ok, err = plugin.DispatchLoopStartup(rqs, rsp, s); !ok {
+		if ok, err = plugin.DispatchLoopStartup(ctx, rqs, rsp); !ok {
 			return false, err
 		}
 	}
@@ -89,9 +89,9 @@ func (b *Broker) DispatchLoopStartup(rqs request.Interface, rsp response.Interfa
 }
 
 // PreDispatch notifyes plugins of PreDispatch routine
-func (b *Broker) PreDispatch(rqs request.Interface, rsp response.Interface, s session.Interface) (ok bool, err error) {
+func (b *Broker) PreDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (ok bool, err error) {
 	for _, plugin := range b.Plugins() {
-		if ok, err = plugin.PreDispatch(rqs, rsp, s); !ok {
+		if ok, err = plugin.PreDispatch(ctx, rqs, rsp); !ok {
 			return false, err
 		}
 	}
@@ -100,9 +100,9 @@ func (b *Broker) PreDispatch(rqs request.Interface, rsp response.Interface, s se
 }
 
 // PostDispatch notifyes plugins of PostDispatch routine
-func (b *Broker) PostDispatch(rqs request.Interface, rsp response.Interface, s session.Interface) (ok bool, err error) {
+func (b *Broker) PostDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (ok bool, err error) {
 	for _, plugin := range b.Plugins() {
-		if ok, err = plugin.PostDispatch(rqs, rsp, s); !ok {
+		if ok, err = plugin.PostDispatch(ctx, rqs, rsp); !ok {
 			return false, err
 		}
 	}
@@ -111,9 +111,9 @@ func (b *Broker) PostDispatch(rqs request.Interface, rsp response.Interface, s s
 }
 
 // DispatchLoopShutdown notifyes plugins of DispatchLoopShutdown routine
-func (b *Broker) DispatchLoopShutdown(rqs request.Interface, rsp response.Interface, s session.Interface) (ok bool, err error) {
+func (b *Broker) DispatchLoopShutdown(ctx context.Context, rqs request.Interface, rsp response.Interface) (ok bool, err error) {
 	for _, plugin := range b.Plugins() {
-		if ok, err = plugin.DispatchLoopShutdown(rqs, rsp, s); !ok {
+		if ok, err = plugin.DispatchLoopShutdown(ctx, rqs, rsp); !ok {
 			return false, err
 		}
 	}

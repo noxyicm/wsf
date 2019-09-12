@@ -14,5 +14,11 @@ func init() {
 
 // NewLoggerResource creates a new resource of type Log
 func NewLoggerResource(cfg config.Config) (Interface, error) {
-	return log.NewLog(cfg)
+	lg, err := log.NewLog(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	log.SetInstance(lg)
+	return lg, nil
 }

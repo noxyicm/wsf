@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"reflect"
 	"strconv"
@@ -18,6 +19,8 @@ const (
 
 var (
 	buildRowHandlers = map[string]func(*RowConfig) (Row, error){}
+
+	rowCfgContextKey contextKey
 )
 
 func init() {
@@ -26,6 +29,8 @@ func init() {
 
 // Row represents row interface
 type Row interface {
+	Setup() error
+	Set(key string, value interface{})
 	Get(key string) interface{}
 	GetString(key string) string
 	GetInt(key string) int
@@ -33,19 +38,32 @@ type Row interface {
 	GetBool(key string) bool
 	GetTime(key string) time.Time
 	Unmarshal(output interface{}) error
+	Populate(data map[string]interface{})
 	Prepare(row []sql.RawBytes, columns []*sql.ColumnType) error
 	SetTable(table Table) error
 	Table() Table
+	IsEmpty() bool
 }
 
 // DefaultRow holds data and operates over row
 type DefaultRow struct {
+	Row
 	Options   *RowConfig
 	Data      map[string]interface{}
 	Tbl       Table
 	Connected bool
 	Stored    bool
 	ReadOnly  bool
+}
+
+// Setup the object
+func (r *DefaultRow) Setup() error {
+	return nil
+}
+
+// Set value v to row data with key k
+func (r *DefaultRow) Set(k string, v interface{}) {
+	r.Data[k] = v
 }
 
 // Get returns a value by its key
@@ -129,6 +147,11 @@ func (r *DefaultRow) GetTime(key string) time.Time {
 	return time.Time{}
 }
 
+// GetAll returns all row columns as map
+func (r *DefaultRow) GetAll() map[string]interface{} {
+	return r.Data
+}
+
 // Unmarshal unmarshals data into struct
 func (r *DefaultRow) Unmarshal(output interface{}) error {
 	if err := mapstructure.Decode(r.Data, output); err != nil {
@@ -136,6 +159,13 @@ func (r *DefaultRow) Unmarshal(output interface{}) error {
 	}
 
 	return nil
+}
+
+// Populate the row object with provided data
+func (r *DefaultRow) Populate(data map[string]interface{}) {
+	for key, value := range data {
+		r.Data[key] = value
+	}
 }
 
 // Prepare initializes row
@@ -158,6 +188,11 @@ func (r *DefaultRow) Table() Table {
 	return r.Tbl
 }
 
+// IsEmpty returns true if object has no data
+func (r *DefaultRow) IsEmpty() bool {
+	return len(r.Data) == 0
+}
+
 // NewDefaultRow creates default row
 func NewDefaultRow(options *RowConfig) (Row, error) {
 	r := &DefaultRow{
@@ -177,6 +212,7 @@ func NewDefaultRow(options *RowConfig) (Row, error) {
 		}
 	}
 
+	r.Setup()
 	return r, nil
 }
 
@@ -207,6 +243,15 @@ func NewEmptyRow(rowType string) Row {
 // RegisterRow registers a handler for database row creation
 func RegisterRow(rowType string, handler func(*RowConfig) (Row, error)) {
 	buildRowHandlers[rowType] = handler
+}
+
+// RowTypeRegistered returns true if type rowType registered
+func RowTypeRegistered(rowType string) bool {
+	if _, ok := buildRowHandlers[rowType]; ok {
+		return true
+	}
+
+	return false
 }
 
 // PrepareRow parses a RawBytes into map structure
@@ -318,4 +363,15 @@ func PrepareRow(row []sql.RawBytes, columns []*sql.ColumnType) (data map[string]
 	}
 
 	return data, err
+}
+
+// RowConfigToContext returns a new context with stored row config
+func RowConfigToContext(ctx context.Context, cfg *RowConfig) context.Context {
+	return context.WithValue(ctx, rowCfgContextKey, cfg)
+}
+
+// RowConfigFromContext returns a row config stored in context
+func RowConfigFromContext(ctx context.Context) (*RowConfig, bool) {
+	v, ok := ctx.Value(rowCfgContextKey).(*RowConfig)
+	return v, ok
 }

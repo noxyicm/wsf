@@ -8,7 +8,8 @@ import (
 
 // ManagerConfig defines set of session manager variables
 type ManagerConfig struct {
-	Type                    string              `json:"type"`
+	Type                    string `json:"type"`
+	Priority                int
 	SessionName             string              `json:"sessionName"`
 	SessionIDLength         int                 `json:"sessionIDLength"`
 	SessionIDPrefix         string              `json:"sessionIDPrefix"`
@@ -20,7 +21,7 @@ type ManagerConfig struct {
 	EnableSidInHTTPHeader   bool                `json:"EnableSidInHTTPHeader"`
 	EnableSidInURLQuery     bool                `json:"EnableSidInURLQuery"`
 	Strict                  bool                `json:"strict"`
-	Store                   config.Config       `json:"store"`
+	Storage                 config.Config       `json:"storage"`
 	Session                 config.Config       `json:"session"`
 	Valds                   []*validator.Config `json:"valds"`
 }
@@ -36,11 +37,11 @@ func (c *ManagerConfig) Populate(cfg config.Config) error {
 	}
 
 	if scfg := cfg.Get("storage"); scfg != nil {
-		c.Store = scfg
+		c.Storage = scfg
 	}
 
-	if c.Store == nil {
-		c.Store = config.NewBridge()
+	if c.Storage == nil {
+		c.Storage = config.NewBridge()
 	}
 
 	if vscfg := cfg.Get("validators"); vscfg != nil {
@@ -63,6 +64,7 @@ func (c *ManagerConfig) Populate(cfg config.Config) error {
 // Defaults sets configuration default values
 func (c *ManagerConfig) Defaults() error {
 	c.Type = "default"
+	c.Priority = 15
 	c.SessionName = "WSFSESS"
 	c.SessionIDLength = 16
 	c.SessionLifeTime = 900
@@ -72,8 +74,8 @@ func (c *ManagerConfig) Defaults() error {
 		c.Session = config.NewBridge()
 	}
 
-	if c.Store == nil {
-		c.Store = config.NewBridge()
+	if c.Storage == nil {
+		c.Storage = config.NewBridge()
 	}
 
 	return nil
@@ -85,7 +87,7 @@ func (c *ManagerConfig) Valid() error {
 		return errors.New("Invalid session configuration")
 	}
 
-	if c.Store == nil {
+	if c.Storage == nil {
 		return errors.New("Invalid storage configuration")
 	}
 

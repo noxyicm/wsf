@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 	"wsf/controller"
+	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
@@ -14,28 +15,30 @@ import (
 	"wsf/session"
 )
 
-const (
-	// EventResponse thrown after the request has been processed
-	EventResponse = iota + 500
-
-	// EventError thrown on any non job error provided by server
-	EventError
-)
-
 // Handler serves http connections
 type Handler struct {
 	options *Config
 	ctrl    controller.Interface
-	mul     sync.Mutex
-	lsn     func(event int, ctx interface{})
+	lsns    []func(event int, ctx interface{})
+	mu      sync.RWMutex
 }
 
-// Listen attaches handler event watcher
-func (h *Handler) Listen(l func(event int, ctx interface{})) {
-	h.mul.Lock()
-	defer h.mul.Unlock()
+// AddListener attaches handler event watcher
+func (h *Handler) AddListener(l func(event int, ctx interface{})) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
-	h.lsn = l
+	h.lsns = append(h.lsns, l)
+}
+
+// throw invokes event handler if any
+func (h *Handler) throw(event int, ctx interface{}) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for _, l := range h.lsns {
+		l(event, ctx)
+	}
 }
 
 // ServeHTTP Serves a HTTP request
@@ -72,7 +75,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.ctrl.Dispatch(req, rsp, s); err != nil {
+	ctx, err := context.NewContext(r.Context())
+	if err != nil {
+		h.handleError(w, r, err, start)
+		return
+	}
+	ctx.SetValue(context.SessionID, sid)
+	ctx.SetValue(context.Session, s)
+	if err := h.ctrl.Dispatch(ctx, req, rsp); err != nil {
 		session.Close(sid)
 		h.handleResponse(req, rsp, err, start)
 		return
@@ -90,7 +100,7 @@ func (h *Handler) handleError(w http.ResponseWriter, r *http.Request, err error,
 
 	w.WriteHeader(500)
 
-	h.throw(EventError, event.NewError(r, err, start))
+	h.throw(EventHTTPError, event.NewError(r, err, start))
 	w.Write([]byte(err.Error()))
 }
 
@@ -107,28 +117,19 @@ func (h *Handler) handleResponse(req request.Interface, rsp response.Interface, 
 
 		default:
 			rsp.SetResponseCode(500)
+			rsp.SetBody([]byte(err.Error()))
 		}
 	} else {
 		rsp.SetResponseCode(200)
 	}
 
-	h.throw(EventResponse, event.NewResponse(req, rsp, err, start))
+	h.throw(EventHTTPResponse, event.NewResponse(req, rsp, err, start))
 	rsp.Write()
-}
-
-// throw invokes event handler if any
-func (h *Handler) throw(event int, ctx interface{}) {
-	h.mul.Lock()
-	defer h.mul.Unlock()
-
-	if h.lsn != nil {
-		h.lsn(event, ctx)
-	}
 }
 
 // NewHandler creates a new handler
 func NewHandler(cfg *Config) (h *Handler, err error) {
-	rsr := registry.Get("maincontroller")
+	rsr := registry.GetResource("maincontroller")
 	if rsr == nil {
 		return nil, errors.New("Maincontroller resource must be registered and initialized")
 	}

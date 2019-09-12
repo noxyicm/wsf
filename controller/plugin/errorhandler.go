@@ -1,10 +1,10 @@
 package plugin
 
 import (
+	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
-	"wsf/session"
 )
 
 // ErrorHandler is a plugin for handling errors
@@ -87,33 +87,33 @@ func (p *ErrorHandler) ErrorHandlerAction() string {
 }
 
 // RouteStartup routine
-func (p *ErrorHandler) RouteStartup(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error) {
-	return p.handleError(rqs, rsp, s)
+func (p *ErrorHandler) RouteStartup(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return p.handleError(ctx, rqs, rsp)
 }
 
 // RouteShutdown routine
-func (p *ErrorHandler) RouteShutdown(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error) {
-	return p.handleError(rqs, rsp, s)
+func (p *ErrorHandler) RouteShutdown(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return p.handleError(ctx, rqs, rsp)
 }
 
 // DispatchLoopStartup routine
-func (p *ErrorHandler) DispatchLoopStartup(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error) {
-	return p.handleError(rqs, rsp, s)
+func (p *ErrorHandler) DispatchLoopStartup(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return p.handleError(ctx, rqs, rsp)
 }
 
 // PreDispatch routine
-func (p *ErrorHandler) PreDispatch(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error) {
-	return p.handleError(rqs, rsp, s)
+func (p *ErrorHandler) PreDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return p.handleError(ctx, rqs, rsp)
 }
 
 // PostDispatch routine
-func (p *ErrorHandler) PostDispatch(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error) {
-	return p.handleError(rqs, rsp, s)
+func (p *ErrorHandler) PostDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return p.handleError(ctx, rqs, rsp)
 }
 
 // DispatchLoopShutdown routine
-func (p *ErrorHandler) DispatchLoopShutdown(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error) {
-	return p.handleError(rqs, rsp, s)
+func (p *ErrorHandler) DispatchLoopShutdown(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return p.handleError(ctx, rqs, rsp)
 }
 
 // SetHandleErrors sets if errors should be handled
@@ -121,7 +121,7 @@ func (p *ErrorHandler) SetHandleErrors(v bool) {
 	p.handleErrors = v
 }
 
-func (p *ErrorHandler) handleError(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error) {
+func (p *ErrorHandler) handleError(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
 	if !p.handleErrors {
 		return true, nil
 	}

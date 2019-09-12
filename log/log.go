@@ -25,6 +25,7 @@ const (
 
 var (
 	priorities = make(map[int]string)
+	lg         *Log
 )
 
 func init() {
@@ -308,4 +309,94 @@ func NewLog(options config.Config) (*Log, error) {
 	}
 
 	return l, nil
+}
+
+// SetInstance sets global log instance
+func SetInstance(l *Log) {
+	lg = l
+}
+
+// Instance returns global log instance
+func Instance() *Log {
+	return lg
+}
+
+// Debug logs message at a debug priority
+func Debug(message string, extras map[string]string) error {
+	return lg.Log(message, DEBUG, extras)
+}
+
+// Debugf logs formated message at a debug priority
+func Debugf(message string, extras map[string]string, f ...interface{}) error {
+	return lg.Logf(message, DEBUG, extras, f...)
+}
+
+// Info logs message at an info priority
+func Info(message string, extras map[string]string) error {
+	return lg.Log(message, INFO, extras)
+}
+
+// Infof logs formated message at an info priority
+func Infof(message string, extras map[string]string, f ...interface{}) error {
+	return lg.Logf(message, INFO, extras, f...)
+}
+
+// Notice logs message at a notice priority
+func Notice(message string, extras map[string]string) error {
+	return lg.Log(message, NOTICE, extras)
+}
+
+// Noticef logs formated message at a notice priority
+func Noticef(message string, extras map[string]string, f ...interface{}) error {
+	return lg.Logf(message, NOTICE, extras, f...)
+}
+
+// Warning logs message at a warning priority
+func Warning(message string, extras map[string]string) error {
+	return lg.Log(message, WARN, extras)
+}
+
+// Warningf logs formated message at a warning priority
+func Warningf(message string, extras map[string]string, f ...interface{}) error {
+	return lg.Logf(message, WARN, extras, f...)
+}
+
+// Error logs message at an error priority
+func Error(message string, extras map[string]string) error {
+	return lg.Log(message, ERR, extras)
+}
+
+// Errorf logs formated message at an error priority
+func Errorf(message string, extras map[string]string, f ...interface{}) error {
+	return lg.Logf(message, ERR, extras, f...)
+}
+
+// Critical logs message at a critical priority
+func Critical(message string, extras map[string]string) error {
+	return lg.Log(message, CRIT, extras)
+}
+
+// Criticalf logs formated message at a critical priority
+func Criticalf(message string, extras map[string]string, f ...interface{}) error {
+	return lg.Logf(message, CRIT, extras, f...)
+}
+
+// Alert logs message at an alert priority
+func Alert(message string, extras map[string]string) error {
+	return lg.Log(message, ALERT, extras)
+}
+
+// Alertf logs formated message at an alert priority
+func Alertf(message string, extras map[string]string, f ...interface{}) error {
+	return lg.Logf(message, ALERT, extras, f...)
+}
+
+// Emergency logs message at an emergency priority
+func Emergency(message string, extras map[string]string) error {
+	return lg.Log(message, EMERG, extras)
+}
+
+// Emergencyf logs formated message at an emergency priority
+func Emergencyf(message string, extras map[string]string, f ...interface{}) error {
+	return lg.Logf(message, EMERG, extras, f...)
 }

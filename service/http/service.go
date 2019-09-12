@@ -24,11 +24,26 @@ import (
 )
 
 const (
-	// ID of service
-	ID = "http"
+	// EventDebug thrown if there is something insegnificant to say
+	EventDebug = iota + 500
+
+	// EventInfo thrown if there is something to say
+	EventInfo
+
+	// EventError thrown on any non job error provided
+	EventError
 
 	// EventInitSSL describes TLS initialization
-	EventInitSSL int = iota
+	EventInitSSL
+
+	// EventHTTPResponse thrown after the http request has been processed
+	EventHTTPResponse
+
+	// EventHTTPError thrown after the http request has been processed with error
+	EventHTTPError
+
+	// ID of service
+	ID = "http"
 )
 
 // http middleware
@@ -40,9 +55,9 @@ type Service struct {
 	accessLogger *log.Log
 	logger       *log.Log
 	env          environment.Interface
-	lsns         []func(event int, ctx interface{})
 	mdwr         []middleware
-	mu           sync.Mutex
+	lsns         []func(event int, ctx interface{})
+	mu           sync.RWMutex
 	serving      bool
 	handler      *Handler
 	http         *http.Server
@@ -56,9 +71,19 @@ func (s *Service) AddMiddleware(m middleware) {
 	s.mdwr = append(s.mdwr, m)
 }
 
-// AddListener attaches server event watcher
+// AddListener attaches event watcher
 func (s *Service) AddListener(l func(event int, ctx interface{})) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.lsns = append(s.lsns, l)
+}
+
+// throw handles service, server and pool events.
+func (s *Service) throw(event int, ctx interface{}) {
+	for _, l := range s.lsns {
+		l(event, ctx)
+	}
 }
 
 // Init HTTP service
@@ -70,15 +95,15 @@ func (s *Service) Init(options *Config, env environment.Interface) (bool, error)
 	s.options = options
 	s.env = env
 	s.signalChan = make(chan os.Signal)
-	s.AddListener(s.logAccess)
 
 	acclogger, err := log.NewLog(options.AccessLogger)
 	if err != nil {
 		return false, err
 	}
 	s.accessLogger = acclogger
+	s.AddListener(s.logAccess)
 
-	logResource := registry.Get("log")
+	logResource := registry.GetResource("syslog")
 	if logResource == nil {
 		return false, errors.New("Log resource is not configured")
 	}
@@ -98,9 +123,10 @@ func (s *Service) Serve() (err error) {
 
 	s.handler, err = NewHandler(s.options)
 	if err != nil {
+		s.mu.Unlock()
 		return err
 	}
-	s.handler.Listen(s.throw)
+	s.handler.AddListener(s.throw)
 
 	s.http = &http.Server{
 		Addr:         s.options.Address(),
@@ -115,7 +141,7 @@ func (s *Service) Serve() (err error) {
 	s.mu.Unlock()
 
 	errChan := make(chan error, 2)
-	s.logger.Infof("[HTTP Server] Starting: Listening on %s...", nil, s.options.Address())
+	s.throw(EventInfo, fmt.Sprintf("[HTTP Server] Starting: Listening on %s...", s.options.Address()))
 	go func() { errChan <- s.http.ListenAndServe() }()
 	if s.https != nil {
 		go func() { errChan <- s.https.ListenAndServeTLS(s.options.SSL.Cert, s.options.SSL.Key) }()
@@ -127,9 +153,10 @@ func (s *Service) Serve() (err error) {
 	s.mu.Unlock()
 
 	if err == http.ErrServerClosed {
-		s.logger.Info("[HTTP Server] Stoped", nil)
+		s.throw(EventInfo, "[HTTP Server] Stoped")
 		return nil
 	}
+
 	return err
 }
 
@@ -138,7 +165,7 @@ func (s *Service) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.logger.Info("[HTTP Server] Stopping", nil)
+	s.throw(EventInfo, "[HTTP Server] Initiating stop...")
 	if s.http == nil {
 		return
 	}
@@ -185,16 +212,9 @@ func (s *Service) initSSL() *http.Server {
 	return server
 }
 
-// throw handles service, server and pool events.
-func (s *Service) throw(event int, ctx interface{}) {
-	for _, l := range s.lsns {
-		l(event, ctx)
-	}
-}
-
 func (s *Service) logAccess(event int, ctx interface{}) {
 	switch event {
-	case EventResponse:
+	case EventHTTPResponse:
 		s.accessLogger.Info("Logging access", map[string]string{
 			"client":     ctx.(*evt.Response).Request.(*request.HTTP).RemoteAddr,
 			"user":       "-",
@@ -205,7 +225,7 @@ func (s *Service) logAccess(event int, ctx interface{}) {
 			"useragent":  ctx.(*evt.Response).Request.(*request.HTTP).UserAgent,
 		})
 
-	case EventError:
+	case EventHTTPError:
 		s.accessLogger.Info("Logging access", map[string]string{
 			"client":     ctx.(*evt.Error).Request.RemoteAddr,
 			"user":       "-",

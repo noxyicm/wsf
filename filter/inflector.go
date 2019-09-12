@@ -5,9 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"wsf/config"
+	"wsf/errors"
 	"wsf/registry"
-
-	"github.com/pkg/errors"
 )
 
 func init() {

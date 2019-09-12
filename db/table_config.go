@@ -24,6 +24,10 @@ type TableConfig struct {
 
 // Populate populates Config values using given Config source
 func (c *TableConfig) Populate(cfg config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+
 	if err := cfg.Unmarshal(c); err != nil {
 		return err
 	}

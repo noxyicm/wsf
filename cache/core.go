@@ -27,6 +27,7 @@ var (
 
 // Interface represents a core cache
 type Interface interface {
+	Enabled() bool
 	Load(id string, testCacheValidity bool) ([]byte, bool)
 	Read(id string, object *interface{}, testCacheValidity bool) bool
 	Test(id string) bool
@@ -38,22 +39,46 @@ type Interface interface {
 
 // Core cache
 type Core struct {
-	options         *Config
-	logger          *log.Log
-	backend         backend.Interface
-	extendedBackend bool
+	Options         *Config
+	Logger          *log.Log
+	Backend         backend.Interface
+	ExtendedBackend bool
 	lastError       error
 	lastID          string
 }
 
 // Priority returns resource initialization priority
 func (c *Core) Priority() int {
-	return c.options.Priority
+	return c.Options.Priority
+}
+
+// Init resource
+func (c *Core) Init(options *Config) (bool, error) {
+	c.Options = options
+
+	adp, err := backend.NewBackendCache(options.Backend.GetString("type"), options.Backend)
+	if err != nil {
+		return false, err
+	}
+	c.Backend = adp
+
+	lg, err := log.NewLog(options.Logger)
+	if err != nil {
+		return false, err
+	}
+	c.Logger = lg
+
+	return true, nil
+}
+
+// Enabled returns true if cache is enabled
+func (c *Core) Enabled() bool {
+	return c.Options.Enable
 }
 
 // Load loads data from cache
 func (c *Core) Load(id string, testCacheValidity bool) ([]byte, bool) {
-	if !c.options.Enable {
+	if !c.Options.Enable {
 		return nil, false
 	}
 
@@ -64,8 +89,8 @@ func (c *Core) Load(id string, testCacheValidity bool) ([]byte, bool) {
 		return nil, false
 	}
 
-	c.logger.Debugf("[WSF Cache]: Load item '%s'", nil, id)
-	data, err := c.backend.Load(id, testCacheValidity)
+	c.Logger.Debugf("[WSF Cache]: Load item '%s'", nil, id)
+	data, err := c.Backend.Load(id, testCacheValidity)
 	if err != nil {
 		c.lastError = err
 		return nil, false
@@ -80,7 +105,7 @@ func (c *Core) Load(id string, testCacheValidity bool) ([]byte, bool) {
 
 // Read loads data from cache and unmarshals it into object
 func (c *Core) Read(id string, object *interface{}, testCacheValidity bool) bool {
-	if !c.options.Enable {
+	if !c.Options.Enable {
 		return false
 	}
 
@@ -91,8 +116,8 @@ func (c *Core) Read(id string, object *interface{}, testCacheValidity bool) bool
 		return false
 	}
 
-	c.logger.Debugf("[WSF Cache]: Load item '%s'", nil, id)
-	data, err := c.backend.Load(id, testCacheValidity)
+	c.Logger.Debugf("[WSF Cache]: Load item '%s'", nil, id)
+	data, err := c.Backend.Load(id, testCacheValidity)
 	if err != nil {
 		c.lastError = err
 		return false
@@ -112,7 +137,7 @@ func (c *Core) Read(id string, object *interface{}, testCacheValidity bool) bool
 
 // Test returns true if chache exists
 func (c *Core) Test(id string) bool {
-	if !c.options.Enable {
+	if !c.Options.Enable {
 		return false
 	}
 
@@ -123,13 +148,13 @@ func (c *Core) Test(id string) bool {
 		return false
 	}
 
-	c.logger.Debugf("[WSF Cache]: Load item '%s'", nil, id)
-	return c.backend.Test(id)
+	c.Logger.Debugf("[WSF Cache]: Load item '%s'", nil, id)
+	return c.Backend.Test(id)
 }
 
 // Save saves data into cache
 func (c *Core) Save(data []byte, id string, tags []string, specificLifetime int64) bool {
-	if !c.options.Enable {
+	if !c.Options.Enable {
 		return false
 	}
 
@@ -150,38 +175,42 @@ func (c *Core) Save(data []byte, id string, tags []string, specificLifetime int6
 	}
 
 	// automatic cleaning
-	if c.options.AutomaticCleaningFactor > 0 {
+	if c.Options.AutomaticCleaningFactor > 0 {
 		rand.Seed(time.Now().UnixNano())
-		rand := rand.Int63n(c.options.AutomaticCleaningFactor)
+		rand := rand.Int63n(c.Options.AutomaticCleaningFactor)
 		if rand == 0 {
-			if c.options.ExtendedBackend {
-				c.logger.Debug("[WSF Cache]::save(): Automatic cleaning running", nil)
+			if c.Options.ExtendedBackend {
+				c.Logger.Debug("[WSF Cache]::save(): Automatic cleaning running", nil)
 				c.Clear(CleaningModeOld, []string{})
 			} else {
-				c.logger.Warning("[WSF Cache]::save(): Automatic cleaning is not available/necessary with current backend", nil)
+				c.Logger.Warning("[WSF Cache]::save(): Automatic cleaning is not available/necessary with current backend", nil)
 			}
 		}
 	}
 
-	c.logger.Debugf("[WSF Cache]: Save item '%s'", nil, id)
-	if err := c.backend.Save(data, id, tags, specificLifetime); err != nil {
-		c.logger.Warningf("[WSF Cache]::save(): Failed to save item '%s' -> removing it", nil, id)
+	if specificLifetime == 0 {
+		specificLifetime = int64(c.Options.Backend.GetInt("lifetime"))
+	}
+
+	c.Logger.Debugf("[WSF Cache]: Save item '%s'", nil, id)
+	if err := c.Backend.Save(data, id, tags, specificLifetime); err != nil {
+		c.Logger.Warningf("[WSF Cache]::save(): Failed to save item '%s' -> removing it", nil, id)
 		c.Remove(id)
 		c.lastError = err
 		return false
 	}
 
-	if c.options.WriteControl {
-		dataCheck, err := c.backend.Load(id, true)
+	if c.Options.WriteControl {
+		dataCheck, err := c.Backend.Load(id, true)
 		if err != nil {
-			c.logger.Warningf("[WSF Cache]::save(): Write control of item '%s' failed -> removing it", nil, id)
+			c.Logger.Warningf("[WSF Cache]::save(): Write control of item '%s' failed -> removing it", nil, id)
 			c.Remove(id)
 			c.lastError = err
 			return false
 		}
 
 		if !utils.EqualBSlice(data, dataCheck) {
-			c.logger.Warningf("[WSF Cache]::save(): Write control of item '%s' failed -> removing it", nil, id)
+			c.Logger.Warningf("[WSF Cache]::save(): Write control of item '%s' failed -> removing it", nil, id)
 			c.Remove(id)
 			return false
 		}
@@ -192,7 +221,7 @@ func (c *Core) Save(data []byte, id string, tags []string, specificLifetime int6
 
 // Remove the cache
 func (c *Core) Remove(id string) bool {
-	if !c.options.Enable {
+	if !c.Options.Enable {
 		return false
 	}
 
@@ -202,8 +231,8 @@ func (c *Core) Remove(id string) bool {
 		return false
 	}
 
-	c.logger.Debugf("[WSF Cache]: Remove item '%s'", nil, id)
-	if err := c.backend.Remove(id); err != nil {
+	c.Logger.Debugf("[WSF Cache]: Remove item '%s'", nil, id)
+	if err := c.Backend.Remove(id); err != nil {
 		c.lastError = err
 		return false
 	}
@@ -213,7 +242,7 @@ func (c *Core) Remove(id string) bool {
 
 // Clear cache
 func (c *Core) Clear(mode int64, tags []string) bool {
-	if !c.options.Enable {
+	if !c.Options.Enable {
 		return false
 	}
 
@@ -227,7 +256,7 @@ func (c *Core) Clear(mode int64, tags []string) bool {
 		return false
 	}
 
-	if err := c.backend.Clear(mode, tags); err != nil {
+	if err := c.Backend.Clear(mode, tags); err != nil {
 		c.lastError = err
 		return false
 	}
@@ -241,8 +270,8 @@ func (c *Core) Error() error {
 }
 
 func (c *Core) prepareID(id string) string {
-	if id != "" && c.options.CacheIDPrefix != "" {
-		return c.options.CacheIDPrefix + id
+	if id != "" && c.Options.CacheIDPrefix != "" {
+		return c.Options.CacheIDPrefix + id
 	}
 
 	return id
@@ -277,20 +306,20 @@ func NewCore(cacheType string, options config.Config) (*Core, error) {
 	cfg.Populate(options)
 
 	cc := &Core{
-		options: cfg,
+		Options: cfg,
 	}
 
 	adp, err := backend.NewBackendCache(cfg.Backend.GetString("type"), cfg.Backend)
 	if err != nil {
 		return nil, err
 	}
-	cc.backend = adp
+	cc.Backend = adp
 
 	lg, err := log.NewLog(cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
-	cc.logger = lg
+	cc.Logger = lg
 
 	return cc, nil
 }

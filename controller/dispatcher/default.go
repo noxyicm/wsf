@@ -4,12 +4,12 @@ import (
 	"reflect"
 	"wsf/controller/action"
 	"wsf/controller/action/helper"
+	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
 	"wsf/log"
 	"wsf/registry"
-	"wsf/session"
 )
 
 const (
@@ -27,7 +27,7 @@ type Default struct {
 }
 
 // Dispatch dispatches the request into the apropriet handler
-func (d *Default) Dispatch(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error) {
+func (d *Default) Dispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
 	md := d.modules.Module(rqs.ModuleName())
 	if md == nil {
 		if md = d.modules.Module(d.DefaultModule()); md == nil {
@@ -47,8 +47,9 @@ func (d *Default) Dispatch(rqs request.Interface, rsp response.Interface, s sess
 		return true, errors.Errorf("Controller ( %s ) does not implements action.Controller", rqs.ControllerName())
 	}
 
-	d.PopulateController(ctrl, rqs, rsp, s, d.invokeParams)
-	err = ctrl.(action.Interface).NewHelperBroker()
+	d.PopulateController(ctx, ctrl, rqs, rsp, d.invokeParams)
+	actctrl := ctrl.(action.Interface)
+	err = actctrl.NewHelperBroker()
 	if err != nil {
 		return true, err
 	}
@@ -59,14 +60,14 @@ func (d *Default) Dispatch(rqs request.Interface, rsp response.Interface, s sess
 		return true, errors.Errorf("Action ( %s ) does not exists", act)
 	}
 
-	if !d.ParamBool("noViewRenderer") && !ctrl.(action.Interface).HelperBroker().HasHelper("viewRenderer") {
+	if !d.ParamBool("noViewRenderer") && !actctrl.HelperBroker().HasHelper("viewRenderer") {
 		vr, err := helper.NewViewRenderer()
 		if err != nil {
 			return true, err
 		}
 
 		vr.SetController(ctrl.(helper.ControllerInterface))
-		err = ctrl.(action.Interface).HelperBroker().SetHelper(-80, vr)
+		err = actctrl.HelperBroker().SetHelper(-80, vr, nil)
 		if err != nil {
 			return true, err
 		}
@@ -74,11 +75,11 @@ func (d *Default) Dispatch(rqs request.Interface, rsp response.Interface, s sess
 
 	// Initiate action controller
 	rqs.SetDispatched(true)
-	if err = ctrl.(action.Interface).Init(); err != nil {
+	if err = actctrl.Init(); err != nil {
 		return true, err
 	}
 
-	err = ctrl.(action.Interface).Dispatch(ctrl, mtd)
+	err = actctrl.Dispatch(actctrl, mtd)
 	if err != nil {
 		return true, err
 	}
@@ -91,7 +92,7 @@ func NewDefaultDispatcher(options *Config) (di Interface, err error) {
 	d := &Default{}
 	d.options = options
 
-	logResource := registry.Get("log")
+	logResource := registry.GetResource("syslog")
 	if logResource == nil {
 		return nil, errors.New("[Dispatcher] Log resource is not configured")
 	}

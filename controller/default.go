@@ -1,12 +1,12 @@
 package controller
 
 import (
+	"wsf/controller/context"
 	"wsf/controller/dispatcher"
 	"wsf/controller/plugin"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/controller/router"
-	"wsf/session"
 )
 
 const (
@@ -46,7 +46,7 @@ func (c *Default) Dispatcher() dispatcher.Interface {
 }
 
 // Dispatch dispatches the reauest into the dispatcher loop
-func (c *Default) Dispatch(rqs request.Interface, rsp response.Interface, s session.Interface) error {
+func (c *Default) Dispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) error {
 	if c.ErrorHandling() && !c.plugins.Has("ErrorHandler") {
 		p, err := plugin.NewErrorHandler()
 		if err != nil {
@@ -56,7 +56,7 @@ func (c *Default) Dispatch(rqs request.Interface, rsp response.Interface, s sess
 		c.plugins.Register(p, 100)
 	}
 
-	ok, err := c.plugins.RouteStartup(rqs, rsp, s)
+	ok, err := c.plugins.RouteStartup(ctx, rqs, rsp)
 	if !ok && c.ThrowExceptions() {
 		return err
 	} else if err != nil {
@@ -70,14 +70,14 @@ func (c *Default) Dispatch(rqs request.Interface, rsp response.Interface, s sess
 		rsp.SetException(err)
 	}
 
-	ok, err = c.plugins.RouteShutdown(rqs, rsp, s)
+	ok, err = c.plugins.RouteShutdown(ctx, rqs, rsp)
 	if !ok && c.ThrowExceptions() {
 		return err
 	} else if err != nil {
 		rsp.SetException(err)
 	}
 
-	ok, err = c.plugins.DispatchLoopStartup(rqs, rsp, s)
+	ok, err = c.plugins.DispatchLoopStartup(ctx, rqs, rsp)
 	if !ok && c.ThrowExceptions() {
 		return err
 	} else if err != nil {
@@ -92,7 +92,7 @@ func (c *Default) Dispatch(rqs request.Interface, rsp response.Interface, s sess
 		rqs.SetDispatched(true)
 
 		// Notify plugins of dispatch startup
-		ok, err = c.plugins.PreDispatch(rqs, rsp, s)
+		ok, err = c.plugins.PreDispatch(ctx, rqs, rsp)
 		if !ok && c.ThrowExceptions() {
 			return err
 		} else if err != nil {
@@ -105,7 +105,7 @@ func (c *Default) Dispatch(rqs request.Interface, rsp response.Interface, s sess
 		}
 
 		// Dispatch request
-		ok, err = c.dispatcher.Dispatch(rqs, rsp, s)
+		ok, err = c.dispatcher.Dispatch(ctx, rqs, rsp)
 		if !ok && c.ThrowExceptions() {
 			return err
 		} else if err != nil {
@@ -113,7 +113,7 @@ func (c *Default) Dispatch(rqs request.Interface, rsp response.Interface, s sess
 		}
 
 		// Notify plugins of dispatch completion
-		ok, err = c.plugins.PostDispatch(rqs, rsp, s)
+		ok, err = c.plugins.PostDispatch(ctx, rqs, rsp)
 		if !ok && c.ThrowExceptions() {
 			return err
 		} else if err != nil {
@@ -123,7 +123,7 @@ func (c *Default) Dispatch(rqs request.Interface, rsp response.Interface, s sess
 
 done:
 	// Notify plugins of dispatch loop completion
-	ok, err = c.plugins.DispatchLoopShutdown(rqs, rsp, s)
+	ok, err = c.plugins.DispatchLoopShutdown(ctx, rqs, rsp)
 	if !ok && c.ThrowExceptions() {
 		return err
 	} else if err != nil {
@@ -136,7 +136,7 @@ done:
 // NewDefaultController creates new default controller
 func NewDefaultController(cfg *Config) (ci Interface, err error) {
 	c := &Default{}
-	c.options = cfg
+	c.Options = cfg
 	c.handlers = make(map[string]func() error)
 	c.plugins, err = plugin.NewBroker()
 	c.errorHandling = cfg.ErrorHandling

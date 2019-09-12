@@ -28,11 +28,23 @@ import (
 )
 
 const (
-	// ID of service
-	ID = "rest"
+	// EventDebug thrown if there is something insegnificant to say
+	EventDebug = iota + 500
+
+	// EventInfo thrown if there is something to say
+	EventInfo
+
+	// EventError thrown on any non job error provided
+	EventError
 
 	// EventInitSSL describes TLS initialization
-	EventInitSSL int = iota
+	EventInitSSL
+
+	// EventResponse thrown after the request has been processed
+	EventResponse
+
+	// ID of service
+	ID = "rest"
 )
 
 // http middleware
@@ -45,10 +57,10 @@ type Service struct {
 	logger       *log.Log
 	env          environment.Interface
 	prefix       string
-	lsns         []func(event int, ctx interface{})
 	mdwr         []middleware
 	serviceMap   sync.Map
-	mu           sync.Mutex
+	lsns         []func(event int, ctx interface{})
+	mu           sync.RWMutex
 	serving      bool
 	handler      *Handler
 	http         *http.Server
@@ -62,9 +74,19 @@ func (s *Service) AddMiddleware(m middleware) {
 	s.mdwr = append(s.mdwr, m)
 }
 
-// AddListener attaches server event watcher
+// AddListener attaches event watcher
 func (s *Service) AddListener(l func(event int, ctx interface{})) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.lsns = append(s.lsns, l)
+}
+
+// throw handles service, server and pool events.
+func (s *Service) throw(event int, ctx interface{}) {
+	for _, l := range s.lsns {
+		l(event, ctx)
+	}
 }
 
 // Init HTTP service
@@ -73,13 +95,9 @@ func (s *Service) Init(options *Config, env environment.Interface) (bool, error)
 		return false, nil
 	}
 
-	//fmt.Println(base64.URLEncoding.EncodeToString([]byte("7wvuK8Q5wz8YCiDdb222lE1WdYd3GfwQLLd22e2KTYAjeThn0ho1YyknxolwrDKv")))
-	//os.Exit(2)
-
 	s.options = options
 	s.env = env
 	s.signalChan = make(chan os.Signal)
-	s.AddListener(s.logAccess)
 	s.prefix = options.Prefix
 
 	acclogger, err := log.NewLog(options.AccessLogger)
@@ -87,14 +105,15 @@ func (s *Service) Init(options *Config, env environment.Interface) (bool, error)
 		return false, err
 	}
 	s.accessLogger = acclogger
+	s.AddListener(s.logAccess)
 
-	logResource := registry.Get("log")
+	logResource := registry.GetResource("syslog")
 	if logResource == nil {
 		return false, errors.New("[REST Server] Log resource is not configured")
 	}
 	s.logger = logResource.(*log.Log)
 
-	mdls := registry.Get("modules")
+	mdls := registry.GetResource("modules")
 	if mdls == nil {
 		return false, errors.New("[REST Server] Resource 'modules' is required but not initialized")
 	}
@@ -174,7 +193,7 @@ func (s *Service) Serve() (err error) {
 	if err != nil {
 		return err
 	}
-	s.handler.Listen(s.throw)
+	s.handler.AddListener(s.throw)
 
 	s.http = &http.Server{
 		Addr:         s.options.Address(),
@@ -189,8 +208,8 @@ func (s *Service) Serve() (err error) {
 	s.serving = true
 	s.mu.Unlock()
 
-	errChan := make(chan error, 2)
-	s.logger.Infof("[REST Server] Starting: Listening on %s...", nil, s.options.Address())
+	errChan := make(chan error, 1)
+	s.throw(EventInfo, fmt.Sprintf("[REST Server] Starting: Listening on %s...", s.options.Address()))
 	go func() { errChan <- s.http.ListenAndServe() }()
 	if s.https != nil {
 		go func() { errChan <- s.https.ListenAndServeTLS(s.options.SSL.Cert, s.options.SSL.Key) }()
@@ -202,7 +221,7 @@ func (s *Service) Serve() (err error) {
 	s.mu.Unlock()
 
 	if err == http.ErrServerClosed {
-		s.logger.Info("[REST Server] Stoped", nil)
+		s.throw(EventInfo, "[REST Server] Stoped")
 		return nil
 	}
 	return err
@@ -213,7 +232,7 @@ func (s *Service) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.logger.Info("[REST Server] Stopping", nil)
+	s.throw(EventInfo, "[REST Server] Initiating stop...")
 	if s.http == nil {
 		return
 	}
@@ -287,13 +306,6 @@ func (s *Service) initSSL() *http.Server {
 	http2.ConfigureServer(server, &http2.Server{})
 
 	return server
-}
-
-// throw handles service, server and pool events.
-func (s *Service) throw(event int, ctx interface{}) {
-	for _, l := range s.lsns {
-		l(event, ctx)
-	}
 }
 
 func (s *Service) logAccess(event int, ctx interface{}) {

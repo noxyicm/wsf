@@ -12,6 +12,8 @@ type Interface interface {
 	ResponseCode() int
 	SetBody([]byte) error
 	AppendBody(data []byte, segment string) error
+	GetBodySegment(segment string) []byte
+	GetBody() map[string][]byte
 	ContentLength() int
 	AddCookies(cookies []*http.Cookie)
 	AddCookie(value *http.Cookie)

@@ -32,6 +32,8 @@ var (
 
 	// App is a general application config
 	App Config
+
+	defaults map[string]interface{}
 )
 
 // Config is general config interface
@@ -195,7 +197,7 @@ func LoadConfig(file string, path []string, name string, flags []string) (*Bridg
 		}
 	}
 
-	dcfg := defaults()
+	dcfg := getDefaults()
 	if err := dcfg.MergeConfigMap(cfg.AllSettings()); err != nil {
 		return nil, err
 	}
@@ -221,45 +223,14 @@ func LoadConfig(file string, path []string, name string, flags []string) (*Bridg
 	return &Bridge{dcfg}, nil
 }
 
-func defaults() *viper.Viper {
+// SetDefaults sets default config for bridge
+func SetDefaults(def map[string]interface{}) {
+	defaults = def
+}
+
+func getDefaults() *viper.Viper {
 	cfg := viper.New()
-
-	dcfg := map[string]interface{}{
-		"resources": map[string]interface{}{
-			"log": map[string]interface{}{
-				"log": map[string]interface{}{
-					"enable": true,
-					"writers": map[string]interface{}{
-						"default": map[string]interface{}{
-							"params": map[string]interface{}{
-								"type": "null",
-							},
-							"formatter": map[string]interface{}{
-								"type": "simple",
-							},
-						},
-					},
-				},
-			},
-			"controller": map[string]interface{}{
-				"maincontroller": map[string]interface{}{
-					"type":            "default",
-					"throwExceptions": true,
-					"errorHandling":   true,
-				},
-			},
-			"view": map[string]interface{}{
-				"view": map[string]interface{}{
-					"type":        "default",
-					"doctype":     "html5",
-					"charset":     "utf-8",
-					"contentType": "text/html",
-				},
-			},
-		},
-	}
-
-	cfg.MergeConfigMap(dcfg)
+	cfg.MergeConfigMap(defaults)
 	return cfg
 }
 

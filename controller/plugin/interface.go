@@ -1,20 +1,20 @@
 package plugin
 
 import (
+	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
-	"wsf/session"
 )
 
 // Interface represents controller plugin
 type Interface interface {
 	Name() string
-	RouteStartup(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error)
-	RouteShutdown(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error)
-	DispatchLoopStartup(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error)
-	PreDispatch(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error)
-	PostDispatch(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error)
-	DispatchLoopShutdown(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error)
+	RouteStartup(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error)
+	RouteShutdown(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error)
+	DispatchLoopStartup(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error)
+	PreDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error)
+	PostDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error)
+	DispatchLoopShutdown(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error)
 }
 
 // ControllerWithExceptionInterface is a wrapper for main controller

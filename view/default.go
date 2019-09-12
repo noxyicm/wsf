@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"wsf/config"
+	"wsf/controller/context"
 	"wsf/errors"
 	"wsf/log"
 	"wsf/registry"
@@ -26,21 +27,25 @@ func init() {
 // Default is a default view
 type Default struct {
 	view
+
 	doctype  *helper.Doctype
 	headMeta *helper.HeadMeta
 }
 
 // Init a view resource
 func (v *Default) Init(options *Config) (bool, error) {
-	v.options = options
-	v.baseDir = options.BaseDir
+	v.Options = options
+	v.BaseDir = options.BaseDir
+	v.ViewBasePathSpec = options.ViewBasePathSpec
+	v.ViewScriptPathSpec = options.ViewScriptPathSpec
+	v.ViewScriptPathNoControllerSpec = options.ViewScriptPathNoControllerSpec
+	v.ViewSuffix = options.ViewSuffix
 
-	logResource := registry.Get("log")
+	logResource := registry.GetResource("syslog")
 	if logResource == nil {
 		return false, errors.New("[View] Log resource is not configured")
 	}
-
-	v.logger = logResource.(*log.Log)
+	v.Logger = logResource.(*log.Log)
 
 	if options.Doctype != "" {
 		v.doctype.SetDoctype(strings.ToUpper(options.Doctype))
@@ -57,6 +62,11 @@ func (v *Default) Init(options *Config) (bool, error) {
 		v.Assign(options.Assign)
 	}
 
+	return true, nil
+}
+
+// Setup resource
+func (v *Default) Setup() (bool, error) {
 	err := v.PrepareTemplates()
 	if err != nil {
 		return false, err
@@ -72,7 +82,7 @@ func (v *Default) PrepareTemplates() error {
 		if err != nil {
 			switch err.(type) {
 			case *os.PathError:
-				v.logger.Warningf("[View] Unable to read template directory: %v", nil, err.Error())
+				v.Logger.Warningf("[View] Unable to read template directory: %v", nil, err.Error())
 
 			default:
 				return err
@@ -89,7 +99,7 @@ func (v *Default) ReadTemplates(path string, info os.FileInfo, err error) error 
 		return errors.Errorf("[View] Error scanning source: %s", err)
 	}
 
-	if info.IsDir() || strings.HasPrefix(info.Name(), ".") || !strings.HasSuffix(info.Name(), ".phtml") {
+	if info.IsDir() || strings.HasPrefix(info.Name(), ".") {
 		return nil
 	}
 
@@ -105,27 +115,41 @@ func (v *Default) ReadTemplates(path string, info os.FileInfo, err error) error 
 		return err
 	}
 
-	tpl, err := template.New(info.Name()).Parse(string(tplData))
+	tpl, err := template.New(path).Parse(string(tplData))
 	if err != nil {
 		return err
 	}
 
-	p, _ := filepath.Rel(config.AppPath, path)
+	p, err := filepath.Rel(config.AppPath, path)
 	if err != nil {
 		return err
 	}
 
-	//suffix := filepath.Ext(p)
-	//p = p[0 : len(p)-len(suffix)]
 	v.templates[p] = tpl
+	v.template.New(p).Parse(string(tplData))
 	return nil
 }
 
 // Render returns a render result of provided script
-func (v *Default) Render(script string) ([]byte, error) {
-	if v, ok := v.templates[script]; ok {
+func (v *Default) Render(ctx context.Context, script string) ([]byte, error) {
+	/* 	wr := &bytes.Buffer{}
+	   	if err := v.template.ExecuteTemplate(wr, script, ctx.Data()); err == nil {
+	   		b := make([]byte, wr.Len())
+	   		_, err = wr.Read(b)
+	   		if err != nil {
+	   			return nil, err
+	   		}
+
+	   		return b, nil
+	   		//fmt.Println(string(b))
+	   		//os.Exit(2)
+	   	} else {
+	   		return nil, err
+	   	}
+	*/
+	if t, ok := v.templates[script]; ok {
 		wr := &bytes.Buffer{}
-		err := v.Execute(wr, map[string]interface{}{})
+		err := t.Execute(wr, ctx.Data())
 		if err != nil {
 			return nil, err
 		}
@@ -142,15 +166,21 @@ func (v *Default) Render(script string) ([]byte, error) {
 	return nil, errors.Errorf("[View] Template by name '%s' not found", script)
 }
 
+// GetTemplate sa
+func (v *Default) GetTemplate(name string) *template.Template {
+	return v.template.Lookup(name)
+	//return v.templates[name]
+}
+
 // NewDefaultView creates new default view
 func NewDefaultView(options *Config) (Interface, error) {
 	v := &Default{}
-	v.options = options
-	v.baseDir = options.BaseDir
+	v.Options = options
 	v.paths = make(map[string]map[string]string)
 	v.params = make(map[string]interface{})
 	v.helpers = make(map[string]helper.Interface)
 	v.templates = make(map[string]*template.Template)
+	v.template = template.New("layout")
 
 	// for default view doctype view halper is mandatory
 	dctp, err := helper.NewDoctype()
@@ -169,5 +199,6 @@ func NewDefaultView(options *Config) (Interface, error) {
 
 	v.headMeta = hdmt
 	v.RegisterHelper("HeadMeta", hdmt)
+
 	return v, nil
 }

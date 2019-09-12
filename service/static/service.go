@@ -31,6 +31,11 @@ func (s *Service) Init(options *Config, h *wsfhttp.Service) (bool, error) {
 	return true, nil
 }
 
+// AddListener attaches server event watcher
+func (s *Service) AddListener(l func(event int, ctx interface{})) {
+	return
+}
+
 // Priority returns predefined service priority
 func (s *Service) Priority() int {
 	return s.priority

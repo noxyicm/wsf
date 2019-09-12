@@ -45,6 +45,7 @@ type Service struct {
 	Tasks                 map[int]time.Time
 	InExitSequence        bool
 	MaxConsequetiveErrors int
+	lsns                  []func(event int, ctx interface{})
 	mu                    sync.Mutex
 	mux                   sync.Mutex
 	serving               bool
@@ -58,14 +59,14 @@ func (s *Service) Init(options *Config) (bool, error) {
 	}
 
 	s.options = options
-	dbResource := registry.Get("db")
+	dbResource := registry.GetResource("db")
 	if dbResource == nil {
 		return false, errors.New("DB resource is not configured")
 	}
 
 	s.Db = dbResource.(*db.Db)
 
-	logResource := registry.Get("log")
+	logResource := registry.GetResource("syslog")
 	if logResource == nil {
 		return false, errors.New("Log resource is not configured")
 	}
@@ -77,6 +78,21 @@ func (s *Service) Init(options *Config) (bool, error) {
 // Priority returns predefined service priority
 func (s *Service) Priority() int {
 	return s.priority
+}
+
+// AddListener attaches server event watcher
+func (s *Service) AddListener(l func(event int, ctx interface{})) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.lsns = append(s.lsns, l)
+}
+
+// throw handles service, server and pool events.
+func (s *Service) throw(event int, ctx interface{}) {
+	for _, l := range s.lsns {
+		l(event, ctx)
+	}
 }
 
 // Serve serves the service
@@ -109,7 +125,7 @@ func (s *Service) Serve() error {
 					tasksConsequetiveErrors[obj.ID] = 1
 				}
 
-				_, _ = s.Db.Update("tasks", map[string]interface{}{"lastrun": nil}, map[string]interface{}{"id = ?": obj.ID})
+				_, _ = s.Db.Update(s.Db.Context(), "tasks", map[string]interface{}{"lastrun": nil}, map[string]interface{}{"id = ?": obj.ID})
 			} else {
 				delete(tasksConsequetiveErrors, obj.ID)
 				key, hasKey := utils.IKey(obj.ID, s.NotifyedTasks)
@@ -160,7 +176,7 @@ Mainloop:
 			}
 
 			sel.From("tasks", "*").Where("state = ?", TaskStatusReady)
-			preresult, err := s.Db.Query(sel)
+			preresult, err := s.Db.Query(s.ctx, sel)
 			if err != nil {
 				s.Logger.Error(err.Error(), nil)
 			} else {

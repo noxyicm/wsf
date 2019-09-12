@@ -30,17 +30,17 @@ func (h *HelperBroker) Controller() Interface {
 // AddHelper pushs helper into stack
 func (h *HelperBroker) AddHelper(hlp helper.Interface) error {
 	h.stack.Push(hlp)
-	return hlp.Init()
+	return hlp.Init(nil)
 }
 
 // SetHelper sets helper into stack with priority
-func (h *HelperBroker) SetHelper(priority int, hlp helper.Interface) error {
+func (h *HelperBroker) SetHelper(priority int, hlp helper.Interface, options map[string]interface{}) error {
 	err := h.stack.Set(priority, hlp)
 	if err != nil {
 		return err
 	}
 
-	return hlp.Init()
+	return hlp.Init(options)
 }
 
 // HasHelper returns true if action helper by name is registered

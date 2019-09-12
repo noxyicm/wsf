@@ -27,6 +27,86 @@ type MySQL struct {
 	driverConfig *mysql.Config
 }
 
+// Setup the adapter
+func (a *MySQL) Setup() {
+	a.identifierSymbol = "`"
+	a.AutoQuoteIdentifiers = true
+	a.PingTimeout = time.Duration(a.Options.PingTimeout) * time.Second
+	a.QueryTimeout = time.Duration(a.Options.QueryTimeout) * time.Second
+
+	//sql.Register(name string, driver driver.Driver)
+	a.driverConfig = mysql.NewConfig()
+	a.driverConfig.User = a.Options.Username
+	a.driverConfig.Passwd = a.Options.Password
+	a.driverConfig.Net = a.Options.Protocol
+	a.driverConfig.Addr = a.Options.Host
+	a.driverConfig.DBName = a.Options.DBname
+	a.driverConfig.Loc = a.Options.TimeFormat
+	a.driverConfig.Collation = a.Options.Charset
+	//TLSConfig
+
+	a.Unquoteable = []string{
+		"BETWEEN",
+		"LIKE",
+		"AND",
+		"OR",
+		"=",
+		"!=",
+		">",
+		">=",
+		"<",
+		"<=",
+		"<>",
+		"/",
+		"+",
+		"-",
+		"?",
+		"*",
+		"(",
+		")",
+		"IS",
+		"NOT",
+		"NULL",
+		"IN",
+		"IN(",
+		" ",
+		".",
+	}
+
+	a.Spliters = []string{
+		"=",
+		"!=",
+		">",
+		">=",
+		"<",
+		"<=",
+		"<>",
+		"/",
+		"+",
+		"-",
+		".",
+		` `,
+		"(",
+		")",
+	}
+
+	a.UnquoteableFunctions = []string{
+		"CONCAT",
+		"LOWER",
+		"UPPER",
+		"DATE",
+		"UNIX_TIMESTAMP",
+		"AVG",
+		"SUM",
+		"COUNT",
+	}
+
+	a.Params = map[string]interface{}{
+		"positional": true,
+		"named":      false,
+	}
+}
+
 // Init a connection to database
 func (a *MySQL) Init(ctx context.Context) (err error) {
 	db, err := sql.Open("mysql", a.driverConfig.FormatDSN())
@@ -57,9 +137,9 @@ func (a *MySQL) Init(ctx context.Context) (err error) {
 }
 
 // SetOptions sets new options for MySQL adapter
-func (a *MySQL) SetOptions(options *AdapterConfig) Adapter {
+func (a *MySQL) SetOptions(options *AdapterConfig) error {
 	a.Options = options
-	return a
+	return nil
 }
 
 // GetOptions returns MySQL adapter options
@@ -200,82 +280,8 @@ func (a *MySQL) FormatDSN() string {
 // NewMySQLAdapter creates a new MySQL adapter
 func NewMySQLAdapter(options *AdapterConfig) (ai Adapter, err error) {
 	adp := &MySQL{}
-	adp.identifierSymbol = "`"
-	adp.AutoQuoteIdentifiers = true
-	adp.PingTimeout = time.Duration(options.PingTimeout) * time.Second
-	adp.QueryTimeout = time.Duration(options.QueryTimeout) * time.Second
-
-	//sql.Register(name string, driver driver.Driver)
-	adp.driverConfig = mysql.NewConfig()
-	adp.driverConfig.User = options.Username
-	adp.driverConfig.Passwd = options.Password
-	adp.driverConfig.Net = options.Protocol
-	adp.driverConfig.Addr = options.Host
-	adp.driverConfig.DBName = options.DBname
-	adp.driverConfig.Loc = options.TimeFormat
-	adp.driverConfig.Collation = options.Charset
-	//TLSConfig
-
-	adp.Unquoteable = []string{
-		"BETWEEN",
-		"LIKE",
-		"AND",
-		"OR",
-		"=",
-		"!=",
-		">",
-		">=",
-		"<",
-		"<=",
-		"<>",
-		"/",
-		"+",
-		"-",
-		"?",
-		"*",
-		"(",
-		")",
-		"IS",
-		"NOT",
-		"NULL",
-		"IN",
-		"IN(",
-		" ",
-		".",
-	}
-
-	adp.Spliters = []string{
-		"=",
-		"!=",
-		">",
-		">=",
-		"<",
-		"<=",
-		"<>",
-		"/",
-		"+",
-		"-",
-		".",
-		` `,
-		"(",
-		")",
-	}
-
-	adp.UnquoteableFunctions = []string{
-		"CONCAT",
-		"LOWER",
-		"UPPER",
-		"DATE",
-		"UNIX_TIMESTAMP",
-		"AVG",
-		"SUM",
-		"COUNT",
-	}
-
 	adp.Options = options
-	adp.Params = map[string]interface{}{
-		"positional": true,
-		"named":      false,
-	}
+	adp.Setup()
+
 	return adp, nil
 }

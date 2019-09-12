@@ -95,6 +95,32 @@ func (r *HTTP) ClearBodySegment(segment string) error {
 	return r.Body.Unset(segment)
 }
 
+// GetBodySegment returns a body segment
+func (r *HTTP) GetBodySegment(segment string) []byte {
+	if r.Body.Has(segment) {
+		if b := r.Body.Value(segment); b != nil {
+			if v, ok := b.([]byte); ok {
+				return v
+			}
+		}
+	}
+
+	return []byte{}
+}
+
+// GetBody returns a maped body
+func (r *HTTP) GetBody() map[string][]byte {
+	m := make(map[string][]byte)
+	mp := r.Body.Map()
+	for k, v := range mp {
+		if b, ok := v.([]byte); ok {
+			m[k] = b
+		}
+	}
+
+	return m
+}
+
 // ContentLength returns number of bytes of response body
 func (r *HTTP) ContentLength() int {
 	l := 0
@@ -293,7 +319,7 @@ func (r *HTTP) Destroy() {
 	r.Code = 500
 	r.Headers = make(map[string][]string)
 	r.Cookies = make(map[string]*http.Cookie)
-	r.Body = stack.NewReferenced()
+	r.Body = stack.NewReferenced(nil)
 	r.Datamap = make(map[string]interface{})
 	r.Writer = nil
 }
@@ -311,7 +337,7 @@ func NewHTTPResponse(w http.ResponseWriter) (Interface, error) {
 		Code:    500,
 		Headers: make(map[string][]string),
 		Cookies: make(map[string]*http.Cookie),
-		Body:    stack.NewReferenced(),
+		Body:    stack.NewReferenced(nil),
 		Datamap: make(map[string]interface{}),
 		Writer:  w,
 	}, nil

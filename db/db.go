@@ -7,6 +7,8 @@ import (
 	"wsf/registry"
 )
 
+type contextKey int
+
 var (
 	ins *Db
 
@@ -53,23 +55,33 @@ func (d *Db) Select() (Select, error) {
 }
 
 // Insert inserts new row into table
-func (d *Db) Insert(table string, data map[string]interface{}) (int, error) {
-	return d.adapter.Insert(table, data)
+func (d *Db) Insert(ctx context.Context, table string, data map[string]interface{}) (int, error) {
+	return d.adapter.Insert(ctx, table, data)
 }
 
 // Update inserts new row into table
-func (d *Db) Update(table string, data map[string]interface{}, cond map[string]interface{}) (bool, error) {
-	return d.adapter.Update(table, data, cond)
+func (d *Db) Update(ctx context.Context, table string, data map[string]interface{}, cond map[string]interface{}) (bool, error) {
+	return d.adapter.Update(ctx, table, data, cond)
+}
+
+// Delete removes row from table
+func (d *Db) Delete(ctx context.Context, table string, cond map[string]interface{}) (bool, error) {
+	return d.adapter.Delete(ctx, table, cond)
 }
 
 // Query runs a query
-func (d *Db) Query(sql Select) (Rowset, error) {
-	return d.adapter.Query(sql)
+func (d *Db) Query(ctx context.Context, sql Select) (Rowset, error) {
+	return d.adapter.Query(ctx, sql)
+}
+
+// QueryRow runs a query
+func (d *Db) QueryRow(ctx context.Context, sql Select) (Row, error) {
+	return d.adapter.QueryRow(ctx, sql)
 }
 
 // BeginTransaction creates a new database transaction
-func (d *Db) BeginTransaction() (Transaction, error) {
-	return d.adapter.BeginTransaction()
+func (d *Db) BeginTransaction(ctx context.Context) (Transaction, error) {
+	return d.adapter.BeginTransaction(ctx)
 }
 
 // Quote a string
@@ -147,18 +159,28 @@ func CreateSelect() (Select, error) {
 }
 
 // Insert inserts new row into table
-func Insert(table string, data map[string]interface{}) (int, error) {
-	return ins.Insert(table, data)
+func Insert(ctx context.Context, table string, data map[string]interface{}) (int, error) {
+	return ins.Insert(ctx, table, data)
 }
 
 // Update inserts new row into table
-func Update(table string, data map[string]interface{}, cond map[string]interface{}) (bool, error) {
-	return ins.Update(table, data, cond)
+func Update(ctx context.Context, table string, data map[string]interface{}, cond map[string]interface{}) (bool, error) {
+	return ins.Update(ctx, table, data, cond)
+}
+
+// Delete removes a row from table
+func Delete(ctx context.Context, table string, cond map[string]interface{}) (bool, error) {
+	return ins.Delete(ctx, table, cond)
 }
 
 // Query runs a query
-func Query(sql Select) (Rowset, error) {
-	return ins.Query(sql)
+func Query(ctx context.Context, sql Select) (Rowset, error) {
+	return ins.Query(ctx, sql)
+}
+
+// QueryRow runs a query
+func QueryRow(ctx context.Context, sql Select) (Row, error) {
+	return ins.QueryRow(ctx, sql)
 }
 
 // SetDefaultAdapter sets the default db.Adapter

@@ -20,8 +20,13 @@ type Config struct {
 
 // Populate populates Config values using given Config source
 func (c *Config) Populate(cfg config.Config) error {
-	c.Backend = cfg.Get("backend")
-	c.Logger = cfg.Get("log")
+	if bcfg := cfg.Get("backend"); bcfg != nil {
+		c.Backend = bcfg
+	}
+
+	if lcfg := cfg.Get("log"); lcfg != nil {
+		c.Logger = lcfg
+	}
 
 	if err := cfg.Unmarshal(c); err != nil {
 		return err
@@ -34,6 +39,14 @@ func (c *Config) Populate(cfg config.Config) error {
 func (c *Config) Defaults() error {
 	c.Priority = 20
 	c.Enable = true
+
+	if c.Backend == nil {
+		c.Backend = config.NewBridge()
+	}
+
+	if c.Logger == nil {
+		c.Logger = config.NewBridge()
+	}
 
 	return nil
 }

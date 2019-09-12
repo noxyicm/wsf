@@ -2,9 +2,8 @@ package locale
 
 import (
 	"strings"
+	"wsf/errors"
 	"wsf/utils"
-
-	"github.com/pkg/errors"
 )
 
 var (

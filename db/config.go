@@ -10,6 +10,7 @@ type Config struct {
 	Adapter        string
 	DefaultAdapter string
 	Select         *SelectConfig
+	Table          *TableConfig
 	Rowset         *RowsetConfig
 	Row            *RowConfig
 }
@@ -27,6 +28,15 @@ func (c *Config) Populate(cfg config.Config) error {
 	c.Select.Defaults()
 	if scfg := cfg.Get("select"); scfg != nil {
 		c.Select.Populate(scfg)
+	}
+
+	if c.Table == nil {
+		c.Table = &TableConfig{}
+	}
+
+	c.Table.Defaults()
+	if scfg := cfg.Get("table"); scfg != nil {
+		c.Table.Populate(scfg)
 	}
 
 	if c.Rowset == nil {
@@ -52,10 +62,13 @@ func (c *Config) Populate(cfg config.Config) error {
 
 // Defaults sets configuration default values
 func (c *Config) Defaults() error {
-	c.Priority = 10
+	c.Priority = 3
 
 	c.Select = &SelectConfig{}
 	c.Select.Defaults()
+
+	c.Table = &TableConfig{}
+	c.Table.Defaults()
 
 	c.Rowset = &RowsetConfig{}
 	c.Rowset.Defaults()

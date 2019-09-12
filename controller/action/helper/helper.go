@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
@@ -15,7 +16,7 @@ var (
 // Interface represents action helper interface
 type Interface interface {
 	Name() string
-	Init() error
+	Init(options map[string]interface{}) error
 	PreDispatch() error
 	PostDispatch() error
 	SetController(ctrl ControllerInterface) error
@@ -53,7 +54,9 @@ type ControllerInterface interface {
 	SetViewSuffix(suffix string) error
 	View() view.Interface
 	HasHelper(name string) bool
-	Helper(name string) (Interface, error)
+	Helper(name string) Interface
+	SetContext(ctx context.Context)
+	Context() context.Context
 	SetSession(s session.Interface)
 	Session() session.Interface
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"wsf/application/modules"
 	"wsf/controller/action"
+	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
@@ -20,13 +21,13 @@ var (
 
 // Interface is a dispatcher interface
 type Interface interface {
-	Dispatch(rqs request.Interface, rsp response.Interface, s session.Interface) (bool, error)
+	Dispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error)
 	IsDispatchable(rqs request.Interface) bool
 	DefaultModule() string
 	DefaultController() string
 	DefaultAction() string
 	RequestController(req request.Interface) (string, error)
-	PopulateController(ctrl interface{}, rqs request.Interface, rsp response.Interface, s session.Interface, invokeArgs map[string]interface{}) error
+	PopulateController(ctx context.Context, ctrl interface{}, rqs request.Interface, rsp response.Interface, invokeArgs map[string]interface{}) error
 	GetActionMethod(req request.Interface) (string, error)
 	SetModulesHandler(mds modules.Handler) error
 	ModulesHandler() modules.Handler
@@ -209,14 +210,15 @@ func (d *standart) formatActionName(name string) string {
 }
 
 // PopulateController populates action controller
-func (d *standart) PopulateController(controller interface{}, rqs request.Interface, rsp response.Interface, s session.Interface, invokeArgs map[string]interface{}) error {
+func (d *standart) PopulateController(ctx context.Context, controller interface{}, rqs request.Interface, rsp response.Interface, invokeArgs map[string]interface{}) error {
 	controllerIndexes := d.findControllers(reflect.TypeOf(controller).Elem())
 	controllerValue := reflect.ValueOf(controller).Elem()
 	actionController := &action.Controller{}
 
 	actionController.SetRequest(rqs)
 	actionController.SetResponse(rsp)
-	actionController.SetSession(s)
+	actionController.SetContext(ctx)
+	actionController.SetSession(ctx.Value(context.Session).(session.Interface))
 	actionController.SetParams(invokeArgs)
 
 	value := reflect.ValueOf(actionController)
@@ -289,8 +291,8 @@ func NewDispatcher(dispatcherType string, options *Config) (Interface, error) {
 			return nil, err
 		}
 
-		if mds := registry.Get("modules"); mds != nil {
-			dsp.SetModulesHandler(registry.Get("modules").(modules.Handler))
+		if mds := registry.GetResource("modules"); mds != nil {
+			dsp.SetModulesHandler(registry.GetResource("modules").(modules.Handler))
 		}
 
 		return dsp, nil

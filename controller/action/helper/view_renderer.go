@@ -9,6 +9,7 @@ import (
 	"wsf/filter/word"
 	"wsf/registry"
 	"wsf/session"
+	"wsf/utils"
 	"wsf/view"
 )
 
@@ -58,8 +59,8 @@ func (vr *ViewRenderer) Controller() ControllerInterface {
 }
 
 // Init the helper
-func (vr *ViewRenderer) Init() error {
-	return vr.initView("", "", map[string]interface{}{})
+func (vr *ViewRenderer) Init(options map[string]interface{}) error {
+	return vr.initView("", "", options)
 }
 
 // PreDispatch do dispatch preparations
@@ -70,7 +71,7 @@ func (vr *ViewRenderer) PreDispatch() error {
 // PostDispatch do dispatch aftermath
 func (vr *ViewRenderer) PostDispatch() error {
 	if vr.shouldRender() {
-		return vr.render(vr.Request().ActionName(), "default", false)
+		return vr.Render(vr.Request().ActionName(), "default", false)
 	}
 
 	return nil
@@ -198,7 +199,8 @@ func (vr *ViewRenderer) GetViewScript(action string, params map[string]string) (
 	return vr.translateSpec(params)
 }
 
-func (vr *ViewRenderer) renderScript(script string, name string) error {
+// RenderScript renders script
+func (vr *ViewRenderer) RenderScript(script string, name string) error {
 	if name == "" {
 		name = vr.GetResponseSegment()
 	}
@@ -207,7 +209,8 @@ func (vr *ViewRenderer) renderScript(script string, name string) error {
 		return errors.New("View is not initialized")
 	}
 
-	rendered, err := vr.View.Render(script)
+	vr.Controller().Context().SetValue("renderedscript", script)
+	rendered, err := vr.View.Render(vr.Controller().Context(), script)
 	if err != nil {
 		return err
 	}
@@ -217,14 +220,15 @@ func (vr *ViewRenderer) renderScript(script string, name string) error {
 	return nil
 }
 
-func (vr *ViewRenderer) render(action string, name string, noController bool) error {
-	vr.setRender(action, name, noController)
+// Render the script for action
+func (vr *ViewRenderer) Render(action string, name string, noController bool) error {
+	//vr.setRender(action, name, noController)
 	path, err := vr.GetViewScript(action, map[string]string{})
 	if err != nil {
 		return errors.Wrap(err, "[ViewRenderer] Render error")
 	}
 
-	return vr.renderScript(path, name)
+	return vr.RenderScript(path, name)
 }
 
 // Should the ViewRenderer render a view script?
@@ -317,7 +321,7 @@ func (vr *ViewRenderer) translateSpec(vars map[string]string) (string, error) {
 
 func (vr *ViewRenderer) initView(path string, prefix string, options map[string]interface{}) (err error) {
 	if vr.View == nil {
-		v := registry.Get("view")
+		v := registry.GetResource("view")
 		if v == nil {
 			return errors.New("View resource is not initialized")
 		}
@@ -325,16 +329,24 @@ func (vr *ViewRenderer) initView(path string, prefix string, options map[string]
 		vr.View = v.(view.Interface)
 	}
 
-	// Reset some flags every time
-	if _, ok := options["noController"]; !ok {
-		options["noController"] = false
+	defaultOptions := map[string]interface{}{
+		"neverRender":                    false,
+		"neverController":                false,
+		"noController":                   false,
+		"noRender":                       false,
+		"scriptAction":                   "",
+		"responseSegment":                "",
+		"viewBasePathSpec":               vr.View.GetBasePath(),
+		"viewScriptPathSpec":             vr.View.GetScriptPath(),
+		"viewScriptPathNoControllerSpec": vr.View.GetScriptPathNoController(),
+		"viewSuffix":                     vr.View.GetSuffix(),
 	}
 
-	if _, ok := options["noRender"]; !ok {
-		options["noRender"] = false
+	if options == nil {
+		options = defaultOptions
+	} else {
+		options = utils.MapSMerge(defaultOptions, options)
 	}
-	vr.scriptAction = ""
-	vr.responseSegment = ""
 
 	// Set options first; may be used to determine other initializations
 	vr.setOptions(options)
@@ -418,7 +430,7 @@ func (vr *ViewRenderer) setOptions(options map[string]interface{}) error {
 
 func (vr *ViewRenderer) getBasePath() (string, error) {
 	if vr.actionController == nil {
-		return "/views", nil
+		return "views", nil
 	}
 
 	inflector := vr.GetInflector()
@@ -451,10 +463,6 @@ func (vr *ViewRenderer) generateDefaultPrefix() string {
 // NewViewRenderer creates new ViewRenderer action helper
 func NewViewRenderer() (Interface, error) {
 	return &ViewRenderer{
-		name:                           "viewRenderer",
-		viewBasePathSpec:               "views/:module/",
-		viewScriptPathSpec:             "views/:module/:controller/:action.:suffix",
-		viewScriptPathNoControllerSpec: "views/:module/:action.:suffix",
-		viewSuffix:                     "phtml",
+		name: "viewRenderer",
 	}, nil
 }

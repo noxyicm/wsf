@@ -4,9 +4,8 @@ import (
 	"wsf/config"
 	"wsf/controller/dispatcher"
 	"wsf/controller/router"
+	"wsf/errors"
 	"wsf/log"
-
-	"github.com/pkg/errors"
 )
 
 // Config represents controller configuration

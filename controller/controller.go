@@ -2,13 +2,13 @@ package controller
 
 import (
 	"wsf/config"
+	"wsf/controller/context"
 	"wsf/controller/dispatcher"
 	"wsf/controller/plugin"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/controller/router"
 	"wsf/errors"
-	"wsf/session"
 )
 
 var (
@@ -23,7 +23,7 @@ type Interface interface {
 	Router() router.Interface
 	SetDispatcher(dispatcher.Interface) error
 	Dispatcher() dispatcher.Interface
-	Dispatch(rqs request.Interface, rsp response.Interface, s session.Interface) error
+	Dispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) error
 	Priority() int
 	SetThrowExceptions(bool)
 	ThrowExceptions() bool
@@ -36,7 +36,7 @@ type Interface interface {
 
 // Controller base struct
 type Controller struct {
-	options         *Config
+	Options         *Config
 	router          router.Interface
 	dispatcher      dispatcher.Interface
 	handlers        map[string]func() error
@@ -47,7 +47,7 @@ type Controller struct {
 
 // Init controller resource
 func (c *Controller) Init(options *Config) (b bool, err error) {
-	c.options = options
+	c.Options = options
 	c.dispatcher, err = dispatcher.NewDispatcher(options.Dispatcher.Type, options.Dispatcher)
 	if err != nil {
 		return false, err
@@ -63,7 +63,7 @@ func (c *Controller) Init(options *Config) (b bool, err error) {
 
 // Priority returns resource initialization priority
 func (c *Controller) Priority() int {
-	return c.options.Priority
+	return c.Options.Priority
 }
 
 // SetThrowExceptions sets if controller should break on error

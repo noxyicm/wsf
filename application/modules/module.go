@@ -39,6 +39,16 @@ func (m *Module) ControllerType(name string) (reflect.Type, error) {
 
 // RegisterScriptPath registers a paths assosiated with controller
 func (m *Module) RegisterScriptPath(controllerName string) error {
+	viewResource := registry.GetResource("view")
+	if viewResource == nil {
+		return errors.New("View resource has not been initialized")
+	}
+
+	v, ok := viewResource.(view.Interface)
+	if !ok {
+		return errors.New("View resource does not implements \"wsf/view\".Interface")
+	}
+
 	inf, err := filter.NewInflector()
 	if err != nil {
 		return nil
@@ -60,7 +70,7 @@ func (m *Module) RegisterScriptPath(controllerName string) error {
 		":controller": []interface{}{"Word_CamelCaseToDash", uts, "StringToLower", rrc},
 	})
 
-	inflector.SetTarget(m.ViewPathSpec)
+	inflector.SetTarget(v.GetBasePath())
 
 	controllerPath, err := inflector.Filter(map[string]string{
 		"module":     m.Name,
@@ -70,25 +80,22 @@ func (m *Module) RegisterScriptPath(controllerName string) error {
 		return err
 	}
 
-	if v := registry.Get("view"); v != nil {
-		v.(view.Interface).AddTeplatePath(filepath.FromSlash(controllerPath.(string) + "/"))
-	}
+	v.AddTeplatePath(filepath.FromSlash(controllerPath.(string)))
 
 	return nil
 }
 
 // GetResource returns a registered resource from registry
 func (m *Module) GetResource(name string) interface{} {
-	return registry.Get(name)
+	return registry.GetResource(name)
 }
 
 // NewModule creates new module struct
 func NewModule(name string, order int) (*Module, error) {
 	return &Module{
-		Name:         name,
-		Order:        order,
-		ViewPathSpec: "views/:module/:controller",
-		controllers:  make(map[string]reflect.Type),
-		handlers:     make(map[string]action.Interface),
+		Name:        name,
+		Order:       order,
+		controllers: make(map[string]reflect.Type),
+		handlers:    make(map[string]action.Interface),
 	}, nil
 }

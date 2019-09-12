@@ -13,6 +13,7 @@ import (
 	"time"
 	"wsf/errors"
 
+	// CockroachDB uses postgres package for tcp connections
 	_ "github.com/lib/pq"
 )
 
@@ -29,6 +30,107 @@ func init() {
 type Cockroach struct {
 	DefaultAdapter
 	driverConfig *cockroachConfig
+}
+
+// Setup the adapter
+func (a *Cockroach) Setup() {
+	a.identifierSymbol = `"`
+	a.AutoQuoteIdentifiers = true
+	a.PingTimeout = time.Duration(a.Options.PingTimeout) * time.Second
+	a.QueryTimeout = time.Duration(a.Options.QueryTimeout) * time.Second
+
+	//sql.Register(name string, driver driver.Driver)
+	a.driverConfig = &cockroachConfig{AllowNativePasswords: true}
+	a.driverConfig.User = a.Options.Username
+	a.driverConfig.Passwd = a.Options.Password
+	a.driverConfig.Net = a.Options.Protocol
+	a.driverConfig.Addr = a.Options.Host
+	if a.Options.Port > 0 {
+		a.driverConfig.Addr = a.driverConfig.Addr + ":" + strconv.Itoa(a.Options.Port)
+	}
+	a.driverConfig.DBName = a.Options.DBname
+	a.driverConfig.Loc = a.Options.TimeFormat
+	a.driverConfig.Collation = a.Options.Charset
+	//TLSConfig
+
+	a.Unquoteable = []string{
+		"BETWEEN",
+		"LIKE",
+		"AND",
+		"OR",
+		"=",
+		"!=",
+		">",
+		">=",
+		"<",
+		"<=",
+		"<>",
+		"/",
+		"+",
+		"-",
+		"?",
+		"*",
+		"(",
+		")",
+		"IS",
+		"NOT",
+		"NULL",
+		"IN",
+		"IN(",
+		" ",
+		".",
+		"::",
+		"SOME",
+		"ANY",
+		"ALL",
+		"SIMILAR",
+	}
+
+	a.Spliters = []string{
+		"=",
+		"!=",
+		">",
+		">=",
+		"<",
+		"<=",
+		"<>",
+		"/",
+		"+",
+		"-",
+		".",
+		" ",
+	}
+
+	a.UnquoteableFunctions = []string{
+		"concat",
+		"concat_ws",
+		"lower",
+		"upper",
+		"md5",
+		"btrim",
+		"max",
+		"min",
+		"avg",
+		"sum",
+		"abs",
+		"round",
+		"ceil",
+		"floor",
+		"div",
+		"count",
+		"random",
+		"current_timestamp",
+		"greatest",
+		"least",
+		"IF",
+		"IFNULL",
+		"NULLIF",
+	}
+
+	a.Params = map[string]interface{}{
+		"positional": true,
+		"named":      false,
+	}
 }
 
 // Init a connection to database
@@ -61,9 +163,9 @@ func (a *Cockroach) Init(ctx context.Context) (err error) {
 }
 
 // SetOptions sets new options for CockroachDB adapter
-func (a *Cockroach) SetOptions(options *AdapterConfig) Adapter {
+func (a *Cockroach) SetOptions(options *AdapterConfig) error {
 	a.Options = options
-	return a
+	return nil
 }
 
 // GetOptions returns CockroachDB adapter options
@@ -83,7 +185,7 @@ func (a *Cockroach) Select() (Select, error) {
 }
 
 // Insert inserts new row into table
-func (a *Cockroach) Insert(table string, data map[string]interface{}) (int, error) {
+func (a *Cockroach) Insert(ctx context.Context, table string, data map[string]interface{}) (int, error) {
 	cols := []string{}
 	vals := []string{}
 	binds := []interface{}{}
@@ -112,19 +214,19 @@ func (a *Cockroach) Insert(table string, data map[string]interface{}) (int, erro
 
 	sql := "INSERT INTO " + a.QuoteIdentifier(table, true) + " (" + strings.Join(cols, ", ") + ") VALUES (" + strings.Join(vals, ", ") + ") RETURNING \"id\""
 
-	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
-	stmt, err := a.Db.PrepareContext(ctx, sql)
+	stmt, err := a.Db.PrepareContext(pctx, sql)
 	if err != nil {
 		return 0, errors.Wrap(err, "CockroachDB insert Error")
 	}
 	defer stmt.Close()
 
-	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
-	err = stmt.QueryRowContext(ctx, binds...).Scan(&a.lastInsertID)
+	err = stmt.QueryRowContext(qctx, binds...).Scan(&a.lastInsertID)
 	if err != nil {
 		return 0, errors.Wrap(err, "CockroachDB insert Error")
 	}
@@ -133,7 +235,7 @@ func (a *Cockroach) Insert(table string, data map[string]interface{}) (int, erro
 }
 
 // Update updates rows into table be condition
-func (a *Cockroach) Update(table string, data map[string]interface{}, cond map[string]interface{}) (bool, error) {
+func (a *Cockroach) Update(ctx context.Context, table string, data map[string]interface{}, cond map[string]interface{}) (bool, error) {
 	set := []string{}
 	binds := []interface{}{}
 	i := 1
@@ -169,19 +271,19 @@ func (a *Cockroach) Update(table string, data map[string]interface{}, cond map[s
 	}
 	sql = sql + " RETURNING \"id\""
 
-	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
-	stmt, err := a.Db.PrepareContext(ctx, sql)
+	stmt, err := a.Db.PrepareContext(pctx, sql)
 	if err != nil {
 		return false, errors.Wrap(err, "CockroachDB update Error")
 	}
 	defer stmt.Close()
 
-	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
-	rows, err := stmt.QueryContext(ctx, binds...)
+	rows, err := stmt.QueryContext(qctx, binds...)
 	if err != nil {
 		return false, errors.Wrap(err, "CockroachDB update Error")
 	}
@@ -198,7 +300,7 @@ func (a *Cockroach) Update(table string, data map[string]interface{}, cond map[s
 }
 
 // Delete removes rows from table
-func (a *Cockroach) Delete(table string, cond map[string]interface{}) (bool, error) {
+func (a *Cockroach) Delete(ctx context.Context, table string, cond map[string]interface{}) (bool, error) {
 	where := a.whereExpr(cond)
 
 	sql := "DELETE FROM " + a.QuoteIdentifier(table, true)
@@ -207,19 +309,19 @@ func (a *Cockroach) Delete(table string, cond map[string]interface{}) (bool, err
 	}
 	sql = sql + " RETURNING \"id\""
 
-	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
-	stmt, err := a.Db.PrepareContext(ctx, sql)
+	stmt, err := a.Db.PrepareContext(pctx, sql)
 	if err != nil {
 		return false, errors.Wrap(err, "CockroachDB Error")
 	}
 	defer stmt.Close()
 
-	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
-	rows, err := stmt.QueryContext(ctx)
+	rows, err := stmt.QueryContext(qctx)
 	if err != nil {
 		return false, errors.Wrap(err, "CockroachDB Error")
 	}
@@ -397,104 +499,9 @@ func (a *Cockroach) FormatDSN() string {
 // NewCockroachAdapter creates a new CockroachDB adapter
 func NewCockroachAdapter(options *AdapterConfig) (ai Adapter, err error) {
 	adp := &Cockroach{}
-	adp.identifierSymbol = `"`
-	adp.AutoQuoteIdentifiers = true
-	adp.PingTimeout = time.Duration(options.PingTimeout) * time.Second
-	adp.QueryTimeout = time.Duration(options.QueryTimeout) * time.Second
-
-	//sql.Register(name string, driver driver.Driver)
-	adp.driverConfig = &cockroachConfig{AllowNativePasswords: true}
-	adp.driverConfig.User = options.Username
-	adp.driverConfig.Passwd = options.Password
-	adp.driverConfig.Net = options.Protocol
-	adp.driverConfig.Addr = options.Host
-	if options.Port > 0 {
-		adp.driverConfig.Addr = adp.driverConfig.Addr + ":" + strconv.Itoa(options.Port)
-	}
-	adp.driverConfig.DBName = options.DBname
-	adp.driverConfig.Loc = options.TimeFormat
-	adp.driverConfig.Collation = options.Charset
-	//TLSConfig
-
-	adp.Unquoteable = []string{
-		"BETWEEN",
-		"LIKE",
-		"AND",
-		"OR",
-		"=",
-		"!=",
-		">",
-		">=",
-		"<",
-		"<=",
-		"<>",
-		"/",
-		"+",
-		"-",
-		"?",
-		"*",
-		"(",
-		")",
-		"IS",
-		"NOT",
-		"NULL",
-		"IN",
-		"IN(",
-		" ",
-		".",
-		"::",
-		"SOME",
-		"ANY",
-		"ALL",
-		"SIMILAR",
-	}
-
-	adp.Spliters = []string{
-		"=",
-		"!=",
-		">",
-		">=",
-		"<",
-		"<=",
-		"<>",
-		"/",
-		"+",
-		"-",
-		".",
-		" ",
-	}
-
-	adp.UnquoteableFunctions = []string{
-		"concat",
-		"concat_ws",
-		"lower",
-		"upper",
-		"md5",
-		"btrim",
-		"max",
-		"min",
-		"avg",
-		"sum",
-		"abs",
-		"round",
-		"ceil",
-		"floor",
-		"div",
-		"count",
-		"random",
-		"current_timestamp",
-		"greatest",
-		"least",
-		"IF",
-		"IFNULL",
-		"NULLIF",
-	}
-
 	adp.Options = options
-	adp.Params = map[string]interface{}{
-		"positional": true,
-		"named":      false,
-	}
+	adp.Setup()
+
 	return adp, nil
 }
 

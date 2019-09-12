@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 	"wsf/config"
@@ -10,13 +11,17 @@ import (
 
 // InitMethod Worker initialization function
 const (
-	InitMethod = "Init"
+	// EventDebug thrown if there is something insegnificant to say
+	EventDebug = iota + 500
 
 	// EventInfo thrown if there is something to say
-	EventInfo = iota + 500
+	EventInfo
 
 	// EventError thrown on any non job error provided
 	EventError
+
+	InitMethod  = "Init"
+	SetupMethod = "Setup"
 )
 
 var errNoConfig = errors.New("No configuration has been provided")
@@ -76,7 +81,8 @@ func (r *resourceregistry) Register(name string, typ string, rsr Interface) {
 		v.order = k
 	}
 
-	registry.Set(name, rsr)
+	registry.SetResource(name, rsr)
+	r.throw(EventDebug, fmt.Sprintf("Resource '%s' registered", name))
 }
 
 // Init configures all underlying resources with given configuration
@@ -95,7 +101,7 @@ func (r *resourceregistry) Init(cfg config.Config) error {
 	}
 
 	for _, rs := range r.resources {
-		if rs.getStatus() >= StatusOK {
+		if rs.getStatus() >= StatusInit {
 			return errors.Errorf("Resource [%s] has already been configured", rs.name)
 		}
 
@@ -107,9 +113,25 @@ func (r *resourceregistry) Init(cfg config.Config) error {
 
 			return err
 		} else if ok {
-			rs.setStatus(StatusOK)
+			rs.setStatus(StatusInit)
+			r.throw(EventDebug, fmt.Sprintf("Resource '%s' initialized", rs.name))
 		} else {
 			r.throw(EventError, "["+rs.name+"]: disabled")
+		}
+	}
+
+	for _, rs := range r.resources {
+		if rs.getStatus() == StatusInit {
+			if ok, err := r.setupResource(rs.resource); err != nil {
+				return err
+			} else if ok {
+				rs.setStatus(StatusOK)
+				r.throw(EventDebug, fmt.Sprintf("Resource '%s' setuped", rs.name))
+			}
+		} else if rs.getStatus() == StatusOK {
+			return errors.Errorf("Resource [%s] has already been setuped", rs.name)
+		} else {
+			r.throw(EventError, "["+rs.name+"]: not setuped")
 		}
 	}
 
@@ -154,9 +176,6 @@ func (r *resourceregistry) Listen(l func(event int, ctx interface{})) {
 
 // throw invokes event handler if any
 func (r *resourceregistry) throw(event int, ctx interface{}) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	if r.lsn != nil {
 		r.lsn(event, ctx)
 	}
@@ -172,6 +191,7 @@ func (r *resourceregistry) initResource(rs interface{}, segment config.Config) (
 	}
 
 	if err := r.verifySignature(m); err != nil {
+		fmt.Println(err)
 		return false, err
 	}
 
@@ -181,7 +201,32 @@ func (r *resourceregistry) initResource(rs interface{}, segment config.Config) (
 	}
 
 	out := m.Func.Call(values)
+	if out[1].IsNil() {
+		return out[0].Bool(), nil
+	}
 
+	return out[0].Bool(), out[1].Interface().(error)
+}
+
+// calls Setup method with automatically resolved arguments
+func (r *resourceregistry) setupResource(rs interface{}) (bool, error) {
+	rf := reflect.TypeOf(rs)
+
+	m, ok := rf.MethodByName(SetupMethod)
+	if !ok {
+		return true, nil
+	}
+
+	if err := r.verifySignature(m); err != nil {
+		return false, err
+	}
+
+	values, err := r.resolveValues(rs, m, nil)
+	if err != nil {
+		return false, err
+	}
+
+	out := m.Func.Call(values)
 	if out[1].IsNil() {
 		return out[0].Bool(), nil
 	}

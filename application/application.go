@@ -12,6 +12,15 @@ import (
 )
 
 const (
+	// EventDebug thrown if there is something insegnificant to say
+	EventDebug = iota + 500
+
+	// EventInfo thrown if there is something to say
+	EventInfo
+
+	// EventError thrown on any non job error provided
+	EventError
+
 	// VERSION represent version.
 	VERSION = "0.0.0"
 
@@ -23,12 +32,6 @@ const (
 
 	// EnvLOC is a local mode
 	EnvLOC = "local"
-
-	// EventInfo thrown if there is something to say
-	EventInfo = iota + 500
-
-	// EventError thrown on any non job error provided
-	EventError
 )
 
 // Application struct
@@ -189,9 +192,18 @@ func NewApplication(environment string, options interface{}, override []string) 
 	if err != nil {
 		return nil, err
 	}
-	app.bootstrap.Listen(app.throw)
+	app.bootstrap.AddListener(app.throw)
 	app.AddListener(func(event int, ctx interface{}) {
-		app.logger.Info(ctx.(string), nil)
+		switch event {
+		case EventDebug:
+			app.logger.Debug(ctx.(string), nil)
+
+		case EventInfo:
+			app.logger.Info(ctx.(string), nil)
+
+		case EventError:
+			app.logger.Error(ctx.(string), nil)
+		}
 	})
 
 	registry.Set("Application", app)

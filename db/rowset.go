@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"sync"
 	"wsf/errors"
@@ -13,6 +14,8 @@ const (
 
 var (
 	buildRowsetHandlers = map[string]func(*RowsetConfig) (Rowset, error){}
+
+	rowsetCfgContextKey contextKey
 )
 
 func init() {
@@ -21,9 +24,13 @@ func init() {
 
 // Rowset represents rows interface
 type Rowset interface {
+	Setup() error
+	Push(row Row)
 	Get() Row
 	GetOffset(key int) Row
+	OffsetExists(key int) bool
 	Next() bool
+	Populate(data []Row)
 	Prepare(rows *sql.Rows) error
 	SetRowType(typ string) error
 	SetTable(table Table) error
@@ -34,16 +41,27 @@ type Rowset interface {
 
 // DefaultRowset holds and operates over rows
 type DefaultRowset struct {
-	Options   *RowsetConfig
-	Data      []Row
-	Tbl       Table
-	Connected bool
-	Pointer   uint32
-	Cnt       uint32
-	Pointing  bool
-	Stored    bool
-	ReadOnly  bool
-	mu        sync.Mutex
+	Options           *RowsetConfig
+	Data              []Row
+	Tbl               Table
+	Connected         bool
+	Pointer           uint32
+	Cnt               uint32
+	CurrentKeyUnseted bool
+	Pointing          bool
+	Stored            bool
+	ReadOnly          bool
+	mu                sync.Mutex
+}
+
+// Setup the object
+func (r *DefaultRowset) Setup() error {
+	return nil
+}
+
+// Push row to rowset
+func (r *DefaultRowset) Push(row Row) {
+	r.Data = append(r.Data, row)
 }
 
 // Get returns row
@@ -58,6 +76,11 @@ func (r *DefaultRowset) GetOffset(key int) Row {
 	}
 
 	return r.Data[key]
+}
+
+// OffsetExists returns true if key is in rows data
+func (r *DefaultRowset) OffsetExists(key int) bool {
+	return key >= 0 && key < len(r.Data)
 }
 
 // Next moves pointer further
@@ -86,6 +109,11 @@ func (r *DefaultRowset) Next() bool {
 	}
 
 	return true
+}
+
+// Populate the object with provided data
+func (r *DefaultRowset) Populate(data []Row) {
+	r.Data = append(r.Data, data...)
 }
 
 // Prepare initializes rowset
@@ -193,4 +221,15 @@ func NewEmptyRowset(rowsetType string) Rowset {
 // RegisterRowset registers a handler for database rowset creation
 func RegisterRowset(rowsetType string, handler func(*RowsetConfig) (Rowset, error)) {
 	buildRowsetHandlers[rowsetType] = handler
+}
+
+// RowsetConfigToContext returns a new context with stored rowset config
+func RowsetConfigToContext(ctx context.Context, cfg *RowsetConfig) context.Context {
+	return context.WithValue(ctx, rowsetCfgContextKey, cfg)
+}
+
+// RowsetConfigFromContext returns a rowset config stored in context
+func RowsetConfigFromContext(ctx context.Context) (*RowsetConfig, bool) {
+	v, ok := ctx.Value(rowsetCfgContextKey).(*RowsetConfig)
+	return v, ok
 }

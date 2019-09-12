@@ -7,6 +7,7 @@ import (
 // Config represents dispatcher configuration
 type Config struct {
 	Type          string
+	Lifetime      int64
 	Serialization bool
 }
 

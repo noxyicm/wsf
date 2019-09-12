@@ -128,6 +128,16 @@ func (s *Referenced) Value(key string) interface{} {
 	return nil
 }
 
+// Map retruns stack as map
+func (s *Referenced) Map() map[string]interface{} {
+	m := make(map[string]interface{})
+	for k, v := range s.stack {
+		m[s.backrefs[k]] = v
+	}
+
+	return m
+}
+
 // Contains returns true if stack contains a value
 func (s *Referenced) Contains(value interface{}) bool {
 	for _, v := range s.stack {
@@ -156,6 +166,13 @@ func (s *Referenced) Clear() error {
 	return nil
 }
 
+// Populate the stack with provided values
+func (s *Referenced) Populate(data map[string]interface{}) {
+	for k, v := range data {
+		s.Append(k, v)
+	}
+}
+
 func (s *Referenced) pushup(key int) {
 	newbackrefs := make(map[int]string)
 	for k := range s.stack {
@@ -179,10 +196,16 @@ func (s *Referenced) pushdown(key int) {
 }
 
 // NewReferenced creates a new referenced stack
-func NewReferenced() *Referenced {
-	return &Referenced{
+func NewReferenced(data map[string]interface{}) *Referenced {
+	s := &Referenced{
 		refs:     make(map[string]int),
 		stack:    make([]interface{}, 0),
 		backrefs: make(map[int]string),
 	}
+
+	if data != nil {
+		s.Populate(data)
+	}
+
+	return s
 }

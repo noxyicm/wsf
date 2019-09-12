@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"path/filepath"
 	"wsf/config"
+	"wsf/controller/context"
 	"wsf/errors"
 	"wsf/log"
 	"wsf/view/helper"
@@ -15,9 +16,17 @@ var (
 
 // Interface is a view resource interface
 type Interface interface {
-	Render(script string) ([]byte, error)
+	Priority() int
+	Render(ctx context.Context, script string) ([]byte, error)
 	GetPaths() map[string]map[string]string
 	AddBasePath(path string, prefix string) error
+	GetBasePath() string
+	SetScriptPath(path string) error
+	GetScriptPath() string
+	SetScriptPathNoController(path string) error
+	GetScriptPathNoController() string
+	SetSuffix(suffix string) error
+	GetSuffix() string
 	AddTeplatePath(path string) error
 	GetTemplatePaths() map[string]string
 	RegisterHelper(name string, hlp helper.Interface) error
@@ -29,17 +38,22 @@ type Interface interface {
 	ParamString(key string, def string) string
 	ParamInt(key string, def int) int
 	PrepareTemplates() error
-	Priority() int
+	GetTemplate(name string) *template.Template
 }
 
 type view struct {
-	options   *Config
-	logger    *log.Log
-	baseDir   string
-	paths     map[string]map[string]string
-	helpers   map[string]helper.Interface
-	params    map[string]interface{}
-	templates map[string]*template.Template
+	Options                        *Config
+	Logger                         *log.Log
+	BaseDir                        string
+	ViewBasePathSpec               string
+	ViewScriptPathSpec             string
+	ViewScriptPathNoControllerSpec string
+	ViewSuffix                     string
+	paths                          map[string]map[string]string
+	helpers                        map[string]helper.Interface
+	params                         map[string]interface{}
+	templates                      map[string]*template.Template
+	template                       *template.Template
 }
 
 // GetPaths returns all registered script pathes
@@ -50,10 +64,48 @@ func (v *view) GetPaths() map[string]map[string]string {
 //setBasePath
 // AddBasePath registers a new base script path
 func (v *view) AddBasePath(path string, prefix string) error {
-	v.AddTeplatePath(filepath.FromSlash(path) + "templates")
+	v.AddTeplatePath(filepath.FromSlash(path))
 	//$this->addHelperPath($path . 'helpers', $classPrefix . 'Helper');
 	//$this->addFilterPath($path . 'filters', $classPrefix . 'Filter');
 	return nil
+}
+
+// GetBasePath returns base path pattern
+func (v *view) GetBasePath() string {
+	return v.ViewBasePathSpec
+}
+
+// SetScriptPath sets script path pattern
+func (v *view) SetScriptPath(path string) error {
+	v.ViewScriptPathSpec = path
+	return nil
+}
+
+// GetScriptPath returns script path pattern
+func (v *view) GetScriptPath() string {
+	return v.ViewScriptPathSpec
+}
+
+// SetScriptPathNoController sets script path pattern without controller specification
+func (v *view) SetScriptPathNoController(path string) error {
+	v.ViewScriptPathNoControllerSpec = path
+	return nil
+}
+
+// SetScriptPathNoController returns script path pattern
+func (v *view) GetScriptPathNoController() string {
+	return v.ViewScriptPathNoControllerSpec
+}
+
+// SetSuffix sets path file suffix
+func (v *view) SetSuffix(suffix string) error {
+	v.ViewSuffix = suffix
+	return nil
+}
+
+// GetBasePath returns path file suffix
+func (v *view) GetSuffix() string {
+	return v.ViewSuffix
 }
 
 // AddTeplatePath adds a path to templates
@@ -164,7 +216,7 @@ func (v *view) Helper(name string) helper.Interface {
 
 // Priority returns resource initialization priority
 func (v *view) Priority() int {
-	return v.options.Priority
+	return v.Options.Priority
 }
 
 // NewView creates a new controller specified by type

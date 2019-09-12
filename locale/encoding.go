@@ -1,6 +1,6 @@
 package locale
 
-import "github.com/pkg/errors"
+import "wsf/errors"
 
 // Encoding specifies encoding of the input data.
 type Encoding uint
@@ -9,8 +9,8 @@ const (
 	// UTF8 interprets the input data as UTF-8.
 	UTF8 = iota
 
-	// ISO_8859_1 interprets the input data as ISO-8859-1.
-	ISO_8859_1
+	// ISO88591 interprets the input data as ISO-8859-1.
+	ISO88591
 )
 
 // Convert Interprets a byte buffer either as an ISO-8859-1 or UTF-8 encoded string.
@@ -21,7 +21,7 @@ func Convert(buf []byte, enc Encoding) (string, error) {
 	case UTF8:
 		return string(buf), nil
 
-	case ISO_8859_1:
+	case ISO88591:
 		runes := make([]rune, len(buf))
 		for i, b := range buf {
 			runes[i] = rune(b)

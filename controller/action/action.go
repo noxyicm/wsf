@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"wsf/controller/action/helper"
+	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
@@ -33,6 +34,8 @@ type Interface interface {
 	Response() response.Interface
 	SetSession(s session.Interface)
 	Session() session.Interface
+	SetContext(ctx context.Context)
+	Context() context.Context
 	SetParams(params map[string]interface{}) error
 	SetParam(name string, value interface{}) error
 	Param(name string) interface{}
@@ -44,7 +47,7 @@ type Interface interface {
 	NewHelperBroker() error
 	HelperBroker() *HelperBroker
 	HasHelper(name string) bool
-	Helper(name string) (helper.Interface, error)
+	Helper(name string) helper.Interface
 	Dispatch(ctrl interface{}, m reflect.Method) error
 	Render() error
 	SetView(v view.Interface) error
@@ -59,6 +62,7 @@ type Controller struct {
 	InvokeParams map[string]interface{}
 	Rqs          request.Interface
 	Rsp          response.Interface
+	Ctx          context.Context
 	Sess         session.Interface
 	Hlpr         *HelperBroker
 	ViewSuffix   string
@@ -126,8 +130,9 @@ func (c *Controller) HasHelper(name string) bool {
 }
 
 // Helper returns Action Halper
-func (c *Controller) Helper(name string) (helper.Interface, error) {
-	return c.Hlpr.GetHelper(name)
+func (c *Controller) Helper(name string) helper.Interface {
+	h, _ := c.Hlpr.GetHelper(name)
+	return h
 }
 
 // SetRequest sets request
@@ -158,6 +163,27 @@ func (c *Controller) SetSession(s session.Interface) {
 // Session returns session
 func (c *Controller) Session() session.Interface {
 	return c.Sess
+}
+
+// SetContext sets context
+func (c *Controller) SetContext(ctx context.Context) {
+	c.Ctx = ctx
+}
+
+// Context returns context
+func (c *Controller) Context() context.Context {
+	return c.Ctx
+}
+
+// SetLayout sets a layout
+func (c *Controller) SetLayout(name string) error {
+	c.Ctx.SetValue(context.Layout, name)
+	return nil
+}
+
+// DisableLayout disables the layout
+func (c *Controller) DisableLayout() {
+	c.Ctx.SetValue(context.LayoutEnabled, false)
 }
 
 // SetParams sets parameters to pass to handlers
@@ -265,7 +291,6 @@ func (c *Controller) Invoke(ctrl interface{}, m reflect.Method) error {
 	}
 
 	out := m.Func.Call(values)
-
 	if out[0].IsNil() {
 		return nil
 	}
@@ -309,7 +334,7 @@ func (c *Controller) GetViewScript(action string, noController bool) (string, er
 
 // GetResource returns a registered resource from registry
 func (c *Controller) GetResource(name string) interface{} {
-	return registry.Get(name)
+	return registry.GetResource(name)
 }
 
 // PreDispatch fires before action invocation

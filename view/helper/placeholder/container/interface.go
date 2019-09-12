@@ -1,5 +1,9 @@
 package container
 
+import (
+	"wsf/utils/stack"
+)
+
 // Container contants
 const (
 	SET     = "SET"
@@ -9,12 +13,13 @@ const (
 
 // Interface is a placeholder container interface
 type Interface interface {
-	Set(value interface{}) error
-	Get() []interface{}
-	GetOffset(index int) interface{}
-	Unset(index int)
-	Append(value interface{}) error
-	Prepend(value interface{}) error
+	Set(key string, value interface{}) error
+	Get(key string) interface{}
+	GetAll() map[string]interface{}
+	GetStack() []interface{}
+	Unset(key string)
+	Append(key string, value interface{}) error
+	Prepend(key string, value interface{}) error
 	SetPrefix(prefix string) error
 	Prefix() string
 	SetPostfix(postfix string) error
@@ -27,7 +32,7 @@ type Interface interface {
 
 // Container is a default placeholder container implementation
 type Container struct {
-	data      []interface{}
+	data      *stack.Referenced
 	prefix    string
 	postfix   string
 	separator string
@@ -35,42 +40,43 @@ type Container struct {
 }
 
 // Set sets a single value
-func (c *Container) Set(value interface{}) error {
-	c.data = []interface{}{value}
-	return nil
+func (c *Container) Set(key string, value interface{}) error {
+	c.data = stack.NewReferenced(nil)
+	return c.data.Set(key, value)
 }
 
-// Get returns a container contents
-func (c *Container) Get() []interface{} {
-	return c.data
-}
-
-// GetOffset returns a container contents in a specific index
-func (c *Container) GetOffset(index int) interface{} {
-	if len(c.data) > index {
-		return c.data[index]
+// Get returns a container value
+func (c *Container) Get(key string) interface{} {
+	if c.data.Has(key) {
+		return c.data.Value(key)
 	}
 
 	return nil
+}
+
+// GetAll returns a container contents
+func (c *Container) GetAll() map[string]interface{} {
+	return c.data.Map()
+}
+
+// GetStack returns a container contents as slice
+func (c *Container) GetStack() []interface{} {
+	return c.data.Stack()
 }
 
 // Unset specific index from container
-func (c *Container) Unset(index int) {
-	if len(c.data) > index {
-		c.data = append(c.data[0:index-1], c.data[index:]...)
-	}
+func (c *Container) Unset(key string) {
+	c.data.Unset(key)
 }
 
 // Append value to the bottom of the container
-func (c *Container) Append(value interface{}) error {
-	c.data = append(c.data, value)
-	return nil
+func (c *Container) Append(key string, value interface{}) error {
+	return c.data.Append(key, value)
 }
 
 // Prepend value to the top of the container
-func (c *Container) Prepend(value interface{}) error {
-	c.data = append([]interface{}{value}, c.data...)
-	return nil
+func (c *Container) Prepend(key string, value interface{}) error {
+	return c.data.Prepend(key, value)
 }
 
 // SetPrefix sets a prefix for serialization
@@ -118,8 +124,8 @@ func (c *Container) Indent() string {
 }
 
 // NewContainer creates a new placeholder container
-func NewContainer(data []interface{}) (Interface, error) {
+func NewContainer(data map[string]interface{}) (Interface, error) {
 	return &Container{
-		data: data,
+		data: stack.NewReferenced(data),
 	}, nil
 }

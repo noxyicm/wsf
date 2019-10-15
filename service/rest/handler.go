@@ -2,6 +2,7 @@ package rest
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
@@ -102,16 +103,35 @@ func (h *Handler) handleError(w http.ResponseWriter, r *http.Request, err error,
 
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(500)
-
 	data := JSONResponse{
 		StatusCode: 500,
 		Version:    h.options.Version,
 		BasePath:   config.App.GetString("application.Domain"),
 		Status:     1,
-		Message:    err.Error(),
+		Message:    "",
 		URL:        r.URL.Path,
 		Data:       nil,
 	}
+
+	switch err.(type) {
+	case *errors.HTTPError:
+		if config.AppEnv == "production" {
+			data.Message = err.Error()
+		} else {
+			data.Message = fmt.Sprintf("%+s", err.(*errors.HTTPError))
+		}
+
+	case *errors.Exception:
+		if config.AppEnv == "production" {
+			data.Message = err.Error()
+		} else {
+			data.Message = fmt.Sprintf("%+s", err.(*errors.Exception).Original)
+		}
+
+	default:
+		data.Message = err.Error()
+	}
+
 	encoded, _ := json.Marshal(data)
 
 	h.throw(EventError, event.NewError(r, err, start))
@@ -140,13 +160,26 @@ func (h *Handler) handleResponse(req request.Interface, rsp response.Interface, 
 		switch err.(type) {
 		case *errors.HTTPError:
 			data.StatusCode = err.(*errors.HTTPError).Code()
+			if config.AppEnv == "production" {
+				data.Message = err.Error()
+			} else {
+				data.Message = fmt.Sprintf("%+s", err.(*errors.HTTPError))
+			}
+
+		case *errors.Exception:
+			data.StatusCode = err.(*errors.Exception).Code()
+			if config.AppEnv == "production" {
+				data.Message = err.Error()
+			} else {
+				data.Message = fmt.Sprintf("%+s", err.(*errors.Exception).Original)
+			}
 
 		default:
 			data.StatusCode = 500
+			data.Message = err.Error()
 		}
 
 		data.Status = 1
-		data.Message = err.Error()
 	}
 
 	encoded, _ := json.Marshal(data)

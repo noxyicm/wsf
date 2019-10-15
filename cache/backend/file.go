@@ -25,6 +25,7 @@ type File struct {
 	Backend
 	Options *FileConfig
 	mu      sync.Mutex
+	mul     sync.Mutex
 }
 
 // Load stored data
@@ -115,7 +116,7 @@ func (b *File) Save(data []byte, id string, tags []string, specificLifetime int6
 		return errors.Wrap(err, "Save failed")
 	}
 
-	if len(tags) > 0 {
+	if len(tags) > 0 && b.Options.TagsHolder != "" {
 		tagsFilePath := b.Options.Dir + "/" + b.Options.TagsHolder + b.Options.Suffix
 		tfd, err := os.OpenFile(tagsFilePath, os.O_RDWR|os.O_CREATE, 0664)
 		if err != nil {
@@ -164,53 +165,55 @@ func (b *File) Save(data []byte, id string, tags []string, specificLifetime int6
 
 // Remove data by key
 func (b *File) Remove(id string) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.mul.Lock()
+	defer b.mul.Unlock()
 
 	filePath := b.Options.Dir + "/" + id + b.Options.Suffix
 	if err := os.Remove(filePath); err != nil {
 		return errors.Wrap(err, "Remove failed")
 	}
 
-	tagsFilePath := b.Options.Dir + "/" + b.Options.TagsHolder + b.Options.Suffix
-	tfd, err := os.OpenFile(tagsFilePath, os.O_RDWR|os.O_CREATE, 0664)
-	if err != nil {
-		return errors.Wrap(err, "Remove failed")
-	}
-	defer tfd.Close()
-
-	fi, err := os.Stat(tagsFilePath)
-	if err != nil {
-		return errors.Wrap(err, "Remove failed")
-	}
-
-	d := make([]byte, fi.Size())
-	n, err := tfd.Read(d)
-	if err != nil {
-		return err
-	}
-
-	m := make(map[string][]string)
-	if n > 0 {
-		if err := json.Unmarshal(d, &m); err != nil {
+	if b.Options.TagsHolder != "" {
+		tagsFilePath := b.Options.Dir + "/" + b.Options.TagsHolder + b.Options.Suffix
+		tfd, err := os.OpenFile(tagsFilePath, os.O_RDWR|os.O_CREATE, 0664)
+		if err != nil {
 			return errors.Wrap(err, "Remove failed")
 		}
-	}
+		defer tfd.Close()
 
-	for tag, storedIDs := range m {
-		key, hasKey := utils.SKey(id, storedIDs)
-		if hasKey {
-			storedIDs = append(storedIDs[:key], storedIDs[key+1:]...)
-			if len(storedIDs) > 0 {
-				m[tag] = storedIDs
+		fi, err := os.Stat(tagsFilePath)
+		if err != nil {
+			return errors.Wrap(err, "Remove failed")
+		}
+
+		d := make([]byte, fi.Size())
+		n, err := tfd.Read(d)
+		if err != nil {
+			return err
+		}
+
+		m := make(map[string][]string)
+		if n > 0 {
+			if err := json.Unmarshal(d, &m); err != nil {
+				return errors.Wrap(err, "Remove failed")
 			}
 		}
-	}
 
-	encoded, _ := json.Marshal(m)
-	tfd.Truncate(0)
-	if _, err := tfd.WriteAt(encoded, 0); err != nil {
-		return errors.Wrap(err, "Remove failed")
+		for tag, storedIDs := range m {
+			key, hasKey := utils.SKey(id, storedIDs)
+			if hasKey {
+				storedIDs = append(storedIDs[:key], storedIDs[key+1:]...)
+				if len(storedIDs) > 0 {
+					m[tag] = storedIDs
+				}
+			}
+		}
+
+		encoded, _ := json.Marshal(m)
+		tfd.Truncate(0)
+		if _, err := tfd.WriteAt(encoded, 0); err != nil {
+			return errors.Wrap(err, "Remove failed")
+		}
 	}
 
 	return nil

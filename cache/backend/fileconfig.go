@@ -23,7 +23,7 @@ func (c *FileConfig) Populate(cfg config.Config) error {
 
 // Defaults sets configuration default values
 func (c *FileConfig) Defaults() error {
-	c.Type = "default"
+	c.Type = "file"
 	return nil
 }
 

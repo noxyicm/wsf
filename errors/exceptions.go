@@ -67,6 +67,16 @@ func (e *Exception) Error() string {
 	return e.Original.Error()
 }
 
+// Code returns exception code
+func (e *Exception) Code() int {
+	switch e.Original.(type) {
+	case *HTTPError:
+		return e.Original.(*HTTPError).Code()
+	}
+
+	return 500
+}
+
 // NewException creates a new exception
 func NewException(err error) *Exception {
 	return &Exception{

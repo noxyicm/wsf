@@ -468,12 +468,13 @@ func (a *DefaultAdapter) QuoteIdentifierAs(ident interface{}, alias string, auto
 		functions := make([]string, 0)
 		declarations := make([]string, 0)
 		initialIdent := ident.(string)
+
 		v := ident.(string)
 		if find := RegexpSingleQuote.FindString(v); find != "" {
 			literals = append(literals, find)
-			reg, err := regexp.Compile(`\{\$` + strconv.Itoa((len(literals) - 1)) + `\}`)
+			reg, err := regexp.Compile(find)
 			if err == nil {
-				quoted = reg.ReplaceAllString(v, find)
+				v = reg.ReplaceAllString(v, `{`+strconv.Itoa((len(literals)-1))+`}`)
 			}
 		}
 
@@ -567,7 +568,7 @@ func (a *DefaultAdapter) QuoteIdentifierAs(ident interface{}, alias string, auto
 
 	if len(literals) > 0 {
 		for key, literal := range literals {
-			quoted = strings.ReplaceAll(quoted, `{$`+strconv.Itoa(key)+`}`, literal)
+			quoted = strings.ReplaceAll(quoted, `{`+strconv.Itoa(key)+`}`, literal)
 		}
 	}
 

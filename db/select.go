@@ -32,24 +32,25 @@ const (
 	CrossJoin   = "cross join"
 	NaturalJoin = "natural join"
 
-	SQLWildcard  = "*"
-	SQLSelect    = "SELECT"
-	SQLUnion     = "UNION"
-	SQLUnionAll  = "UNION ALL"
-	SQLFrom      = "FROM"
-	SQLWhere     = "WHERE"
-	SQLDistinct  = "DISTINCT"
-	SQLGroupBy   = "GROUP BY"
-	SQLOrderBy   = "ORDER BY"
-	SQLHaving    = "HAVING"
-	SQLForUpdate = "FOR UPDATE"
-	SQLAnd       = "AND"
-	SQLAs        = "AS"
-	SQLOr        = "OR"
-	SQLOn        = "ON"
-	SQLAsc       = "ASC"
-	SQLDesc      = "DESC"
-	SQLBetween   = "BETWEEN"
+	SQLWildcard      = "*"
+	SQLSelect        = "SELECT"
+	SQLUnion         = "UNION"
+	SQLUnionAll      = "UNION ALL"
+	SQLUnionDistinct = "UNION DISTINCT"
+	SQLFrom          = "FROM"
+	SQLWhere         = "WHERE"
+	SQLDistinct      = "DISTINCT"
+	SQLGroupBy       = "GROUP BY"
+	SQLOrderBy       = "ORDER BY"
+	SQLHaving        = "HAVING"
+	SQLForUpdate     = "FOR UPDATE"
+	SQLAnd           = "AND"
+	SQLAs            = "AS"
+	SQLOr            = "OR"
+	SQLOn            = "ON"
+	SQLAsc           = "ASC"
+	SQLDesc          = "DESC"
+	SQLBetween       = "BETWEEN"
 )
 
 var (
@@ -57,7 +58,7 @@ var (
 	JoinTypes = []string{InnerJoin, LeftJoin, RightJoin, FullJoin, CrossJoin, NaturalJoin}
 
 	// UnionTypes specify legal union types
-	UnionTypes = []string{SQLUnion, SQLUnionAll}
+	UnionTypes = []string{SQLUnion, SQLUnionAll, SQLUnionDistinct}
 
 	buildSelectHandlers = map[string]func(*SelectConfig) (Select, error){}
 
@@ -101,6 +102,8 @@ type Select interface {
 	FromAs(name string, alias string, cols interface{}) Select
 	FromSchema(name string, cols interface{}, schema string) Select
 	FromAsSchema(name string, alias string, cols interface{}, schema string) Select
+	Columns(cols interface{}, correlationName string) Select
+	Union(sql interface{}, typ string) Select
 	Where(cond string, value interface{}) Select
 	OrWhere(cond string, value interface{}) Select
 	Limit(count int, offset int) Select
@@ -328,9 +331,9 @@ func (s *DefaultSelect) Assemble() string {
 	sql := SQLSelect
 	sql = s.renderDistinct(sql)
 	sql = s.renderColumns(sql)
-	//sql = s.renderUnion(sql)
 	sql = s.renderFrom(sql)
 	sql = s.renderWhere(sql)
+	sql = s.renderUnion(sql)
 	//sql = s.renderGroup(sql)
 	//sql = s.renderHaving(sql)
 	//sql = s.renderOrder(sql)
@@ -665,6 +668,17 @@ func (s *DefaultSelect) renderFrom(sql string) string {
 	// Add the list of all joins
 	if len(from) > 0 {
 		sql = sql + " " + SQLFrom + " " + strings.Join(from, "\n")
+	}
+
+	return sql
+}
+
+// Render UNION clause
+func (s *DefaultSelect) renderUnion(sql string) string {
+	if len(s.Parts.Union) > 0 && len(s.Parts.Union) > 0 {
+		for _, union := range s.Parts.Union {
+			sql = sql + " " + union.Type + " " + union.Target
+		}
 	}
 
 	return sql

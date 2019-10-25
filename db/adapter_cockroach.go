@@ -122,9 +122,9 @@ func (a *Cockroach) Setup() {
 		"current_timestamp",
 		"greatest",
 		"least",
-		"IF",
-		"IFNULL",
-		"NULLIF",
+		"if",
+		"ifnull",
+		"nullif",
 	}
 
 	a.Params = map[string]interface{}{

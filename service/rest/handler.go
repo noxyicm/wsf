@@ -118,14 +118,14 @@ func (h *Handler) handleError(w http.ResponseWriter, r *http.Request, err error,
 		if config.AppEnv == "production" {
 			data.Message = err.Error()
 		} else {
-			data.Message = fmt.Sprintf("%+s", err.(*errors.HTTPError))
+			data.Message = fmt.Sprintf("%+v", err.(*errors.HTTPError))
 		}
 
 	case *errors.Exception:
 		if config.AppEnv == "production" {
 			data.Message = err.Error()
 		} else {
-			data.Message = fmt.Sprintf("%+s", err.(*errors.Exception).Original)
+			data.Message = fmt.Sprintf("%+v", err.(*errors.Exception).Original)
 		}
 
 	default:
@@ -163,7 +163,7 @@ func (h *Handler) handleResponse(req request.Interface, rsp response.Interface, 
 			if config.AppEnv == "production" {
 				data.Message = err.Error()
 			} else {
-				data.Message = fmt.Sprintf("%+s", err.(*errors.HTTPError))
+				data.Message = fmt.Sprintf("%+v", err.(*errors.HTTPError))
 			}
 
 		case *errors.Exception:
@@ -171,7 +171,7 @@ func (h *Handler) handleResponse(req request.Interface, rsp response.Interface, 
 			if config.AppEnv == "production" {
 				data.Message = err.Error()
 			} else {
-				data.Message = fmt.Sprintf("%+s", err.(*errors.Exception).Original)
+				data.Message = fmt.Sprintf("%+v", err.(*errors.Exception).Original)
 			}
 
 		default:

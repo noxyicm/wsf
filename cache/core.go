@@ -9,6 +9,7 @@ import (
 	"wsf/config"
 	"wsf/errors"
 	"wsf/log"
+	"wsf/registry"
 	"wsf/utils"
 )
 
@@ -27,6 +28,7 @@ var (
 
 // Interface represents a core cache
 type Interface interface {
+	Init(options *Config) (bool, error)
 	Enabled() bool
 	Load(id string, testCacheValidity bool) ([]byte, bool)
 	Read(id string, object *interface{}, testCacheValidity bool) bool
@@ -62,11 +64,11 @@ func (c *Core) Init(options *Config) (bool, error) {
 	}
 	c.Backend = adp
 
-	lg, err := log.NewLog(options.Logger)
-	if err != nil {
-		return false, err
+	lg := registry.GetResource("syslog")
+	if lg == nil {
+		return false, errors.New("Log resource is not configured")
 	}
-	c.Logger = lg
+	c.Logger = lg.(*log.Log)
 
 	return true, nil
 }
@@ -308,18 +310,6 @@ func NewCore(cacheType string, options config.Config) (*Core, error) {
 	cc := &Core{
 		Options: cfg,
 	}
-
-	adp, err := backend.NewBackendCache(cfg.Backend.GetString("type"), cfg.Backend)
-	if err != nil {
-		return nil, err
-	}
-	cc.Backend = adp
-
-	lg, err := log.NewLog(cfg.Logger)
-	if err != nil {
-		return nil, err
-	}
-	cc.Logger = lg
 
 	return cc, nil
 }

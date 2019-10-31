@@ -109,6 +109,17 @@ func (m *Manager) Init(options *ManagerConfig) (bool, error) {
 	m.Started = true
 	m.mu.Unlock()
 
+	ccfg := &cache.Config{}
+	ccfg.Defaults()
+	ccfg.Populate(options.Storage)
+	if ok, err := m.Storage.Init(ccfg); !ok {
+		m.mu.Lock()
+		m.Started = false
+		m.mu.Unlock()
+
+		return ok, err
+	}
+
 	return true, nil
 }
 

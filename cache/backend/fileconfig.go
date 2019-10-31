@@ -10,6 +10,7 @@ type FileConfig struct {
 	Dir        string
 	Suffix     string
 	TagsHolder string
+	GC         int64
 }
 
 // Populate populates Config values using given Config source
@@ -24,6 +25,7 @@ func (c *FileConfig) Populate(cfg config.Config) error {
 // Defaults sets configuration default values
 func (c *FileConfig) Defaults() error {
 	c.Type = "file"
+	c.GC = 3600
 	return nil
 }
 

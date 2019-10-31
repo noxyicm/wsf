@@ -93,7 +93,7 @@ func (v *Default) PrepareTemplates() error {
 	return nil
 }
 
-// ReadTemplates as
+// ReadTemplates loads and parses template into memory
 func (v *Default) ReadTemplates(path string, info os.FileInfo, err error) error {
 	if err != nil {
 		return errors.Errorf("[View] Error scanning source: %s", err)

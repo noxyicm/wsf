@@ -80,7 +80,7 @@ func (b *Backend) Remove(id string) error {
 	return nil
 }
 
-// Clean stored data by tags
+// Clear stored data by tags
 func (b *Backend) Clear(mode int64, tags []string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()

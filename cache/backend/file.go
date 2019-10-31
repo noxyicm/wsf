@@ -24,6 +24,7 @@ func init() {
 type File struct {
 	Backend
 	Options *FileConfig
+	GC      *FileGC
 	mu      sync.Mutex
 	mul     sync.Mutex
 }
@@ -246,6 +247,11 @@ func NewFileBackendCache(options config.Config) (bi Interface, err error) {
 		}
 	}
 
+	if b.GC, err = NewFileGC(cfg); err != nil {
+		return nil, errors.Wrap(err, "Failed to create file backend cache gc object")
+	}
+
+	b.GC.Start()
 	return b, nil
 }
 

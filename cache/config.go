@@ -15,7 +15,6 @@ type Config struct {
 	CacheIDPrefix           string
 	Backend                 config.Config
 	Logger                  config.Config
-	//Frontend         map[string]*frontend.Config
 }
 
 // Populate populates Config values using given Config source

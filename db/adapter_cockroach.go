@@ -481,8 +481,16 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 	return desc, nil
 }
 
-// Limit is
+// Limit ands a limit clause to statement
 func (a *Cockroach) Limit(sql string, count int, offset int) string {
+	if count > 0 {
+		sql = sql + " LIMIT " + strconv.Itoa(count)
+
+		if offset > 0 {
+			sql = sql + " OFFSET " + strconv.Itoa(offset)
+		}
+	}
+
 	return sql
 }
 

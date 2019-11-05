@@ -251,17 +251,12 @@ func (a *MySQL) DescribeTable(table string, schema string) (map[string]*TableCol
 
 // Limit is
 func (a *MySQL) Limit(sql string, count int, offset int) string {
-	if count <= 0 {
-		return sql
-	}
+	if count > 0 {
+		sql = sql + " LIMIT " + strconv.Itoa(count)
 
-	if offset < 0 {
-		return sql
-	}
-
-	sql = sql + " LIMIT " + strconv.Itoa(count)
-	if offset > 0 {
-		sql = sql + " OFFSET " + strconv.Itoa(offset)
+		if offset > 0 {
+			sql = sql + " OFFSET " + strconv.Itoa(offset)
+		}
 	}
 
 	return sql

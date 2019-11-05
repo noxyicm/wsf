@@ -150,7 +150,7 @@ func (c *Core) Test(id string) bool {
 		return false
 	}
 
-	c.Logger.Debugf("[WSF Cache]: Load item '%s'", nil, id)
+	c.Logger.Debugf("[WSF Cache]: Test item '%s'", nil, id)
 	return c.Backend.Test(id)
 }
 

@@ -110,6 +110,7 @@ type Select interface {
 	Order(order string) Select
 	Binds() []interface{}
 	Err() error
+	Clear() Select
 	Assemble() string
 	ToString() string
 }
@@ -160,8 +161,8 @@ type selectParts struct {
 	Group       []interface{}
 	Having      []interface{}
 	Order       []interface{}
-	LimitCount  interface{}
-	LimitOffset interface{}
+	LimitCount  int
+	LimitOffset int
 	ForUpdate   bool
 }
 
@@ -326,6 +327,24 @@ func (s *DefaultSelect) ToString() string {
 	return s.Assemble()
 }
 
+// Clear select struct
+func (s *DefaultSelect) Clear() Select {
+	s.Bind = make(map[string]interface{})
+	s.Parts.Dinstinct = false
+	s.Parts.Columns = []*selectColumn{}
+	s.Parts.Union = []*selectUnion{}
+	s.Parts.From = map[string]*selectFrom{}
+	s.Parts.Where = []string{}
+	s.Parts.Group = []interface{}{}
+	s.Parts.Having = []interface{}{}
+	s.Parts.Order = []interface{}{}
+	s.Parts.LimitCount = 0
+	s.Parts.LimitOffset = 0
+	s.Parts.ForUpdate = false
+	s.Errors = make([]error, 0)
+	return s
+}
+
 // Assemble converts this object to an SQL SELECT string
 func (s *DefaultSelect) Assemble() string {
 	sql := SQLSelect
@@ -338,7 +357,6 @@ func (s *DefaultSelect) Assemble() string {
 	//sql = s.renderHaving(sql)
 	//sql = s.renderOrder(sql)
 	sql = s.renderLimit(sql)
-	//sql = s.renderLimitOffset(sql)
 	//sql = s.renderForupdate(sql)
 
 	return sql
@@ -698,13 +716,12 @@ func (s *DefaultSelect) renderLimit(sql string) string {
 	count := 0
 	offset := 0
 
-	if s.Parts.LimitOffset != nil && s.Parts.LimitOffset.(int) > 0 {
-		offset = s.Parts.LimitOffset.(int)
-		count = int(^uint(0) >> 1)
+	if s.Parts.LimitOffset > 0 {
+		offset = s.Parts.LimitOffset
 	}
 
-	if s.Parts.LimitCount != nil && s.Parts.LimitCount.(int) > 0 {
-		count = s.Parts.LimitCount.(int)
+	if s.Parts.LimitCount > 0 {
+		count = s.Parts.LimitCount
 	}
 
 	if count > 0 {
@@ -754,8 +771,8 @@ func NewDefaultSelect(options *SelectConfig) (Select, error) {
 			Group:       []interface{}{},
 			Having:      []interface{}{},
 			Order:       []interface{}{},
-			LimitCount:  nil,
-			LimitOffset: nil,
+			LimitCount:  0,
+			LimitOffset: 0,
 			ForUpdate:   false,
 		},
 		Errors: make([]error, 0),
@@ -779,8 +796,8 @@ func NewSelectEmpty() (Select, error) {
 			Group:       []interface{}{},
 			Having:      []interface{}{},
 			Order:       []interface{}{},
-			LimitCount:  nil,
-			LimitOffset: nil,
+			LimitCount:  0,
+			LimitOffset: 0,
 			ForUpdate:   false,
 		},
 		Errors: make([]error, 0),

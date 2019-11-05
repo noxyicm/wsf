@@ -424,6 +424,61 @@ func (a *DefaultAdapter) Quote(value interface{}) string {
 
 		return strings.Join(sl, ", ")
 
+	case []int:
+		v := value.([]int)
+		sl := make([]string, len(v))
+		i := 0
+		for _, val := range v {
+			sl[i] = a.Quote(val)
+			i++
+		}
+
+		return strings.Join(sl, ", ")
+
+	case []int64:
+		v := value.([]int64)
+		sl := make([]string, len(v))
+		i := 0
+		for _, val := range v {
+			sl[i] = a.Quote(val)
+			i++
+		}
+
+		return strings.Join(sl, ", ")
+
+	case []int32:
+		v := value.([]int32)
+		sl := make([]string, len(v))
+		i := 0
+		for _, val := range v {
+			sl[i] = a.Quote(val)
+			i++
+		}
+
+		return strings.Join(sl, ", ")
+
+	case []float32:
+		v := value.([]float32)
+		sl := make([]string, len(v))
+		i := 0
+		for _, val := range v {
+			sl[i] = a.Quote(val)
+			i++
+		}
+
+		return strings.Join(sl, ", ")
+
+	case []float64:
+		v := value.([]float64)
+		sl := make([]string, len(v))
+		i := 0
+		for _, val := range v {
+			sl[i] = a.Quote(val)
+			i++
+		}
+
+		return strings.Join(sl, ", ")
+
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 		return strconv.Itoa(value.(int))
 

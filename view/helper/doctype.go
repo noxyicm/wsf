@@ -3,7 +3,7 @@ package helper
 import (
 	"strings"
 
-	"github.com/pkg/errors"
+	"wsf/errors"
 )
 
 // DocType constants

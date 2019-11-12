@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"wsf/controller/context"
+	"wsf/context"
 	"wsf/controller/dispatcher"
 	"wsf/controller/plugin"
 	"wsf/controller/request"

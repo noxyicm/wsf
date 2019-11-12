@@ -1,6 +1,6 @@
 package tasker
 
-import "context"
+import "wsf/context"
 
 // Handler represents a worker handler interface
 type Handler interface {

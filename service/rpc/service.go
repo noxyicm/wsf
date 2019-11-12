@@ -6,10 +6,10 @@ import (
 	"sync"
 	"syscall"
 	"wsf/config"
+	"wsf/context"
+	"wsf/errors"
 	"wsf/service"
 	"wsf/transporter/codec"
-
-	"github.com/pkg/errors"
 )
 
 // ID of service
@@ -58,7 +58,7 @@ func (s *Service) Priority() int {
 }
 
 // Serve serves the service
-func (s *Service) Serve() error {
+func (s *Service) Serve(ctx context.Context) error {
 	if s.rpc == nil {
 		return errors.New("RPC service is not configured")
 	}

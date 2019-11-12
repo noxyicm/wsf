@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"context"
 	"wsf/config"
+	"wsf/context"
 	"wsf/errors"
 )
 

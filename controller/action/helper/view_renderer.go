@@ -2,6 +2,7 @@ package helper
 
 import (
 	"regexp"
+	"wsf/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
@@ -71,7 +72,11 @@ func (vr *ViewRenderer) PreDispatch() error {
 // PostDispatch do dispatch aftermath
 func (vr *ViewRenderer) PostDispatch() error {
 	if vr.shouldRender() {
-		return vr.Render(vr.Request().ActionName(), "default", false)
+		if enabled, _ := vr.actionController.Context().Value(context.LayoutEnabledKey).(bool); enabled {
+			return vr.Render(vr.Request().ActionName(), vr.actionController.Context().Value(context.LayoutKey).(string), false)
+		}
+
+		return vr.Render(vr.Request().ActionName(), vr.View.GetOptions().LayoutContentKey, false)
 	}
 
 	return nil
@@ -210,12 +215,12 @@ func (vr *ViewRenderer) RenderScript(script string, name string) error {
 	}
 
 	vr.Controller().Context().SetValue("renderedscript", script)
-	rendered, err := vr.View.Render(vr.Controller().Context(), script)
+	rendered, err := vr.View.Render(vr.Controller().Context(), script, name)
 	if err != nil {
 		return err
 	}
 
-	vr.Response().AppendBody(rendered, name)
+	vr.Response().AppendBody(rendered, vr.GetResponseSegment())
 	vr.SetNoRender(true)
 	return nil
 }

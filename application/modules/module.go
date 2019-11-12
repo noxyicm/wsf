@@ -80,7 +80,7 @@ func (m *Module) RegisterScriptPath(controllerName string) error {
 		return err
 	}
 
-	v.AddTeplatePath(filepath.FromSlash(controllerPath.(string)))
+	v.AddTemplatePath(filepath.FromSlash(controllerPath.(string)))
 
 	return nil
 }

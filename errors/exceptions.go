@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"fmt"
 	"wsf/controller/request"
 )
 
@@ -65,6 +66,11 @@ type Exception struct {
 // Error returns exception message
 func (e *Exception) Error() string {
 	return e.Original.Error()
+}
+
+// WithTrace returns exception message with stack trace
+func (e *Exception) WithTrace() string {
+	return fmt.Sprintf("%+v", e.Original)
 }
 
 // Code returns exception code

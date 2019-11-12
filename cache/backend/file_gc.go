@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"wsf/config"
 	"wsf/errors"
 	"wsf/log"
 	"wsf/registry"
@@ -29,8 +30,11 @@ type FileGC struct {
 }
 
 // Init the file gc
-func (g *FileGC) Init(options *FileConfig) (bool, error) {
-	g.Options = options
+func (g *FileGC) Init(options config.Config) (bool, error) {
+	cfg := &FileConfig{}
+	cfg.Defaults()
+	cfg.Populate(options)
+	g.Options = cfg
 
 	logResource := registry.GetResource("syslog")
 	if logResource == nil {
@@ -38,7 +42,7 @@ func (g *FileGC) Init(options *FileConfig) (bool, error) {
 	}
 
 	g.Logger = logResource.(*log.Log)
-
+	g.Start()
 	return true, nil
 }
 
@@ -51,7 +55,7 @@ func (g *FileGC) Start() {
 // Check filepath, read file and remove it if needed
 func (g *FileGC) Check(path string, info os.FileInfo, err error) error {
 	if err != nil {
-		return errors.Errorf("[View] Error scanning source: %s", err)
+		return errors.Errorf("scanning source '%s' failed: %v", path, err)
 	}
 
 	if info.IsDir() || strings.HasPrefix(info.Name(), ".") {
@@ -60,7 +64,7 @@ func (g *FileGC) Check(path string, info os.FileInfo, err error) error {
 
 	fd, err := os.Open(path)
 	if err != nil {
-		return errors.Wrap(err, "[File] Check failed")
+		return errors.Wrap(err, "check failed")
 	}
 	defer fd.Close()
 
@@ -70,18 +74,18 @@ func (g *FileGC) Check(path string, info os.FileInfo, err error) error {
 
 	fi, err := os.Stat(path)
 	if err != nil {
-		return errors.Wrap(err, "[File] Check failed")
+		return errors.Wrap(err, "check failed")
 	}
 
 	d := make([]byte, fi.Size())
 	n, err := fd.Read(d)
 	if err != nil {
-		return errors.Wrap(err, "[File] Check failed")
+		return errors.Wrap(err, "check failed")
 	}
 
 	if n == 0 {
 		if err := os.Remove(fd.Name()); err != nil {
-			return errors.Wrapf(err, "[File] Unable to remove file '%s'", fd.Name())
+			return errors.Wrapf(err, "unable to remove file '%s'", fd.Name())
 		}
 
 		g.Removed = append(g.Removed, fd.Name())
@@ -90,12 +94,12 @@ func (g *FileGC) Check(path string, info os.FileInfo, err error) error {
 
 	fdt := FileData{}
 	if err := json.Unmarshal(d, &fdt); err != nil {
-		return errors.Wrap(err, "[File] Unable to deserialize data")
+		return errors.Wrap(err, "unable to deserialize data")
 	}
 
 	if fdt.Expires != 0 && time.Now().After(time.Unix(fdt.Expires, 0)) {
 		if err := os.Remove(fd.Name()); err != nil {
-			return errors.Wrapf(err, "[File] Unable to remove file '%s'", fd.Name())
+			return errors.Wrapf(err, "unable to remove file '%s'", fd.Name())
 		}
 
 		g.Removed = append(g.Removed, fd.Name())
@@ -115,13 +119,15 @@ Mainloop:
 			g.mu.Lock()
 			g.Removed = []string{}
 
-			err := filepath.Walk(g.Options.Dir, g.Check)
-			if err != nil {
-				g.Logger.Warningf("[File] Unable to check file: %v", nil, err.Error())
-			}
+			if _, err := os.Stat(g.Options.Dir); !os.IsNotExist(err) {
+				err := filepath.Walk(g.Options.Dir, g.Check)
+				if err != nil {
+					g.Logger.Warningf("[File] Unable to process file: %v", nil, err.Error())
+				}
 
-			if err := g.clearRemoved(); err != nil {
-				g.Logger.Warning(err.Error(), nil)
+				if err := g.clearRemoved(); err != nil {
+					g.Logger.Warning(err.Error(), nil)
+				}
 			}
 
 			g.mu.Unlock()

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"sync"
 	"wsf/config"
+	"wsf/context"
 	"wsf/errors"
 	"wsf/registry"
 	"wsf/service"
@@ -32,7 +33,7 @@ type Server interface {
 	Init(cfg config.Config) error
 	Has(service string) bool
 	Get(service string) (svc interface{}, status int)
-	Serve() error
+	Serve(ctx context.Context) error
 	Stop()
 	Listen(l func(event int, ctx interface{}))
 }
@@ -154,7 +155,7 @@ func (s *server) Get(target string) (svc interface{}, status int) {
 }
 
 // Serve all configured services
-func (s *server) Serve() error {
+func (s *server) Serve(ctx context.Context) error {
 	var (
 		numServing = 0
 		done       = make(chan interface{}, len(s.services))
@@ -172,7 +173,7 @@ func (s *server) Serve() error {
 			b.setStatus(StatusServing)
 			defer b.setStatus(StatusStopped)
 
-			if err := b.service.Serve(); err != nil {
+			if err := b.service.Serve(ctx); err != nil {
 				done <- err
 			} else {
 				done <- nil

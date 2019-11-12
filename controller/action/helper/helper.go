@@ -1,7 +1,7 @@
 package helper
 
 import (
-	"wsf/controller/context"
+	"wsf/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"

@@ -1,7 +1,7 @@
 package db
 
 import (
-	"context"
+	goctx "context"
 	"database/sql"
 	"fmt"
 	"regexp"
@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 	"wsf/config"
+	"wsf/context"
 	"wsf/errors"
 	"wsf/utils"
 )
@@ -32,10 +33,10 @@ var (
 // Adapter represents database adapter interface
 type Adapter interface {
 	Setup()
-	Init(ctx context.Context) error
+	Init() error
 	Context() context.Context
 	SetContext(ctx context.Context) error
-	Connection() (Connection, error)
+	Connection(ctx context.Context) (Connection, error)
 	Select() (Select, error)
 	Query(ctx context.Context, sql Select) (Rowset, error)
 	QueryRow(ctx context.Context, sql Select) (Row, error)
@@ -122,7 +123,7 @@ func (a *DefaultAdapter) SetContext(ctx context.Context) error {
 }
 
 // Connection returns a connection to database
-func (a *DefaultAdapter) Connection() (conn Connection, err error) {
+func (a *DefaultAdapter) Connection(ctx context.Context) (conn Connection, err error) {
 	if a.Db == nil {
 		return nil, errors.New("Database is not initialized")
 	}
@@ -132,7 +133,7 @@ func (a *DefaultAdapter) Connection() (conn Connection, err error) {
 		return nil, err
 	}
 
-	conn.SetContext(a.Ctx)
+	conn.SetContext(ctx)
 	return conn, nil
 }
 
@@ -142,7 +143,7 @@ func (a *DefaultAdapter) Query(ctx context.Context, dbs Select) (Rowset, error) 
 		return nil, errors.New("Database is not initialized")
 	}
 
-	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	if err := dbs.Err(); err != nil {
@@ -155,7 +156,7 @@ func (a *DefaultAdapter) Query(ctx context.Context, dbs Select) (Rowset, error) 
 	}
 	defer rows.Close()
 
-	rstConfig, ok := RowsetConfigFromContext(ctx)
+	rstConfig, ok := ctx.Value(context.RowsetConfigKey).(*RowsetConfig)
 	if !ok {
 		rstConfig = Options().Rowset
 	}
@@ -178,7 +179,7 @@ func (a *DefaultAdapter) QueryRow(ctx context.Context, dbs Select) (Row, error) 
 		return nil, errors.New("Database is not initialized")
 	}
 
-	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	if err := dbs.Err(); err != nil {
@@ -208,7 +209,7 @@ func (a *DefaultAdapter) QueryRow(ctx context.Context, dbs Select) (Row, error) 
 			return nil, err
 		}
 
-		rwConfig, ok := RowConfigFromContext(ctx)
+		rwConfig, ok := ctx.Value(context.RowConfigKey).(*RowConfig)
 		if !ok {
 			rwConfig = Options().Row
 		}
@@ -261,7 +262,7 @@ func (a *DefaultAdapter) Insert(ctx context.Context, table string, data map[stri
 
 	sql := "INSERT INTO " + a.QuoteIdentifier(table, true) + " (" + strings.Join(cols, ", ") + ") VALUES (" + strings.Join(vals, ", ") + ")"
 
-	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
 	stmt, err := a.Db.PrepareContext(pctx, sql)
@@ -269,7 +270,7 @@ func (a *DefaultAdapter) Insert(ctx context.Context, table string, data map[stri
 		return 0, errors.Wrap(err, "Database insert Error")
 	}
 
-	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	result, err := stmt.ExecContext(qctx, binds...)
@@ -321,7 +322,7 @@ func (a *DefaultAdapter) Update(ctx context.Context, table string, data map[stri
 		sql = sql + " WHERE " + where
 	}
 
-	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
 	stmt, err := a.Db.PrepareContext(pctx, sql)
@@ -330,7 +331,7 @@ func (a *DefaultAdapter) Update(ctx context.Context, table string, data map[stri
 	}
 	defer stmt.Close()
 
-	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	rows, err := stmt.QueryContext(qctx, binds...)
@@ -358,7 +359,7 @@ func (a *DefaultAdapter) Delete(ctx context.Context, table string, cond map[stri
 		sql = sql + " WHERE " + where
 	}
 
-	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
 	stmt, err := a.Db.PrepareContext(pctx, sql)
@@ -367,7 +368,7 @@ func (a *DefaultAdapter) Delete(ctx context.Context, table string, cond map[stri
 	}
 	defer stmt.Close()
 
-	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	rows, err := stmt.QueryContext(qctx)

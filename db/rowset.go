@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"sync"
 	"wsf/errors"
@@ -14,8 +13,6 @@ const (
 
 var (
 	buildRowsetHandlers = map[string]func(*RowsetConfig) (Rowset, error){}
-
-	rowsetCfgContextKey contextKey
 )
 
 func init() {
@@ -221,15 +218,4 @@ func NewEmptyRowset(rowsetType string) Rowset {
 // RegisterRowset registers a handler for database rowset creation
 func RegisterRowset(rowsetType string, handler func(*RowsetConfig) (Rowset, error)) {
 	buildRowsetHandlers[rowsetType] = handler
-}
-
-// RowsetConfigToContext returns a new context with stored rowset config
-func RowsetConfigToContext(ctx context.Context, cfg *RowsetConfig) context.Context {
-	return context.WithValue(ctx, rowsetCfgContextKey, cfg)
-}
-
-// RowsetConfigFromContext returns a rowset config stored in context
-func RowsetConfigFromContext(ctx context.Context) (*RowsetConfig, bool) {
-	v, ok := ctx.Value(rowsetCfgContextKey).(*RowsetConfig)
-	return v, ok
 }

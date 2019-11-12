@@ -1,8 +1,8 @@
 package layout
 
 import (
+	"wsf/context"
 	"wsf/controller/action/helper"
-	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/session"
@@ -71,12 +71,12 @@ func (h *Helper) Session() session.Interface {
 
 // SetLayout sets a layout for render
 func (h *Helper) SetLayout(name string) {
-	h.Controller().Context().SetValue(context.Layout, name)
+	h.Controller().Context().SetValue(context.LayoutKey, name)
 }
 
 // Disable layout render
 func (h *Helper) Disable() {
-	h.Controller().Context().SetValue(context.LayoutEnabled, false)
+	h.Controller().Context().SetValue(context.LayoutEnabledKey, false)
 }
 
 // NewLayoutHelper creates a new layout action helper

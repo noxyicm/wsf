@@ -1,7 +1,6 @@
 package session
 
 import (
-	"context"
 	"wsf/config"
 	"wsf/errors"
 )
@@ -12,13 +11,8 @@ const (
 	TYPESessionDefault = "default"
 )
 
-type contextKey int
-
 var (
 	buildSessionHandlers = map[string]func(*Config) (Interface, error){}
-
-	sessContextKey   contextKey
-	sessIDContextKey contextKey
 )
 
 func init() {
@@ -148,23 +142,4 @@ func NewDefaultSession(options *Config) (Interface, error) {
 		Options: options,
 		Data:    make(map[string]interface{}),
 	}, nil
-}
-
-// ToContext returns a new context with stored session
-func ToContext(ctx context.Context, sid string, sess Interface) context.Context {
-	ctx = context.WithValue(ctx, sessIDContextKey, sid)
-	ctx = context.WithValue(ctx, sessContextKey, sess)
-	return ctx
-}
-
-// FromContext returns a session stored in context
-func FromContext(ctx context.Context) (Interface, bool) {
-	v, ok := ctx.Value(sessContextKey).(Interface)
-	return v, ok
-}
-
-// SIDFromContext returns a session id stored in context
-func SIDFromContext(ctx context.Context) (string, bool) {
-	v, ok := ctx.Value(sessIDContextKey).(string)
-	return v, ok
 }

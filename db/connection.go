@@ -1,10 +1,11 @@
 package db
 
 import (
-	"context"
+	goctx "context"
 	"database/sql"
 	"time"
 	"wsf/config"
+	"wsf/context"
 	"wsf/errors"
 )
 
@@ -25,8 +26,8 @@ func init() {
 type Connection interface {
 	Context() context.Context
 	SetContext(ctx context.Context) error
-	Query(sql string, bind ...interface{}) (map[int]map[string]interface{}, error)
-	BeginTransaction() (Transaction, error)
+	Query(ctx context.Context, sql string, bind ...interface{}) (map[int]map[string]interface{}, error)
+	BeginTransaction(ctx context.Context) (Transaction, error)
 	Close()
 }
 
@@ -78,17 +79,17 @@ func (c *DefaultConnection) SetContext(ctx context.Context) error {
 }
 
 // Query runs the query
-func (c *DefaultConnection) Query(sql string, bind ...interface{}) (map[int]map[string]interface{}, error) {
-	stmt, err := c.Conn.PrepareContext(c.Ctx, sql)
+func (c *DefaultConnection) Query(ctx context.Context, sql string, bind ...interface{}) (map[int]map[string]interface{}, error) {
+	stmt, err := c.Conn.PrepareContext(ctx, sql)
 	if err != nil {
 		return nil, errors.Wrap(err, "Database connection Error")
 	}
 	defer stmt.Close()
 
-	ctx, cancel := context.WithTimeout(c.Ctx, c.QueryTimeout*time.Second)
+	sctx, cancel := goctx.WithTimeout(ctx, c.QueryTimeout*time.Second)
 	defer cancel()
 
-	rows, err := stmt.QueryContext(ctx, bind)
+	rows, err := stmt.QueryContext(sctx, bind)
 	if err != nil {
 		return nil, errors.Wrap(err, "Database connection Error")
 	}
@@ -106,12 +107,12 @@ func (c *DefaultConnection) Query(sql string, bind ...interface{}) (map[int]map[
 }
 
 // BeginTransaction creates a new transaction
-func (c *DefaultConnection) BeginTransaction() (Transaction, error) {
+func (c *DefaultConnection) BeginTransaction(ctx context.Context) (Transaction, error) {
 	if c.Conn == nil {
 		return nil, errors.New("Database connection is not initialized")
 	}
 
-	tx, err := c.Conn.BeginTx(c.Ctx, &sql.TxOptions{Isolation: c.Options.Transaction.IsolationLevel, ReadOnly: c.Options.Transaction.ReadOnly})
+	tx, err := c.Conn.BeginTx(ctx, &sql.TxOptions{Isolation: c.Options.Transaction.IsolationLevel, ReadOnly: c.Options.Transaction.ReadOnly})
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +122,7 @@ func (c *DefaultConnection) BeginTransaction() (Transaction, error) {
 		return nil, err
 	}
 
-	trns.SetContext(c.Ctx)
+	trns.SetContext(ctx)
 	return trns, nil
 }
 
@@ -170,7 +171,7 @@ func (c *DefaultConnection) processRows(rows *sql.Rows) (map[int]map[string]inte
 func NewDefaultConnection(options *ConnectionConfig) (Connection, error) {
 	return &DefaultConnection{
 		Options:      options,
-		Ctx:          context.Background(),
+		Ctx:          nil,
 		PingTimeout:  time.Duration(options.PingTimeout) * time.Second,
 		QueryTimeout: time.Duration(options.QueryTimeout) * time.Second,
 	}, nil

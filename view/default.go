@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"wsf/config"
-	"wsf/controller/context"
+	"wsf/context"
 	"wsf/errors"
 	"wsf/log"
 	"wsf/registry"
@@ -72,13 +72,71 @@ func (v *Default) Setup() (bool, error) {
 		return false, err
 	}
 
+	err = v.PrepareLayouts()
+	if err != nil {
+		return false, err
+	}
+
 	return true, nil
+}
+
+// PrepareLayouts parses a layout templates files
+func (v *Default) PrepareLayouts() error {
+	for _, path := range v.paths["layouts"] {
+		err := utils.WalkDirectoryDeep(config.AppPath+path, config.AppPath+path, v.ReadLayouts)
+		if err != nil {
+			switch err.(type) {
+			case *os.PathError:
+				v.Logger.Warningf("[View] Unable to read layout directory: %v", nil, err.Error())
+
+			default:
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// ReadLayouts loads and parses layout template into memory, extending
+// all existing templates
+func (v *Default) ReadLayouts(path string, info os.FileInfo, err error) error {
+	if err != nil {
+		return errors.Errorf("Scanning source '%s' failed: %v", path, err)
+	}
+
+	if info.IsDir() || strings.HasPrefix(info.Name(), ".") {
+		return nil
+	}
+
+	tplFile, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer tplFile.Close()
+
+	tplRaw := make([]byte, info.Size())
+	_, err = tplFile.Read(tplRaw)
+	if err != nil {
+		return err
+	}
+
+	_, filename := filepath.Split(path)
+	tplName := strings.Replace(filename, filepath.Ext(filename), "", -1)
+	for _, tpl := range v.templates {
+		_, err = tpl.New(tplName).Parse(string(tplRaw))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // PrepareTemplates parses a templates files
 func (v *Default) PrepareTemplates() error {
-	for _, tpl := range v.paths["template"] {
-		err := utils.WalkDirectoryDeep(config.AppPath+tpl, config.AppPath+tpl, v.ReadTemplates)
+	for _, path := range v.paths["templates"] {
+		err := utils.WalkDirectoryDeep(config.AppPath+path, config.AppPath+path, v.ReadTemplates)
 		if err != nil {
 			switch err.(type) {
 			case *os.PathError:
@@ -96,7 +154,7 @@ func (v *Default) PrepareTemplates() error {
 // ReadTemplates loads and parses template into memory
 func (v *Default) ReadTemplates(path string, info os.FileInfo, err error) error {
 	if err != nil {
-		return errors.Errorf("[View] Error scanning source: %s", err)
+		return errors.Errorf("Scanning source '%s' failed: %v", path, err)
 	}
 
 	if info.IsDir() || strings.HasPrefix(info.Name(), ".") {
@@ -109,47 +167,50 @@ func (v *Default) ReadTemplates(path string, info os.FileInfo, err error) error 
 	}
 	defer tplFile.Close()
 
-	tplData := make([]byte, info.Size())
-	_, err = tplFile.Read(tplData)
+	tplRaw := make([]byte, info.Size())
+	_, err = tplFile.Read(tplRaw)
 	if err != nil {
 		return err
 	}
 
-	tpl, err := template.New(path).Parse(string(tplData))
+	relPath, err := filepath.Rel(config.AppPath, path)
 	if err != nil {
 		return err
 	}
 
-	p, err := filepath.Rel(config.AppPath, path)
+	v.templates[relPath], err = template.New(v.Options.LayoutContentKey).Parse(string(tplRaw))
 	if err != nil {
 		return err
 	}
 
-	v.templates[p] = tpl
-	v.template.New(p).Parse(string(tplData))
 	return nil
 }
 
-// Render returns a render result of provided script
-func (v *Default) Render(ctx context.Context, script string) ([]byte, error) {
-	/* 	wr := &bytes.Buffer{}
-	   	if err := v.template.ExecuteTemplate(wr, script, ctx.Data()); err == nil {
-	   		b := make([]byte, wr.Len())
-	   		_, err = wr.Read(b)
-	   		if err != nil {
-	   			return nil, err
-	   		}
+// GetOptions returns view options
+func (v *Default) GetOptions() *Config {
+	return v.Options
+}
 
-	   		return b, nil
-	   		//fmt.Println(string(b))
-	   		//os.Exit(2)
-	   	} else {
-	   		return nil, err
-	   	}
-	*/
+// Render returns a render result of provided script
+func (v *Default) Render(ctx context.Context, script string, tpl string) ([]byte, error) {
+	/*wr := &bytes.Buffer{}
+	if err := v.templates[script].ExecuteTemplate(wr, tpl, ctx.Data()); err == nil {
+		b := make([]byte, wr.Len())
+		_, err = wr.Read(b)
+		if err != nil {
+			return nil, err
+		}
+
+		//return b, nil
+		fmt.Println(string(b))
+		os.Exit(2)
+	} else {
+		return nil, err
+	}*/
+
 	if t, ok := v.templates[script]; ok {
 		wr := &bytes.Buffer{}
-		err := t.Execute(wr, ctx.Data())
+		err := t.ExecuteTemplate(wr, tpl, ctx.Data())
 		if err != nil {
 			return nil, err
 		}
@@ -167,9 +228,13 @@ func (v *Default) Render(ctx context.Context, script string) ([]byte, error) {
 }
 
 // GetTemplate sa
-func (v *Default) GetTemplate(name string) *template.Template {
-	return v.template.Lookup(name)
-	//return v.templates[name]
+func (v *Default) GetTemplate(path string) *template.Template {
+	//return v.template.Lookup(name)
+	if v, ok := v.templates[path]; ok {
+		return v
+	}
+
+	return nil
 }
 
 // NewDefaultView creates new default view
@@ -180,6 +245,7 @@ func NewDefaultView(options *Config) (Interface, error) {
 	v.params = make(map[string]interface{})
 	v.helpers = make(map[string]helper.Interface)
 	v.templates = make(map[string]*template.Template)
+	v.layouts = make(map[string]*TemplateData)
 	v.template = template.New("layout")
 
 	// for default view doctype view halper is mandatory

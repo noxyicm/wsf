@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"wsf/application/modules"
+	"wsf/context"
 	"wsf/controller/action"
-	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
@@ -218,7 +218,7 @@ func (d *standart) PopulateController(ctx context.Context, controller interface{
 	actionController.SetRequest(rqs)
 	actionController.SetResponse(rsp)
 	actionController.SetContext(ctx)
-	actionController.SetSession(ctx.Value(context.Session).(session.Interface))
+	actionController.SetSession(ctx.Value(context.SessionKey).(session.Interface))
 	actionController.SetParams(invokeArgs)
 
 	value := reflect.ValueOf(actionController)

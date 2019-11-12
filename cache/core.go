@@ -58,19 +58,13 @@ func (c *Core) Priority() int {
 func (c *Core) Init(options *Config) (bool, error) {
 	c.Options = options
 
-	adp, err := backend.NewBackendCache(options.Backend.GetString("type"), options.Backend)
-	if err != nil {
-		return false, err
-	}
-	c.Backend = adp
-
 	lg := registry.GetResource("syslog")
 	if lg == nil {
 		return false, errors.New("Log resource is not configured")
 	}
 	c.Logger = lg.(*log.Log)
 
-	return true, nil
+	return c.Backend.Init(c.Options.Backend)
 }
 
 // Enabled returns true if cache is enabled
@@ -310,6 +304,12 @@ func NewCore(cacheType string, options config.Config) (*Core, error) {
 	cc := &Core{
 		Options: cfg,
 	}
+
+	adp, err := backend.NewBackendCache(cfg.Backend.GetString("type"), cfg.Backend)
+	if err != nil {
+		return nil, errors.Wrap(err, "[Core] Unable to create underliyng backend")
+	}
+	cc.Backend = adp
 
 	return cc, nil
 }

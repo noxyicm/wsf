@@ -5,6 +5,7 @@ import (
 	"path"
 	"path/filepath"
 	"wsf/config"
+	"wsf/context"
 	"wsf/service"
 	wsfhttp "wsf/service/http"
 )
@@ -42,7 +43,7 @@ func (s *Service) Priority() int {
 }
 
 // Serve the service
-func (s *Service) Serve() (err error) {
+func (s *Service) Serve(ctx context.Context) (err error) {
 	return nil
 }
 

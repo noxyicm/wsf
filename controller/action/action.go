@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"wsf/context"
 	"wsf/controller/action/helper"
-	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
@@ -177,13 +177,13 @@ func (c *Controller) Context() context.Context {
 
 // SetLayout sets a layout
 func (c *Controller) SetLayout(name string) error {
-	c.Ctx.SetValue(context.Layout, name)
+	c.Ctx.SetValue(context.LayoutKey, name)
 	return nil
 }
 
 // DisableLayout disables the layout
 func (c *Controller) DisableLayout() {
-	c.Ctx.SetValue(context.LayoutEnabled, false)
+	c.Ctx.SetValue(context.LayoutEnabledKey, false)
 }
 
 // SetParams sets parameters to pass to handlers

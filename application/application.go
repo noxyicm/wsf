@@ -6,6 +6,7 @@ import (
 	"sync"
 	"wsf/application/bootstrap"
 	"wsf/config"
+	"wsf/context"
 	"wsf/errors"
 	"wsf/log"
 	"wsf/registry"
@@ -22,7 +23,7 @@ const (
 	EventError
 
 	// VERSION represent version.
-	VERSION = "0.0.0"
+	VERSION = "0.0.0.0"
 
 	// EnvDEV is a development mode
 	EnvDEV = "development"
@@ -41,8 +42,14 @@ type Application struct {
 	logger      *log.Log
 	RootPath    string
 	bootstrap   bootstrap.Interface
+	ctx         context.Context
 	lsns        []func(event int, ctx interface{})
 	mu          sync.Mutex
+}
+
+// Context returns Application context
+func (a *Application) Context() context.Context {
+	return a.ctx
 }
 
 // Options returns config for Application
@@ -61,13 +68,18 @@ func (a *Application) SetOptions(options *Config) error {
 }
 
 // Init Initializes the application
-func (a *Application) Init() error {
+func (a *Application) Init() (err error) {
+	a.ctx, err = context.NewContext(context.Background())
+	if err != nil {
+		return errors.New("Initialization failed. Unable to create application context")
+	}
+
 	return a.bootstrap.Init()
 }
 
 // Run serves the application
 func (a *Application) Run() error {
-	return a.bootstrap.Run()
+	return a.bootstrap.Run(a.ctx)
 }
 
 // Stop shuts down the application

@@ -1,8 +1,8 @@
 package db
 
 import (
-	"context"
 	"wsf/config"
+	"wsf/context"
 	"wsf/errors"
 	"wsf/registry"
 )
@@ -45,8 +45,8 @@ func (d *Db) Context() context.Context {
 }
 
 // Connection returns a connection to database
-func (d *Db) Connection() (Connection, error) {
-	return d.adapter.Connection()
+func (d *Db) Connection(ctx context.Context) (Connection, error) {
+	return d.adapter.Connection(ctx)
 }
 
 // Select returns a new select object
@@ -130,7 +130,7 @@ func NewDB(options config.Config) (db *Db, err error) {
 		}
 	}
 
-	err = a.Init(context.Background())
+	err = a.Init()
 	if err != nil {
 		return nil, err
 	}

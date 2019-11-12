@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"sync"
+	"wsf/application/resource"
+	"wsf/application/service"
 )
 
 const (
@@ -24,6 +26,12 @@ type Default struct {
 func NewDefaultBootstrap(options *Config) (Interface, error) {
 	b := &Default{}
 	b.SetOptions(options)
+
+	b.Resources = resource.NewRegistry()
+	b.Resources.Listen(b.throw)
+
+	b.Services = service.NewServer()
+	b.Services.Listen(b.throw)
 
 	return b, nil
 }

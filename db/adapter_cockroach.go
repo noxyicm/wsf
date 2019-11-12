@@ -2,7 +2,7 @@ package db
 
 import (
 	"bytes"
-	"context"
+	goctx "context"
 	"crypto/rsa"
 	"crypto/tls"
 	"database/sql"
@@ -11,10 +11,18 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"wsf/context"
 	"wsf/errors"
 
 	// CockroachDB uses postgres package for tcp connections
-	_ "github.com/lib/pq"
+	//_ "github.com/lib/pq"
+	//_ "github.com/jackc/pgx"
+
+	// pgx needs a connections pool
+	_ "github.com/jackc/pgx/pgxpool"
+
+	// CockroachDB uses pgx package for tcp connections
+	_ "github.com/jackc/pgx/stdlib"
 )
 
 const (
@@ -134,8 +142,8 @@ func (a *Cockroach) Setup() {
 }
 
 // Init a connection to database
-func (a *Cockroach) Init(ctx context.Context) (err error) {
-	db, err := sql.Open("postgres", a.driverConfig.FormatDSN())
+func (a *Cockroach) Init() (err error) {
+	db, err := sql.Open("pgx", a.driverConfig.FormatDSN())
 	if err != nil {
 		return errors.Wrap(err, "CockroachDB Error")
 	}
@@ -145,20 +153,19 @@ func (a *Cockroach) Init(ctx context.Context) (err error) {
 	db.SetMaxOpenConns(a.Options.MaxOpenConnections)
 
 	if a.PingTimeout > 0 {
-		tctx, cancel := context.WithTimeout(ctx, a.PingTimeout*time.Second)
+		tctx, cancel := goctx.WithTimeout(goctx.Background(), a.PingTimeout*time.Second)
 		defer cancel()
 
 		if err = db.PingContext(tctx); err != nil {
 			return errors.Wrap(err, "CockroachDB Error")
 		}
 	} else {
-		if err = db.PingContext(ctx); err != nil {
+		if err = db.PingContext(goctx.Background()); err != nil {
 			return errors.Wrap(err, "CockroachDB Error")
 		}
 	}
 
 	a.Db = db
-	a.Ctx = ctx
 	return nil
 }
 
@@ -214,7 +221,7 @@ func (a *Cockroach) Insert(ctx context.Context, table string, data map[string]in
 
 	sql := "INSERT INTO " + a.QuoteIdentifier(table, true) + " (" + strings.Join(cols, ", ") + ") VALUES (" + strings.Join(vals, ", ") + ") RETURNING \"id\""
 
-	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
 	stmt, err := a.Db.PrepareContext(pctx, sql)
@@ -223,7 +230,7 @@ func (a *Cockroach) Insert(ctx context.Context, table string, data map[string]in
 	}
 	defer stmt.Close()
 
-	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	err = stmt.QueryRowContext(qctx, binds...).Scan(&a.lastInsertID)
@@ -271,7 +278,7 @@ func (a *Cockroach) Update(ctx context.Context, table string, data map[string]in
 	}
 	sql = sql + " RETURNING \"id\""
 
-	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
 	stmt, err := a.Db.PrepareContext(pctx, sql)
@@ -280,7 +287,7 @@ func (a *Cockroach) Update(ctx context.Context, table string, data map[string]in
 	}
 	defer stmt.Close()
 
-	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	rows, err := stmt.QueryContext(qctx, binds...)
@@ -309,7 +316,7 @@ func (a *Cockroach) Delete(ctx context.Context, table string, cond map[string]in
 	}
 	sql = sql + " RETURNING \"id\""
 
-	pctx, cancel := context.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
+	pctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
 	stmt, err := a.Db.PrepareContext(pctx, sql)
@@ -318,7 +325,7 @@ func (a *Cockroach) Delete(ctx context.Context, table string, cond map[string]in
 	}
 	defer stmt.Close()
 
-	qctx, cancel := context.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	rows, err := stmt.QueryContext(qctx)
@@ -353,7 +360,7 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 		sqlstr = "SELECT * FROM information_schema.columns WHERE " + a.QuoteInto("table_name = ?", table, -1)
 	}
 
-	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	ctx, cancel := goctx.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
 	stmt, err := a.Db.PrepareContext(ctx, sqlstr)
@@ -362,7 +369,7 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 	}
 	defer stmt.Close()
 
-	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	ctx, cancel = goctx.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	rows, err := stmt.QueryContext(ctx)
@@ -427,7 +434,7 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 		sqlstr = "SELECT constraint_name, table_schema, table_name, column_name FROM information_schema.key_column_usage WHERE " + a.QuoteInto("table_name = ?", table, -1)
 	}
 
-	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	ctx, cancel = goctx.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
 	stmt2, err := a.Db.PrepareContext(ctx, sqlstr)
@@ -436,7 +443,7 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 	}
 	defer stmt2.Close()
 
-	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	ctx, cancel = goctx.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	rows2, err := stmt2.QueryContext(ctx)

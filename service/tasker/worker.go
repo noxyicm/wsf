@@ -1,10 +1,10 @@
 package tasker
 
 import (
-	"context"
 	"sync"
 	"time"
 	"wsf/config"
+	"wsf/context"
 	"wsf/db"
 	"wsf/errors"
 	"wsf/log"
@@ -35,7 +35,6 @@ type Service struct {
 	Db                    *db.Db
 	Logger                *log.Log
 	ctx                   context.Context
-	stopFunc              context.CancelFunc
 	StopChan              chan bool
 	ExitChan              chan bool
 	IntervalChan          chan bool
@@ -96,17 +95,17 @@ func (s *Service) throw(event int, ctx interface{}) {
 }
 
 // Serve serves the service
-func (s *Service) Serve() error {
+func (s *Service) Serve(ctx context.Context) (err error) {
 	if s.Db == nil {
 		return errors.New("Db resource is not configured")
 	}
 
 	s.mu.Lock()
 	s.serving = true
+	s.ctx = ctx
 	s.mu.Unlock()
 
 	s.Logger.Info("[Tasker] Started", nil)
-	s.ctx, s.stopFunc = context.WithCancel(s.Db.Context())
 
 	tasksInRoutines := make([]int, 0)
 	tasksConsequetiveErrors := make(map[int]int)
@@ -297,9 +296,7 @@ Mainloop:
 func (s *Service) Stop() {
 	s.mu.Lock()
 	s.InExitSequence = true
-	if s.stopFunc != nil {
-		s.stopFunc()
-	}
+	s.ctx.Cancel()
 
 	if s.serving {
 		close(s.StopChan)

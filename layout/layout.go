@@ -1,10 +1,11 @@
 package layout
 
 import (
+	"fmt"
 	"html/template"
 	"wsf/config"
+	"wsf/context"
 	"wsf/controller"
-	"wsf/controller/context"
 	"wsf/errors"
 	"wsf/filter"
 	"wsf/registry"
@@ -12,8 +13,6 @@ import (
 	"wsf/view/helper/placeholder"
 	"wsf/view/helper/placeholder/container"
 )
-
-type contextKey int
 
 // Public constants
 const (
@@ -162,7 +161,7 @@ func (l *DefaultLayout) GetView() view.Interface {
 func (l *DefaultLayout) InitMvc() error {
 	viewResource := registry.GetResource("view")
 	if v, ok := viewResource.(view.Interface); ok {
-		if err := v.AddTeplatePath(l.GetViewScriptPath()); err != nil {
+		if err := v.AddLayoutPath(l.GetViewScriptPath()); err != nil {
 			return err
 		}
 	}
@@ -337,6 +336,7 @@ func (l *DefaultLayout) Populate(data map[string]interface{}) {
 
 // Render layout
 func (l *DefaultLayout) Render(ctx context.Context, name string) ([]byte, error) {
+	fmt.Println("layout.Render")
 	if name == "" {
 		name = l.Options.Layout
 	}
@@ -348,7 +348,7 @@ func (l *DefaultLayout) Render(ctx context.Context, name string) ([]byte, error)
 	}
 	view := l.GetView()
 
-	return view.Render(ctx, l.GetViewScriptPath()+name)
+	return view.Render(ctx, l.GetViewScriptPath()+name, name)
 }
 
 // NewLayoutDefault creates a new default layout

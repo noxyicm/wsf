@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"reflect"
 	"strconv"
@@ -19,8 +18,6 @@ const (
 
 var (
 	buildRowHandlers = map[string]func(*RowConfig) (Row, error){}
-
-	rowCfgContextKey contextKey
 )
 
 func init() {
@@ -47,7 +44,6 @@ type Row interface {
 
 // DefaultRow holds data and operates over row
 type DefaultRow struct {
-	Row
 	Options   *RowConfig
 	Data      map[string]interface{}
 	Tbl       Table
@@ -363,15 +359,4 @@ func PrepareRow(row []sql.RawBytes, columns []*sql.ColumnType) (data map[string]
 	}
 
 	return data, err
-}
-
-// RowConfigToContext returns a new context with stored row config
-func RowConfigToContext(ctx context.Context, cfg *RowConfig) context.Context {
-	return context.WithValue(ctx, rowCfgContextKey, cfg)
-}
-
-// RowConfigFromContext returns a row config stored in context
-func RowConfigFromContext(ctx context.Context) (*RowConfig, bool) {
-	v, ok := ctx.Value(rowCfgContextKey).(*RowConfig)
-	return v, ok
 }

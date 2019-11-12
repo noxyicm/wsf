@@ -1,7 +1,7 @@
 package db
 
 import (
-	"context"
+	goctx "context"
 	"database/sql"
 	"fmt"
 	"strconv"
@@ -108,7 +108,7 @@ func (a *MySQL) Setup() {
 }
 
 // Init a connection to database
-func (a *MySQL) Init(ctx context.Context) (err error) {
+func (a *MySQL) Init() (err error) {
 	db, err := sql.Open("mysql", a.driverConfig.FormatDSN())
 	if err != nil {
 		return errors.Wrap(err, "MySQL Error")
@@ -119,20 +119,19 @@ func (a *MySQL) Init(ctx context.Context) (err error) {
 	db.SetMaxOpenConns(a.Options.MaxOpenConnections)
 
 	if a.PingTimeout > 0 {
-		tctx, cancel := context.WithTimeout(ctx, a.PingTimeout*time.Second)
+		tctx, cancel := goctx.WithTimeout(goctx.Background(), a.PingTimeout*time.Second)
 		defer cancel()
 
 		if err = db.PingContext(tctx); err != nil {
 			return errors.Wrap(err, "MySQL Error")
 		}
 	} else {
-		if err = db.PingContext(ctx); err != nil {
+		if err = db.PingContext(goctx.Background()); err != nil {
 			return errors.Wrap(err, "MySQL Error")
 		}
 	}
 
 	a.Db = db
-	a.Ctx = ctx
 	return nil
 }
 
@@ -167,7 +166,7 @@ func (a *MySQL) DescribeTable(table string, schema string) (map[string]*TableCol
 		sqlstr = "SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE " + a.QuoteInto("table_name = ?", table, -1)
 	}
 
-	ctx, cancel := context.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
+	ctx, cancel := goctx.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
 	stmt, err := a.Db.PrepareContext(ctx, sqlstr)
@@ -176,7 +175,7 @@ func (a *MySQL) DescribeTable(table string, schema string) (map[string]*TableCol
 	}
 	defer stmt.Close()
 
-	ctx, cancel = context.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
+	ctx, cancel = goctx.WithTimeout(a.Ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	rows, err := stmt.QueryContext(ctx)

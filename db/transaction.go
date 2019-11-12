@@ -1,8 +1,8 @@
 package db
 
 import (
-	"context"
 	"database/sql"
+	"wsf/context"
 	"wsf/errors"
 )
 
@@ -76,6 +76,6 @@ func (t *DefaultTransaction) Rollback() error {
 func NewDefaultTransaction(tx *sql.Tx) (Transaction, error) {
 	return &DefaultTransaction{
 		Tx:  tx,
-		Ctx: context.Background(),
+		Ctx: nil,
 	}, nil
 }

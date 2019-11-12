@@ -13,6 +13,7 @@ type Config struct {
 	ViewScriptPathSpec             string
 	ViewScriptPathNoControllerSpec string
 	ViewSuffix                     string
+	LayoutContentKey               string
 	Doctype                        string
 	Charset                        string
 	ContentType                    string
@@ -37,6 +38,7 @@ func (c *Config) Defaults() error {
 	c.ViewScriptPathSpec = "views/:module/:controller/:action.:suffix"
 	c.ViewScriptPathNoControllerSpec = "views/:module/:action.:suffix"
 	c.ViewSuffix = "gohtml"
+	c.LayoutContentKey = "content"
 	c.Assign = make(map[string]interface{})
 	return nil
 }

@@ -21,6 +21,7 @@ func init() {
 
 // Interface represents backend cache interface
 type Interface interface {
+	Init(options config.Config) (bool, error)
 	Load(id string, testCacheValidity bool) ([]byte, error)
 	Test(id string) bool
 	Save(data []byte, id string, tags []string, specificLifetime int64) error
@@ -46,6 +47,11 @@ func Register(backendType string, handler func(config.Config) (Interface, error)
 type Backend struct {
 	Options *Config
 	mu      sync.Mutex
+}
+
+// Init the backend
+func (b *Backend) Init(options config.Config) (bool, error) {
+	return true, nil
 }
 
 // Load stored data

@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,6 +10,7 @@ import (
 	"sync"
 	"time"
 	"wsf/config"
+	"wsf/context"
 	"wsf/controller/request"
 	"wsf/controller/request/attributes"
 	"wsf/errors"
@@ -118,7 +118,7 @@ func (s *Service) Priority() int {
 }
 
 // Serve the service
-func (s *Service) Serve() (err error) {
+func (s *Service) Serve(ctx context.Context) (err error) {
 	s.mu.Lock()
 
 	s.handler, err = NewHandler(s.options)

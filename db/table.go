@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +10,7 @@ import (
 	"strings"
 	"wsf/cache"
 	"wsf/config"
+	"wsf/context"
 	"wsf/errors"
 	"wsf/registry"
 	"wsf/utils"
@@ -769,15 +769,17 @@ func (t *DefaultTable) fetchAll(ctx context.Context, cond interface{}, order int
 		slct.Limit(count, offset)
 	}
 
-	rctx := RowsetConfigToContext(ctx, &RowsetConfig{
-		Type: t.GetRowsetType(),
-		Tbl:  t.Name,
+	if err := ctx.SetValue(context.RowsetConfigKey, &RowsetConfig{
+		Type:  t.GetRowsetType(),
+		Table: t.Name,
 		Row: &RowConfig{
 			Type:  t.GetRowType(),
 			Table: t.Name,
 		},
-	})
-	rows, err := t.Adapter.Query(rctx, slct)
+	}); err != nil {
+		return NewEmptyRowset(t.GetRowsetType()), err
+	}
+	rows, err := t.Adapter.Query(ctx, slct)
 	if err != nil {
 		return NewEmptyRowset(t.GetRowsetType()), err
 	}
@@ -837,11 +839,13 @@ func (t *DefaultTable) fetchRow(ctx context.Context, cond interface{}, order int
 	}
 	fmt.Println(t.GetRowType())
 	os.Exit(2)
-	rctx := RowConfigToContext(ctx, &RowConfig{
+	if err := ctx.SetValue(context.RowConfigKey, &RowConfig{
 		Type:  t.GetRowType(),
 		Table: t.Name,
-	})
-	row, err := t.Adapter.QueryRow(rctx, slct)
+	}); err != nil {
+		return t.CreateRow(nil, DefaultNone), err
+	}
+	row, err := t.Adapter.QueryRow(ctx, slct)
 	if err != nil {
 		return t.CreateRow(nil, DefaultNone), err
 	}

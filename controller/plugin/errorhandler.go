@@ -1,7 +1,7 @@
 package plugin
 
 import (
-	"wsf/controller/context"
+	"wsf/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
@@ -160,7 +160,7 @@ func (p *ErrorHandler) handleError(ctx context.Context, rqs request.Interface, r
 func NewErrorHandler() (Interface, error) {
 	return &ErrorHandler{
 		name:         "ErrorHandler",
-		module:       "",
+		module:       "index",
 		controller:   "error",
 		action:       "error",
 		handleErrors: true,

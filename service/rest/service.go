@@ -1,7 +1,6 @@
 package rest
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,6 +12,7 @@ import (
 	"time"
 	"wsf/application/modules"
 	"wsf/config"
+	"wsf/context"
 	"wsf/controller"
 	"wsf/controller/request"
 	"wsf/controller/request/attributes"
@@ -186,7 +186,7 @@ func (s *Service) Priority() int {
 }
 
 // Serve the service
-func (s *Service) Serve() (err error) {
+func (s *Service) Serve(ctx context.Context) (err error) {
 	s.mu.Lock()
 
 	s.handler, err = NewHandler(s.options)

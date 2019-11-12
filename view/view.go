@@ -4,7 +4,7 @@ import (
 	"html/template"
 	"path/filepath"
 	"wsf/config"
-	"wsf/controller/context"
+	"wsf/context"
 	"wsf/errors"
 	"wsf/log"
 	"wsf/view/helper"
@@ -17,7 +17,8 @@ var (
 // Interface is a view resource interface
 type Interface interface {
 	Priority() int
-	Render(ctx context.Context, script string) ([]byte, error)
+	GetOptions() *Config
+	Render(ctx context.Context, script string, tpl string) ([]byte, error)
 	GetPaths() map[string]map[string]string
 	AddBasePath(path string, prefix string) error
 	GetBasePath() string
@@ -27,8 +28,10 @@ type Interface interface {
 	GetScriptPathNoController() string
 	SetSuffix(suffix string) error
 	GetSuffix() string
-	AddTeplatePath(path string) error
+	AddTemplatePath(path string) error
 	GetTemplatePaths() map[string]string
+	AddLayoutPath(path string) error
+	GetLayoutPaths() map[string]string
 	RegisterHelper(name string, hlp helper.Interface) error
 	Helper(name string) helper.Interface
 	Assign(params map[string]interface{}) error
@@ -37,8 +40,9 @@ type Interface interface {
 	ParamBool(key string, def bool) bool
 	ParamString(key string, def string) string
 	ParamInt(key string, def int) int
+	PrepareLayouts() error
 	PrepareTemplates() error
-	GetTemplate(name string) *template.Template
+	GetTemplate(path string) *template.Template
 }
 
 type view struct {
@@ -52,8 +56,10 @@ type view struct {
 	paths                          map[string]map[string]string
 	helpers                        map[string]helper.Interface
 	params                         map[string]interface{}
-	templates                      map[string]*template.Template
-	template                       *template.Template
+	//templates                      map[string]*TemplateData
+	templates map[string]*template.Template
+	layouts   map[string]*TemplateData
+	template  *template.Template
 }
 
 // GetPaths returns all registered script pathes
@@ -64,7 +70,7 @@ func (v *view) GetPaths() map[string]map[string]string {
 //setBasePath
 // AddBasePath registers a new base script path
 func (v *view) AddBasePath(path string, prefix string) error {
-	v.AddTeplatePath(filepath.FromSlash(path))
+	v.AddTemplatePath(filepath.FromSlash(path))
 	//$this->addHelperPath($path . 'helpers', $classPrefix . 'Helper');
 	//$this->addFilterPath($path . 'filters', $classPrefix . 'Filter');
 	return nil
@@ -108,19 +114,34 @@ func (v *view) GetSuffix() string {
 	return v.ViewSuffix
 }
 
-// AddTeplatePath adds a path to templates
-func (v *view) AddTeplatePath(path string) error {
-	if _, ok := v.paths["template"]; !ok {
-		v.paths["template"] = make(map[string]string)
+// AddTemplatePath adds a path to templates
+func (v *view) AddTemplatePath(path string) error {
+	if _, ok := v.paths["templates"]; !ok {
+		v.paths["templates"] = make(map[string]string)
 	}
 
-	v.paths["template"][filepath.FromSlash(path)] = filepath.FromSlash(path)
+	v.paths["templates"][filepath.FromSlash(path)] = filepath.FromSlash(path)
 	return nil
 }
 
-// GetTemplatePaths returns registered template paths
+// GetTemplatePaths returns registered templates
 func (v *view) GetTemplatePaths() map[string]string {
-	return v.paths["template"]
+	return v.paths["templates"]
+}
+
+// AddLayoutPath adds a path to layout templates
+func (v *view) AddLayoutPath(path string) error {
+	if _, ok := v.paths["layouts"]; !ok {
+		v.paths["layouts"] = make(map[string]string)
+	}
+
+	v.paths["layouts"][filepath.FromSlash(path)] = filepath.FromSlash(path)
+	return nil
+}
+
+// GetLayoutPaths returns registered layout template paths
+func (v *view) GetLayoutPaths() map[string]string {
+	return v.paths["layouts"]
 }
 
 // AddHelperPath adds a path to helpers
@@ -235,4 +256,11 @@ func NewView(viewType string, options config.Config) (Interface, error) {
 // Register registers a handler for controller creation
 func Register(viewType string, handler func(*Config) (Interface, error)) {
 	buildHandlers[viewType] = handler
+}
+
+// TemplateData holds information about template
+type TemplateData struct {
+	Name string
+	Path string
+	Data *template.Template
 }

@@ -5,6 +5,7 @@ import (
 	"wsf/application/resource"
 	"wsf/application/service"
 	"wsf/config"
+	"wsf/context"
 	"wsf/errors"
 	"wsf/log"
 )
@@ -29,9 +30,9 @@ type Interface interface {
 	SetOptions(*Config) error
 	GetOptions() *Config
 	Init() error
-	Run() error
+	Run(ctx context.Context) error
 	Stop()
-	//RegisterResource(resource string, options config.Config) error
+	RegisterResource(resourceType string, resourceName string, options config.Config) error
 	//UnregisterResource(resource string) (i Interface, err error)
 	HasResource(resource string) bool
 	Resource(resource string) (r interface{}, status int)
@@ -40,22 +41,18 @@ type Interface interface {
 
 // Bootstrap is an abstract bootstrap struct
 type Bootstrap struct {
-	Options   *Config
-	Resources resource.Registry
-	Services  service.Server
-	Logger    *log.Log
-	lsns      []func(event int, ctx interface{})
-	mu        sync.Mutex
+	Options       *Config
+	Resources     resource.Registry
+	Services      service.Server
+	Logger        *log.Log
+	resourcesPool map[string]resource.Interface
+	initialized   bool
+	lsns          []func(event int, ctx interface{})
+	mu            sync.Mutex
 }
 
 // Init initializes the application
 func (b *Bootstrap) Init() error {
-	b.Resources = resource.NewRegistry()
-	b.Resources.Listen(b.throw)
-
-	b.Services = service.NewServer()
-	b.Services.Listen(b.throw)
-
 	cfg := b.Options.Get("resources")
 	if cfg == nil {
 		return errors.New("[Application] Resources configuration undefined")
@@ -76,12 +73,13 @@ func (b *Bootstrap) Init() error {
 	}
 	b.Services.Listen(b.throw)
 
+	b.initialized = true
 	return nil
 }
 
 // Run Serves the application
-func (b *Bootstrap) Run() error {
-	return b.Services.Serve()
+func (b *Bootstrap) Run(ctx context.Context) error {
+	return b.Services.Serve(ctx)
 }
 
 // Stop stops the application
@@ -102,6 +100,25 @@ func (b *Bootstrap) SetOptions(options *Config) error {
 // GetOptions returns configuration of the bootstrap struct
 func (b *Bootstrap) GetOptions() *Config {
 	return b.Options
+}
+
+//RegisterResource registers a resource for bootstraping
+func (b *Bootstrap) RegisterResource(resourceType string, resourceName string, options config.Config) error {
+	if b.initialized {
+		return errors.New("Registering resources is only allowed before initialization fase. Bootstrap already initialized")
+	}
+
+	if _, ok := b.resourcesPool[resourceName]; ok {
+		return errors.Errorf("Resource by name '%s' is already registered.", resourceName)
+	}
+
+	rsr, err := resource.NewResource(resourceType, options)
+	if err != nil {
+		return err
+	}
+
+	b.Resources.Register(resourceName, resourceType, rsr)
+	return nil
 }
 
 // HasResource returns true if resource is registered

@@ -1,12 +1,13 @@
 package layout
 
 import (
-	"errors"
+	"fmt"
+	"wsf/context"
 	"wsf/controller/action/helper"
-	"wsf/controller/context"
 	"wsf/controller/plugin"
 	"wsf/controller/request"
 	"wsf/controller/response"
+	"wsf/errors"
 )
 
 // TYPELayoutPlugin is a plugin id
@@ -70,11 +71,14 @@ func (p *Plugin) DispatchLoopStartup(ctx context.Context, rqs request.Interface,
 
 // PreDispatch routine
 func (p *Plugin) PreDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	ctx.SetValue(context.LayoutEnabledKey, true)
 	return true, nil
 }
 
 // PostDispatch routine
 func (p *Plugin) PostDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return true, nil
+	fmt.Println("layout_plugin.PostDispatch")
 	l := p.GetLayout()
 	if l == nil {
 		return false, errors.New("[Layout] Layout object for plugin is not set")
@@ -86,7 +90,7 @@ func (p *Plugin) PostDispatch(ctx context.Context, rqs request.Interface, rsp re
 	}
 
 	// Return early if layout has been disabled
-	if enabled, _ := ctx.Value(context.LayoutEnabled).(bool); enabled && l.IsEnabled() {
+	if enabled, _ := ctx.Value(context.LayoutEnabledKey).(bool); enabled && l.IsEnabled() {
 		return true, nil
 	}
 
@@ -107,7 +111,7 @@ func (p *Plugin) PostDispatch(ctx context.Context, rqs request.Interface, rsp re
 
 	fullContent := make([]byte, 0)
 	var err error
-	if name, ok := ctx.Value(context.Layout).(string); ok {
+	if name, ok := ctx.Value(context.LayoutKey).(string); ok {
 		fullContent, err = l.Render(ctx, name)
 	} else {
 		err = errors.New("[Layout] Bad layout name")

@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"wsf/context"
 	"wsf/controller"
-	"wsf/controller/context"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
@@ -80,8 +80,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleError(w, r, err, start)
 		return
 	}
-	ctx.SetValue(context.SessionID, sid)
-	ctx.SetValue(context.Session, s)
+	ctx.SetValue(context.SessionIDKey, sid)
+	ctx.SetValue(context.SessionKey, s)
 	if err := h.ctrl.Dispatch(ctx, req, rsp); err != nil {
 		session.Close(sid)
 		h.handleResponse(req, rsp, err, start)

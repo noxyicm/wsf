@@ -7,7 +7,7 @@ import (
 // RowsetConfig defines set of rowset variables
 type RowsetConfig struct {
 	Type      string
-	Tbl       string
+	Table     string
 	Connected bool
 	Pointer   uint32
 	Cnt       uint32

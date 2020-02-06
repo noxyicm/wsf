@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"wsf/config"
 	"wsf/context"
 	"wsf/errors"
@@ -49,8 +50,13 @@ func (d *Db) Connection(ctx context.Context) (Connection, error) {
 	return d.adapter.Connection(ctx)
 }
 
+// Adapter returns a database adapter
+func (d *Db) Adapter() Adapter {
+	return d.adapter
+}
+
 // Select returns a new select object
-func (d *Db) Select() (Select, error) {
+func (d *Db) Select() Select {
 	return d.adapter.Select()
 }
 
@@ -70,12 +76,17 @@ func (d *Db) Delete(ctx context.Context, table string, cond map[string]interface
 }
 
 // Query runs a query
-func (d *Db) Query(ctx context.Context, sql Select) (Rowset, error) {
+func (d *Db) Query(ctx context.Context, sql Select) ([]map[string]interface{}, error) { //(Rowset, error) {
 	return d.adapter.Query(ctx, sql)
 }
 
+// QueryInto as
+func (d *Db) QueryInto(ctx context.Context, dbs Select, o interface{}) ([]interface{}, error) {
+	return d.adapter.QueryInto(ctx, dbs, o)
+}
+
 // QueryRow runs a query
-func (d *Db) QueryRow(ctx context.Context, sql Select) (Row, error) {
+func (d *Db) QueryRow(ctx context.Context, sql Select) (map[string]interface{}, error) { //(Row, error) {
 	return d.adapter.QueryRow(ctx, sql)
 }
 
@@ -154,7 +165,7 @@ func Instance() *Db {
 }
 
 // CreateSelect returns a select configured by db instance
-func CreateSelect() (Select, error) {
+func CreateSelect() Select {
 	return ins.Select()
 }
 
@@ -174,12 +185,17 @@ func Delete(ctx context.Context, table string, cond map[string]interface{}) (boo
 }
 
 // Query runs a query
-func Query(ctx context.Context, sql Select) (Rowset, error) {
+func Query(ctx context.Context, sql Select) ([]map[string]interface{}, error) { //(Rowset, error) {
 	return ins.Query(ctx, sql)
 }
 
+// QueryInto as
+func QueryInto(ctx context.Context, dbs Select, o interface{}) ([]interface{}, error) {
+	return ins.QueryInto(ctx, dbs, o)
+}
+
 // QueryRow runs a query
-func QueryRow(ctx context.Context, sql Select) (Row, error) {
+func QueryRow(ctx context.Context, sql Select) (map[string]interface{}, error) { //(Row, error) {
 	return ins.QueryRow(ctx, sql)
 }
 
@@ -215,4 +231,78 @@ func SetupAdapter(db interface{}) (Adapter, error) {
 // Options return db options
 func Options() *Config {
 	return ins.Options()
+}
+
+// ColumnData represents a raw byte data from database
+type ColumnData struct {
+	Column *sql.ColumnType
+	Value  []byte
+}
+
+// Scan implementation of Scanner interface
+func (c *ColumnData) Scan(src interface{}) error {
+	if n, ok := c.Column.Nullable(); ok && n {
+		if src == nil {
+			c.Value = nil
+		} else {
+			c.Value = src.([]byte)
+		}
+	} else {
+		c.Value = make([]byte, 0)
+	}
+
+	return nil
+}
+
+// RowData represents a database row
+type RowData struct {
+	data []*ColumnData
+}
+
+// CreateColumns fills data slice with columns
+func (rd *RowData) CreateColumns(columns []*sql.ColumnType) {
+	rd.data = make([]*ColumnData, len(columns))
+	for i := range columns {
+		rd.data[i] = &ColumnData{
+			Column: columns[i],
+		}
+	}
+}
+
+// Columns returns all row columns
+func (rd *RowData) Columns() []*ColumnData {
+	return rd.data
+}
+
+// ColumnsScan returns all row columns
+func (rd *RowData) ColumnsScan() []interface{} {
+	srcs := make([]interface{}, len(rd.data))
+	for i := range rd.data {
+		srcs[i] = rd.data[i]
+	}
+	return srcs
+}
+
+// ToMap returns a row data as mapstruct
+func (rd *RowData) ToMap() map[string][]byte {
+	d := make(map[string][]byte)
+	for i := range rd.data {
+		d[rd.data[i].Column.Name()] = rd.data[i].Value
+	}
+
+	return d
+}
+
+// Unmarshal unmarshals data into struct
+func (rd *RowData) Unmarshal(adp Adapter, output interface{}) error {
+	//row, err := adp.PrepareRow(rd.Columns())
+	//if err != nil {
+	//	return errors.Wrap(err, "RowData unmarshal error")
+	//}
+
+	//if err := mapstructure.Decode(row, output); err != nil {
+	//	return errors.Wrap(err, "RowData unmarshal error")
+	//}
+
+	return nil
 }

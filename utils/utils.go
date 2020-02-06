@@ -538,6 +538,17 @@ func IKey(value int, sl []int) (int, bool) {
 	return 0, false
 }
 
+// I64Key returns key for value in slice of 64bits integers
+func I64Key(value int64, sl []int64) (int, bool) {
+	for k, v := range sl {
+		if v == value {
+			return k, true
+		}
+	}
+
+	return 0, false
+}
+
 // SKey returns key for value in slice of strings
 func SKey(value string, sl []string) (int, bool) {
 	for k, v := range sl {

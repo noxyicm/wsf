@@ -311,5 +311,13 @@ func NewCore(cacheType string, options config.Config) (*Core, error) {
 	}
 	cc.Backend = adp
 
+	if cc.Logger == nil {
+		logResource := registry.GetResource("syslog")
+		if logResource == nil {
+			return nil, errors.New("Log resource is not provided and syslog is not avaliable")
+		}
+		cc.Logger = logResource.(*log.Log)
+	}
+
 	return cc, nil
 }

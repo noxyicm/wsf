@@ -6,6 +6,7 @@ import (
 	"strings"
 	"wsf/config"
 	"wsf/errors"
+	"wsf/log"
 	"wsf/utils"
 )
 
@@ -101,9 +102,13 @@ type Select interface {
 	From(name string, cols interface{}) Select
 	FromAs(name string, alias string, cols interface{}) Select
 	FromSchema(name string, cols interface{}, schema string) Select
-	FromAsSchema(name string, alias string, cols interface{}, schema string) Select
+	FromSchemaAs(name string, alias string, cols interface{}, schema string) Select
 	Columns(cols interface{}, correlationName string) Select
 	Union(sql interface{}, typ string) Select
+	Join(name string, cond string, cols interface{}) Select
+	JoinAs(name string, alias string, cond string, cols interface{}) Select
+	JoinInner(name string, cond string, cols interface{}) Select
+	JoinInnerAs(name string, alias string, cond string, cols interface{}) Select
 	Where(cond string, value interface{}) Select
 	OrWhere(cond string, value interface{}) Select
 	Limit(count int, offset int) Select
@@ -129,12 +134,21 @@ func NewSelect(selectType string, options config.Config) (Select, error) {
 }
 
 // NewSelectFromConfig creates a new sql select from config
-func NewSelectFromConfig(cfg *SelectConfig) (Select, error) {
+func NewSelectFromConfig(cfg *SelectConfig) (slct Select) {
+	var err error
 	if f, ok := buildSelectHandlers[cfg.Type]; ok {
-		return f(cfg)
+		slct, err = f(cfg)
+	} else {
+		log.Warning(errors.Wrapf(err, "Unrecognized database select type '%v'", cfg.Type).Error(), nil)
+		slct, err = NewDefaultSelect(cfg)
 	}
 
-	return nil, errors.Errorf("Unrecognized database select type \"%v\"", cfg.Type)
+	if err != nil {
+		log.Warning(errors.Wrapf(err, "Unable to create select of type '%s'", cfg.Type).Error(), nil)
+		return NewSelectEmpty()
+	}
+
+	return
 }
 
 // RegisterSelect registers a handler for database statement creation
@@ -156,7 +170,8 @@ type selectParts struct {
 	Dinstinct   bool
 	Columns     []*selectColumn
 	Union       []*selectUnion
-	From        map[string]*selectFrom
+	From        []*selectFrom
+	Join        []*selectFrom
 	Where       []string
 	Group       []interface{}
 	Having      []interface{}
@@ -179,6 +194,7 @@ type selectFrom struct {
 	Schema        string
 	TableName     string
 	JoinCondition string
+	Alias         string
 }
 
 // SelectUnion is a select object union representation
@@ -220,26 +236,31 @@ func (s *DefaultSelect) FromSchema(name string, cols interface{}, schema string)
 	return s.prepareJoin(From, name, "", "", cols, schema)
 }
 
-// FromAsSchema adds a FROM table and optional columns to the query with specific schema
-func (s *DefaultSelect) FromAsSchema(name string, alias string, cols interface{}, schema string) Select {
+// FromSchemaAs adds a FROM table and optional columns to the query with specific schema
+func (s *DefaultSelect) FromSchemaAs(name string, alias string, cols interface{}, schema string) Select {
 	return s.prepareJoin(From, name, alias, "", cols, schema)
 }
 
 // Columns specifies the columns used in the FROM clause
 func (s *DefaultSelect) Columns(cols interface{}, correlationName string) Select {
 	if correlationName == "" && len(s.Parts.From) > 0 {
-		for key := range s.Parts.From {
-			correlationName = key
-			break
+		correlationName = s.Parts.From[0].Alias
+	} else if correlationName != "" && len(s.Parts.From) > 0 {
+		hit := false
+		for i := range s.Parts.From {
+			if s.Parts.From[i].Alias == correlationName {
+				hit = true
+				break
+			}
+		}
+
+		if !hit {
+			s.Errors = append(s.Errors, errors.New("No table has been specified for the FROM clause"))
+			return s
 		}
 	}
 
-	if _, ok := s.Parts.From[correlationName]; !ok {
-		s.Errors = append(s.Errors, errors.New("No table has been specified for the FROM clause"))
-		return s
-	}
-
-	s.tableCols(correlationName, cols, "")
+	s.tableCols(correlationName, cols, correlationName)
 	return s
 }
 
@@ -273,6 +294,26 @@ func (s *DefaultSelect) Union(sql interface{}, typ string) Select {
 	}
 
 	return s
+}
+
+// Join adds a JOIN table and columns to the query
+func (s *DefaultSelect) Join(name string, cond string, cols interface{}) Select {
+	return s.JoinInner(name, cond, cols)
+}
+
+// JoinAs adds a JOIN table and columns to the query
+func (s *DefaultSelect) JoinAs(name string, alias string, cond string, cols interface{}) Select {
+	return s.JoinInnerAs(name, alias, cond, cols)
+}
+
+// JoinInner add an INNER JOIN table and colums to the query
+func (s *DefaultSelect) JoinInner(name string, cond string, cols interface{}) Select {
+	return s.prepareJoin(InnerJoin, name, "", cond, cols, "")
+}
+
+// JoinInnerAs add an INNER JOIN table and colums to the query
+func (s *DefaultSelect) JoinInnerAs(name string, alias string, cond string, cols interface{}) Select {
+	return s.prepareJoin(InnerJoin, name, alias, cond, cols, "")
 }
 
 // Where adds a WHERE condition to the query by AND
@@ -333,7 +374,8 @@ func (s *DefaultSelect) Clear() Select {
 	s.Parts.Dinstinct = false
 	s.Parts.Columns = []*selectColumn{}
 	s.Parts.Union = []*selectUnion{}
-	s.Parts.From = map[string]*selectFrom{}
+	s.Parts.From = []*selectFrom{}
+	s.Parts.Join = []*selectFrom{}
 	s.Parts.Where = []string{}
 	s.Parts.Group = []interface{}{}
 	s.Parts.Having = []interface{}{}
@@ -414,7 +456,7 @@ func (s *DefaultSelect) prepareJoin(typ string, name interface{}, alias string, 
 		}
 
 	default:
-		s.Errors = append(s.Errors, errors.Errorf("Unsupported join type '%t'", t))
+		s.Errors = append(s.Errors, errors.Errorf("Unsupported table name type '%t'", t))
 		return s
 	}
 
@@ -426,40 +468,38 @@ func (s *DefaultSelect) prepareJoin(typ string, name interface{}, alias string, 
 
 	lastFromCorrelationName := ""
 	if correlationName != "" {
-		if _, ok := s.Parts.From[correlationName]; ok {
-			s.Errors = append(s.Errors, errors.Errorf("You cannot define a correlation name '%s' more than once", correlationName))
-			return s
-		}
-
-		currentCorrelationName := ""
-		tmpFromParts := make(map[string]*selectFrom)
-		if typ == From {
-			// append this from after the last from joinType
-			tmpFromParts := s.Parts.From
-			s.Parts.From = make(map[string]*selectFrom)
-			// move all the froms onto the stack
-			for key, part := range tmpFromParts {
-				currentCorrelationName = key
-				if part.JoinType != From {
-					break
-				}
-
-				lastFromCorrelationName = currentCorrelationName
-				s.Parts.From[currentCorrelationName] = part
-				delete(tmpFromParts, currentCorrelationName)
+		for i := range s.Parts.From {
+			if s.Parts.From[i].Alias == correlationName {
+				s.Errors = append(s.Errors, errors.Errorf("You cannot define a correlation name '%s' more than once", correlationName))
+				return s
 			}
 		}
 
-		s.Parts.From[correlationName] = &selectFrom{
+		fromkey := len(s.Parts.From)
+		if typ == From {
+			for i := range s.Parts.From {
+				lastFromCorrelationName = s.Parts.From[i].Alias
+				if s.Parts.From[i].JoinType != From {
+					fromkey = i
+					break
+				}
+			}
+		}
+
+		frm := &selectFrom{
 			JoinType:      typ,
 			Schema:        schema,
 			TableName:     tableName,
-			JoinCondition: cond,
+			JoinCondition: s.Adapter.QuoteIdentifier(cond, true),
+			Alias:         correlationName,
 		}
 
-		for key, part := range tmpFromParts {
-			currentCorrelationName = key
-			s.Parts.From[currentCorrelationName] = part
+		if fromkey == 0 {
+			s.Parts.From = append([]*selectFrom{frm}, s.Parts.From...)
+		} else if fromkey == len(s.Parts.From) {
+			s.Parts.From = append(s.Parts.From, frm)
+		} else {
+			s.Parts.From = append(s.Parts.From[:fromkey-1], append([]*selectFrom{frm}, s.Parts.From[fromkey:]...)...)
 		}
 	}
 
@@ -492,94 +532,110 @@ func (s *DefaultSelect) where(condition string, value interface{}, typ string, b
 
 // Adds to the internal table-to-column mapping array
 func (s *DefaultSelect) tableCols(correlationName string, cols interface{}, afterCorrelationName string) Select {
-	columns := []interface{}{}
-	switch cols.(type) {
+	columnValues := []*selectColumn{}
+	switch tcol := cols.(type) {
 	case string:
-		columns = append(columns, cols.(string))
+		colname, alias, corname := s.extractColumnParts(tcol)
+		if corname != "" {
+			columnValues = append(columnValues, &selectColumn{Table: corname, Column: colname, Alias: alias})
+		} else {
+			columnValues = append(columnValues, &selectColumn{Table: correlationName, Column: colname, Alias: alias})
+		}
+
+	case *SQLExpr:
+		columnValues = append(columnValues, &selectColumn{Table: correlationName, Column: tcol, Alias: ""})
 
 	case []*SQLExpr:
-		s := make([]interface{}, len(cols.([]*SQLExpr)))
-		i := 0
-		for _, col := range cols.([]*SQLExpr) {
-			s[i] = col
-			i++
+		for _, col := range tcol {
+			columnValues = append(columnValues, &selectColumn{Table: correlationName, Column: col, Alias: ""})
 		}
-		columns = append(columns, s...)
 
 	case []string:
-		s := make([]interface{}, len(cols.([]string)))
-		i := 0
-		for _, col := range cols.([]string) {
-			s[i] = col
-			i++
+		for _, col := range tcol {
+			colname, alias, corname := s.extractColumnParts(col)
+			if corname != "" {
+				columnValues = append(columnValues, &selectColumn{Table: corname, Column: colname, Alias: alias})
+			} else {
+				columnValues = append(columnValues, &selectColumn{Table: correlationName, Column: colname, Alias: alias})
+			}
 		}
-		columns = append(columns, s...)
+
+	case map[string]string:
+		for alias, col := range tcol {
+			colname, _, corname := s.extractColumnParts(col)
+			if corname != "" {
+				columnValues = append(columnValues, &selectColumn{Table: corname, Column: colname, Alias: alias})
+			} else {
+				columnValues = append(columnValues, &selectColumn{Table: correlationName, Column: colname, Alias: alias})
+			}
+		}
+
+	case map[string]*SQLExpr:
+		for alias, col := range tcol {
+			columnValues = append(columnValues, &selectColumn{Table: correlationName, Column: col, Alias: alias})
+		}
+
+	case map[string]interface{}:
+		for alias, icol := range tcol {
+			switch ticol := icol.(type) {
+			case string:
+				colname, _, corname := s.extractColumnParts(ticol)
+				if corname != "" {
+					columnValues = append(columnValues, &selectColumn{Table: corname, Column: colname, Alias: alias})
+				} else {
+					columnValues = append(columnValues, &selectColumn{Table: correlationName, Column: colname, Alias: alias})
+				}
+
+			case *SQLExpr:
+				columnValues = append(columnValues, &selectColumn{Table: correlationName, Column: ticol, Alias: ""})
+			}
+		}
 
 	default:
 		s.Errors = append(s.Errors, errors.New("Invalid column type"))
 		return s
 	}
 
-	columnValues := []*selectColumn{}
-	for _, col := range columns {
-		if col == nil {
-			continue
-		}
-
-		currentCorrelationName := correlationName
-		column := ""
-		alias := ""
-		switch col.(type) {
-		case string:
-			// Check for a column matching "<column> AS <alias>" and extract the alias name
-			column = strings.Trim(strings.ReplaceAll(col.(string), "\n", " "), "")
-			if m := RegexColumnAs.FindAllString(column, -1); len(m) > 0 {
-				column = m[1]
-				alias = m[2]
-			}
-
-			// Check for columns that look like functions and convert to dbselect.Expr
-			if RegexColumnExpr.MatchString(column) {
-				column = NewExpr(column).ToString()
-			} else if m := RegexColumnDot.FindAllString(column, -1); len(m) > 0 {
-				currentCorrelationName = m[1]
-				column = m[2]
-			}
-		}
-
-		columnValues = append(columnValues, &selectColumn{Table: currentCorrelationName, Column: column, Alias: alias})
-	}
-
 	if len(columnValues) > 0 {
-		tmpColumns := []*selectColumn{}
-		index := 0
-		// should we attempt to prepend or insert these values?
+		insertkey := len(s.Parts.Columns)
 		if afterCorrelationName != "" {
-			tmpColumns = s.Parts.Columns
-			s.Parts.Columns = []*selectColumn{}
-
-			for key, currentColumn := range tmpColumns {
-				if currentColumn.Alias == afterCorrelationName {
-					break
-				} else {
-					s.Parts.Columns = append(s.Parts.Columns, currentColumn)
-					index = key
+			for i := range s.Parts.Columns {
+				if s.Parts.Columns[i].Table == afterCorrelationName {
+					insertkey = i
 				}
 			}
 		}
 
 		// apply current values to current stack
-		for _, columnValue := range columnValues {
-			s.Parts.Columns = append(s.Parts.Columns, columnValue)
-		}
-
-		// finish ensuring that all previous values are applied (if they exist)
-		for i := index; i < len(tmpColumns); i++ {
-			s.Parts.Columns = append(s.Parts.Columns, tmpColumns[i])
+		if insertkey == 0 {
+			s.Parts.Columns = append(columnValues, s.Parts.Columns...)
+		} else if insertkey == len(s.Parts.Columns) {
+			s.Parts.Columns = append(s.Parts.Columns, columnValues...)
+		} else {
+			s.Parts.Columns = append(s.Parts.Columns[:insertkey-1], append(columnValues, s.Parts.Columns[insertkey:]...)...)
 		}
 	}
 
 	return s
+}
+
+// Check for a column matching "<column> AS <alias>" and extract the alias name
+func (s *DefaultSelect) extractColumnParts(col string) (colname string, alias string, corname string) {
+	colname = strings.Trim(strings.ReplaceAll(col, "\n", " "), "")
+	if m := RegexColumnAs.FindAllString(colname, -1); len(m) > 0 {
+		colname = m[1]
+		alias = m[2]
+	}
+
+	// Check for columns that look like functions and convert to dbselect.Expr
+	if RegexColumnExpr.MatchString(colname) {
+		colname = NewExpr(colname).ToString()
+	} else if m := RegexColumnDot.FindAllString(colname, -1); len(m) > 0 {
+		corname = m[1]
+		colname = m[2]
+	}
+
+	return
 }
 
 // Generate a unique correlation name
@@ -591,14 +647,22 @@ func (s *DefaultSelect) uniqueCorrelation(name string) string {
 		c = name[dot+1 : len(name)]
 	}
 
+	hit := false
 	i := 2
 	for {
-		if _, ok := s.Parts.From[c]; !ok {
-			break
+		hit = false
+		for j := range s.Parts.From {
+			if s.Parts.From[j].Alias == c {
+				c = name + "_" + strconv.Itoa(i)
+				hit = true
+				i++
+				break
+			}
 		}
 
-		c = name + "_" + strconv.Itoa(i)
-		i++
+		if !hit {
+			break
+		}
 	}
 
 	return c
@@ -655,7 +719,7 @@ func (s *DefaultSelect) renderFrom(sql string) string {
 	}
 
 	from := make([]string, 0)
-	for correlationName, table := range s.Parts.From {
+	for _, table := range s.Parts.From {
 		tmp := ""
 		joinType := table.JoinType
 		if table.JoinType == From {
@@ -668,10 +732,10 @@ func (s *DefaultSelect) renderFrom(sql string) string {
 		}
 
 		tmp = tmp + s.quotedSchema(table.Schema)
-		if table.TableName == correlationName {
+		if table.TableName == table.Alias {
 			tmp = tmp + s.quotedTable(table.TableName, "")
 		} else {
-			tmp = tmp + s.quotedTable(table.TableName, correlationName)
+			tmp = tmp + s.quotedTable(table.TableName, table.Alias)
 		}
 
 		// Add join conditions (if applicable)
@@ -740,8 +804,8 @@ func (s *DefaultSelect) renderForupdate(sql string) string {
 	return sql
 }
 
-func (s *DefaultSelect) dummyTable() map[string]*selectFrom {
-	return make(map[string]*selectFrom)
+func (s *DefaultSelect) dummyTable() []*selectFrom {
+	return make([]*selectFrom, 0)
 }
 
 // Return a quoted schema name
@@ -766,7 +830,8 @@ func NewDefaultSelect(options *SelectConfig) (Select, error) {
 			Dinstinct:   false,
 			Columns:     []*selectColumn{},
 			Union:       []*selectUnion{},
-			From:        map[string]*selectFrom{},
+			From:        []*selectFrom{},
+			Join:        []*selectFrom{},
 			Where:       []string{},
 			Group:       []interface{}{},
 			Having:      []interface{}{},
@@ -780,7 +845,7 @@ func NewDefaultSelect(options *SelectConfig) (Select, error) {
 }
 
 // NewSelectEmpty creates a new default select object
-func NewSelectEmpty() (Select, error) {
+func NewSelectEmpty() Select {
 	options := &SelectConfig{}
 	options.Defaults()
 
@@ -791,7 +856,8 @@ func NewSelectEmpty() (Select, error) {
 			Dinstinct:   false,
 			Columns:     []*selectColumn{},
 			Union:       []*selectUnion{},
-			From:        map[string]*selectFrom{},
+			From:        []*selectFrom{},
+			Join:        []*selectFrom{},
 			Where:       []string{},
 			Group:       []interface{}{},
 			Having:      []interface{}{},
@@ -801,5 +867,5 @@ func NewSelectEmpty() (Select, error) {
 			ForUpdate:   false,
 		},
 		Errors: make([]error, 0),
-	}, nil
+	}
 }

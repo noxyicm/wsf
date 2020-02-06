@@ -4,8 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"os"
 	"reflect"
 	"strings"
 	"wsf/cache"
@@ -78,7 +76,7 @@ type Table interface {
 	GetCols() []string
 	Init() error
 	Info() TableInfo
-	Select(withFromPart bool) (Select, error)
+	Select(withFromPart bool) Select
 	Insert(ctx context.Context, data map[string]interface{}) (int, error)
 	IsIdentity(column string) bool
 	Update(ctx context.Context, data map[string]interface{}, cond map[string]interface{}) (bool, error)
@@ -456,12 +454,8 @@ func (t *DefaultTable) Info() TableInfo {
 }
 
 // Select returns an instance of a dbselect.Interface object
-func (t *DefaultTable) Select(withFromPart bool) (Select, error) {
-	slct, err := NewSelectFromConfig(Options().Select)
-	if err != nil {
-		return nil, err
-	}
-
+func (t *DefaultTable) Select(withFromPart bool) Select {
+	slct := NewSelectFromConfig(Options().Select)
 	if withFromPart == SelectWithFormPart {
 		tableSpec := t.Name
 		if t.Schema != "" {
@@ -470,7 +464,7 @@ func (t *DefaultTable) Select(withFromPart bool) (Select, error) {
 		slct.From(tableSpec, SQLWildcard)
 	}
 
-	return slct, nil
+	return slct
 }
 
 // Insert inserts a new row
@@ -753,11 +747,7 @@ func (t *DefaultTable) fetchAll(ctx context.Context, cond interface{}, order int
 		slct = cond.(Select)
 
 	case string:
-		slct, err = t.Select(true)
-		if err != nil {
-			return NewEmptyRowset(t.GetRowsetType()), err
-		}
-
+		slct = t.Select(true)
 		t.where(slct, cond)
 	}
 
@@ -769,23 +759,39 @@ func (t *DefaultTable) fetchAll(ctx context.Context, cond interface{}, order int
 		slct.Limit(count, offset)
 	}
 
-	if err := ctx.SetValue(context.RowsetConfigKey, &RowsetConfig{
+	rows, err := t.GetAdapter().Query(ctx, slct)
+	if err != nil {
+		return NewEmptyRowset(t.GetRowsetType()), err
+	}
+	/*rows, err := t.Adapter.Query(ctx, slct)
+	if err != nil {
+		return NewEmptyRowset(t.GetRowsetType()), err
+	}
+	defer rows.Close()*/
+
+	rstConfig := &RowsetConfig{
 		Type:  t.GetRowsetType(),
 		Table: t.Name,
 		Row: &RowConfig{
 			Type:  t.GetRowType(),
 			Table: t.Name,
 		},
-	}); err != nil {
-		return NewEmptyRowset(t.GetRowsetType()), err
-	}
-	rows, err := t.Adapter.Query(ctx, slct)
-	if err != nil {
-		return NewEmptyRowset(t.GetRowsetType()), err
 	}
 
-	rows.SetTable(t)
-	return rows, nil
+	rst, err := NewRowset(rstConfig.Type, rstConfig)
+	if err != nil {
+		return NewEmptyRowset(t.GetRowsetType()), errors.Wrap(err, "Table fetchAll Error")
+	}
+
+	if err = rst.PopulateMap(rows); err != nil {
+		return NewEmptyRowset(t.GetRowsetType()), errors.Wrap(err, "Table fetchAll Error")
+	}
+	//if err := rst.Prepare(rows); err != nil {
+	//	return NewEmptyRowset(t.GetRowsetType()), errors.Wrap(err, "Database query Error")
+	//}
+
+	rst.SetTable(t)
+	return rst, nil
 }
 
 // FetchRow fetches one row in an object of type db.Row,
@@ -820,11 +826,7 @@ func (t *DefaultTable) fetchRow(ctx context.Context, cond interface{}, order int
 		slct = cond.(Select)
 
 	case string:
-		slct, err = t.Select(true)
-		if err != nil {
-			return t.CreateRow(nil, DefaultNone), err
-		}
-
+		slct = t.Select(true)
 		t.where(slct, cond)
 	}
 
@@ -837,20 +839,13 @@ func (t *DefaultTable) fetchRow(ctx context.Context, cond interface{}, order int
 	} else {
 		slct.Limit(1, 0)
 	}
-	fmt.Println(t.GetRowType())
-	os.Exit(2)
-	if err := ctx.SetValue(context.RowConfigKey, &RowConfig{
-		Type:  t.GetRowType(),
-		Table: t.Name,
-	}); err != nil {
-		return t.CreateRow(nil, DefaultNone), err
-	}
-	row, err := t.Adapter.QueryRow(ctx, slct)
+
+	row, err := t.GetAdapter().QueryRow(ctx, slct)
 	if err != nil {
 		return t.CreateRow(nil, DefaultNone), err
 	}
 
-	return row, nil
+	return t.CreateRow(row, DefaultNone), nil
 }
 
 // CreateRow fetches a new blank row (not from the database)

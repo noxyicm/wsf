@@ -28,7 +28,9 @@ type Rowset interface {
 	OffsetExists(key int) bool
 	Next() bool
 	Populate(data []Row)
-	Prepare(rows *sql.Rows) error
+	PopulateMap(data []map[string]interface{}) error
+	Prepare(rows []map[string]interface{}) error
+	PrepareRaw(rows *sql.Rows) error
 	SetRowType(typ string) error
 	SetTable(table Table) error
 	Table() Table
@@ -111,24 +113,68 @@ func (r *DefaultRowset) Next() bool {
 // Populate the object with provided data
 func (r *DefaultRowset) Populate(data []Row) {
 	r.Data = append(r.Data, data...)
+	r.Cnt = uint32(len(r.Data))
+}
+
+// PopulateMap populates the object with provided mapstruct
+func (r *DefaultRowset) PopulateMap(data []map[string]interface{}) error {
+	for _, rowdata := range data {
+		row, err := NewRow(r.Options.Row.Type, r.Options.Row)
+		if err != nil {
+			return errors.Wrap(err, "Database rowset populate Error")
+		}
+
+		row.Populate(rowdata)
+		r.Data = append(r.Data, row)
+	}
+
+	r.Cnt = uint32(len(r.Data))
+	return nil
 }
 
 // Prepare initializes rowset
-func (r *DefaultRowset) Prepare(rows *sql.Rows) error {
+func (r *DefaultRowset) Prepare(rows []map[string]interface{}) error {
+	if r.Tbl == nil {
+		return errors.New("Database rowset result Error: Reference table must be set")
+	}
+
+	for i := range rows {
+		row, err := NewRow(r.Options.Row.Type, r.Options.Row)
+		if err != nil {
+			return errors.Wrap(err, "Database rowset result Error")
+		}
+
+		//if err := row.Prepare(values, columns); err != nil {
+		//rowdata, err := r.Tbl.GetAdapter().PrepareRow(rows[i].Columns())
+		//if err != nil {
+		//	return err
+		//}
+		//row.Populate(rowdata)
+		row.Populate(rows[i])
+
+		r.Data = append(r.Data, row)
+	}
+
+	r.Cnt = uint32(len(r.Data))
+	return nil
+}
+
+// PrepareRaw initializes rowset
+func (r *DefaultRowset) PrepareRaw(rows *sql.Rows) error {
 	columns, err := rows.ColumnTypes()
 	if err != nil {
 		return errors.Wrap(err, "Database rowset result Error")
 	}
 
-	values := make([]sql.RawBytes, len(columns))
-	scanArgs := make([]interface{}, len(values))
-	for i := range values {
-		scanArgs[i] = &values[i]
+	if r.Tbl == nil {
+		return errors.New("Database rowset result Error: Reference table must be set")
 	}
 
 	for rows.Next() {
-		err = rows.Scan(scanArgs...)
-		if err != nil {
+		rd := &RowData{}
+		rd.CreateColumns(columns)
+
+		if err = rows.Scan(rd.ColumnsScan()...); err != nil {
 			return err
 		}
 
@@ -137,9 +183,12 @@ func (r *DefaultRowset) Prepare(rows *sql.Rows) error {
 			return errors.Wrap(err, "Database rowset result Error")
 		}
 
-		if err := row.Prepare(values, columns); err != nil {
-			return err
-		}
+		//if err := row.Prepare(values, columns); err != nil {
+		//rowdata, err := r.Tbl.GetAdapter().PrepareRow(rd.Columns())
+		//if err != nil {
+		//	return err
+		//}
+		//row.Populate(rowdata)
 
 		r.Data = append(r.Data, row)
 	}

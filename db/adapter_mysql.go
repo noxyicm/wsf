@@ -3,10 +3,11 @@ package db
 import (
 	goctx "context"
 	"database/sql"
-	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
+	"wsf/context"
 	"wsf/errors"
 
 	"github.com/go-sql-driver/mysql"
@@ -147,14 +148,122 @@ func (a *MySQL) GetOptions() *AdapterConfig {
 }
 
 // Select creates a new adapter specific select object
-func (a *MySQL) Select() (Select, error) {
-	sel, err := NewSelectFromConfig(Options().Select)
-	if err != nil {
-		return nil, err
+func (a *MySQL) Select() Select {
+	sel := NewSelectFromConfig(Options().Select)
+	sel.SetAdapter(a)
+	return sel
+}
+
+// Query runs a query
+func (a *MySQL) Query(ctx context.Context, dbs Select) ([]map[string]interface{}, error) {
+	if a.Db == nil {
+		return nil, errors.New("Database is not initialized")
 	}
 
-	sel.SetAdapter(a)
-	return sel, nil
+	if err := dbs.Err(); err != nil {
+		return nil, errors.Wrap(err, "MySQL query error")
+	}
+
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	defer cancel()
+
+	rows, err := a.Db.QueryContext(qctx, dbs.Assemble(), dbs.Binds()...)
+	if err != nil {
+		return nil, errors.Wrap(err, "MySQL query error")
+	}
+	defer rows.Close()
+
+	return a.PrepareRowset(rows)
+}
+
+// QueryRow runs a query
+func (a *MySQL) QueryRow(ctx context.Context, dbs Select) (map[string]interface{}, error) {
+	if a.Db == nil {
+		return nil, errors.New("MySQL is not initialized")
+	}
+
+	if err := dbs.Err(); err != nil {
+		return nil, errors.Wrap(err, "MySQL query Error")
+	}
+
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	defer cancel()
+
+	rows, err := a.Db.QueryContext(qctx, dbs.Assemble(), dbs.Binds()...)
+	if err != nil {
+		return nil, errors.Wrap(err, "MySQL query Error")
+	}
+	defer rows.Close()
+
+	return a.PrepareRow(rows)
+}
+
+// PrepareRowset parses sql.Rows into mapstructure slice
+func (a *MySQL) PrepareRowset(rows *sql.Rows) ([]map[string]interface{}, error) {
+	columns, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, errors.Wrap(err, "MySQL prepare result Error")
+	}
+
+	scanArgs := make([]interface{}, len(columns))
+	for i := range columns {
+		scanArgs[i] = a.reference(columns[i].ScanType())
+	}
+
+	data := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		if err = rows.Scan(scanArgs...); err != nil {
+			return nil, err
+		}
+
+		rowdata := make(map[string]interface{})
+		for i := range columns {
+			rowdata[columns[i].Name()] = a.dereference(scanArgs[i])
+		}
+		data = append(data, rowdata)
+	}
+
+	if err := rows.Err(); err != nil {
+		if err == sql.ErrNoRows {
+			return data, nil
+		}
+
+		return nil, errors.Wrap(err, "MySQL prepare result Error")
+	}
+
+	return data, nil
+}
+
+// PrepareRow parses a RawBytes into map structure
+func (a *MySQL) PrepareRow(rows *sql.Rows) (map[string]interface{}, error) {
+	columns, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, errors.Wrap(err, "MySQL prepare result error")
+	}
+
+	scanArgs := make([]interface{}, len(columns))
+	for i := range columns {
+		scanArgs[i] = a.reference(columns[i].ScanType())
+	}
+
+	data := make(map[string]interface{})
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, errors.Wrap(err, "MySQL prepare result error")
+		}
+
+		return nil, nil
+	}
+
+	if err = rows.Scan(scanArgs...); err != nil {
+		return nil, errors.Wrap(err, "MySQL prepare result error")
+	}
+
+	for i := range columns {
+		data[columns[i].Name()] = a.dereference(scanArgs[i])
+	}
+
+	return data, nil
 }
 
 // DescribeTable returns information about columns in table
@@ -186,26 +295,24 @@ func (a *MySQL) DescribeTable(table string, schema string) (map[string]*TableCol
 
 	columns, err := rows.ColumnTypes()
 	if err != nil {
-		return nil, errors.Wrap(err, "CockroachDB Error")
+		return nil, errors.Wrap(err, "MySQL Error")
 	}
 
-	values := make([]sql.RawBytes, len(columns))
-	scanArgs := make([]interface{}, len(values))
-	for i := range values {
-		scanArgs[i] = &values[i]
-		fmt.Println(columns[i].Name())
+	scanArgs := make([]interface{}, len(columns))
+	for i := range columns {
+		scanArgs[i] = a.reference(columns[i].ScanType())
 	}
 
 	desc := make(map[string]*TableColumn)
 	var i int64
 	for rows.Next() {
 		if err := rows.Scan(scanArgs...); err != nil {
-			return nil, errors.Wrap(err, "CockroachDB Error")
+			return nil, errors.Wrap(err, "MySQL Error")
 		}
 
-		d, err := PrepareRow(values, columns)
-		if err != nil {
-			return nil, errors.Wrap(err, "CockroachDB Error")
+		d := make(map[string]interface{})
+		for i := range columns {
+			d[columns[i].Name()] = a.dereference(scanArgs[i])
 		}
 
 		row := &TableColumn{
@@ -242,13 +349,13 @@ func (a *MySQL) DescribeTable(table string, schema string) (map[string]*TableCol
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "CockroachDB Error")
+		return nil, errors.Wrap(err, "MySQL Error")
 	}
 
 	return desc, nil
 }
 
-// Limit is
+// Limit adds a limit clause to query
 func (a *MySQL) Limit(sql string, count int, offset int) string {
 	if count > 0 {
 		sql = sql + " LIMIT " + strconv.Itoa(count)
@@ -269,6 +376,99 @@ func (a *MySQL) NextSequenceID(sequence string) int {
 // FormatDSN returns a formated dsn string
 func (a *MySQL) FormatDSN() string {
 	return a.driverConfig.FormatDSN()
+}
+
+// returns a value from pointer
+func (a *MySQL) dereference(v interface{}) interface{} {
+	switch t := v.(type) {
+	case *bool:
+		return *t
+	case *sql.NullBool:
+		return t.Bool
+	case *[]byte:
+		return string(*t)
+	case *string:
+		return *t
+	case *sql.NullString:
+		return t.String
+	case *int:
+		return *t
+	case *int8:
+		return *t
+	case *int16:
+		return *t
+	case *int32:
+		return *t
+	case *int64:
+		return *t
+	case *sql.NullInt64:
+		return t.Int64
+	case *float32:
+		return *t
+	case *float64:
+		return *t
+	case *sql.NullFloat64:
+		return t.Float64
+	case *time.Time:
+		return *t
+	case *mysql.NullTime:
+		return t.Time
+	default:
+		return nil
+	}
+}
+
+// creates a pointer to value
+func (a *MySQL) reference(tp reflect.Type) interface{} {
+	if tp == reflect.TypeOf(sql.NullBool{}) {
+		var v sql.NullBool
+		return &v
+	} else if tp == reflect.TypeOf(sql.NullInt64{}) {
+		var v sql.NullInt64
+		return &v
+	} else if tp == reflect.TypeOf(sql.NullFloat64{}) {
+		var v sql.NullFloat64
+		return &v
+	} else if tp == reflect.TypeOf(sql.NullString{}) {
+		var v sql.NullString
+		return &v
+	} else if tp == reflect.TypeOf(mysql.NullTime{}) {
+		var v mysql.NullTime
+		return &v
+	} else if tp == reflect.TypeOf(sql.RawBytes{}) {
+		var v []byte
+		return &v
+	} else if tp == reflect.TypeOf((int)(0)) {
+		var v int
+		return &v
+	} else if tp == reflect.TypeOf((int8)(0)) {
+		var v int8
+		return &v
+	} else if tp == reflect.TypeOf((int16)(0)) {
+		var v int16
+		return &v
+	} else if tp == reflect.TypeOf((int32)(0)) {
+		var v int32
+		return &v
+	} else if tp == reflect.TypeOf((int64)(0)) {
+		var v int64
+		return &v
+	} else if tp == reflect.TypeOf((float32)(0)) {
+		var v float32
+		return &v
+	} else if tp == reflect.TypeOf((float64)(0)) {
+		var v float64
+		return &v
+	} else if tp == reflect.TypeOf(time.Time{}) {
+		var v *time.Time
+		return &v
+	} else if tp == reflect.TypeOf(true) {
+		var v bool
+		return &v
+	} else {
+		var v string
+		return &v
+	}
 }
 
 // NewMySQLAdapter creates a new MySQL adapter

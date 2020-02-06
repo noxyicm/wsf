@@ -2,6 +2,7 @@ package log
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"wsf/config"
@@ -129,7 +130,7 @@ func (l *Log) SetTimestampFormat(format string) {
 }
 
 // Log a message at a priority
-func (l *Log) Log(message string, priority int, extras map[string]string) error {
+func (l *Log) Log(message interface{}, priority int, extras map[string]string) error {
 	if !l.enable {
 		return nil
 	}
@@ -163,88 +164,100 @@ func (l *Log) Log(message string, priority int, extras map[string]string) error 
 }
 
 // Logf logs a formated message at a priority
-func (l *Log) Logf(message string, priority int, extras map[string]string, f ...interface{}) error {
-	message = fmt.Sprintf(message, f...)
-	return l.Log(message, priority, extras)
+func (l *Log) Logf(message interface{}, priority int, extras map[string]string, f ...interface{}) error {
+	var m string
+	switch msg := message.(type) {
+	case string:
+		m = fmt.Sprintf(msg, f...)
+	case error:
+		m = fmt.Sprintf(fmt.Sprintf("%+s", msg), f...)
+		extras["stack"] = fmt.Sprintf(fmt.Sprintf("%+v", msg), f...)
+	case int:
+		m = fmt.Sprintf(strconv.Itoa(msg), f...)
+	default:
+		m = "--- bad message format ---"
+	}
+
+	return l.Log(m, priority, extras)
 }
 
 // Debug logs message at a debug priority
-func (l *Log) Debug(message string, extras map[string]string) error {
+func (l *Log) Debug(message interface{}, extras map[string]string) error {
 	return l.Log(message, DEBUG, extras)
 }
 
 // Debugf logs formated message at a debug priority
-func (l *Log) Debugf(message string, extras map[string]string, f ...interface{}) error {
+func (l *Log) Debugf(message interface{}, extras map[string]string, f ...interface{}) error {
 	return l.Logf(message, DEBUG, extras, f...)
 }
 
 // Info logs message at an info priority
-func (l *Log) Info(message string, extras map[string]string) error {
+func (l *Log) Info(message interface{}, extras map[string]string) error {
 	return l.Log(message, INFO, extras)
 }
 
 // Infof logs formated message at an info priority
-func (l *Log) Infof(message string, extras map[string]string, f ...interface{}) error {
+func (l *Log) Infof(message interface{}, extras map[string]string, f ...interface{}) error {
 	return l.Logf(message, INFO, extras, f...)
 }
 
 // Notice logs message at a notice priority
-func (l *Log) Notice(message string, extras map[string]string) error {
+func (l *Log) Notice(message interface{}, extras map[string]string) error {
 	return l.Log(message, NOTICE, extras)
 }
 
 // Noticef logs formated message at a notice priority
-func (l *Log) Noticef(message string, extras map[string]string, f ...interface{}) error {
+func (l *Log) Noticef(message interface{}, extras map[string]string, f ...interface{}) error {
 	return l.Logf(message, NOTICE, extras, f...)
 }
 
 // Warning logs message at a warning priority
-func (l *Log) Warning(message string, extras map[string]string) error {
+func (l *Log) Warning(message interface{}, extras map[string]string) error {
 	return l.Log(message, WARN, extras)
 }
 
 // Warningf logs formated message at a warning priority
-func (l *Log) Warningf(message string, extras map[string]string, f ...interface{}) error {
+func (l *Log) Warningf(message interface{}, extras map[string]string, f ...interface{}) error {
 	return l.Logf(message, WARN, extras, f...)
 }
 
 // Error logs message at an error priority
-func (l *Log) Error(message string, extras map[string]string) error {
+func (l *Log) Error(message interface{}, extras map[string]string) error {
 	return l.Log(message, ERR, extras)
 }
 
 // Errorf logs formated message at an error priority
-func (l *Log) Errorf(message string, extras map[string]string, f ...interface{}) error {
+func (l *Log) Errorf(message interface{}, extras map[string]string, f ...interface{}) error {
 	return l.Logf(message, ERR, extras, f...)
 }
 
 // Critical logs message at a critical priority
-func (l *Log) Critical(message string, extras map[string]string) error {
+func (l *Log) Critical(message interface{}, extras map[string]string) error {
 	return l.Log(message, CRIT, extras)
 }
 
 // Criticalf logs formated message at a critical priority
-func (l *Log) Criticalf(message string, extras map[string]string, f ...interface{}) error {
+func (l *Log) Criticalf(message interface{}, extras map[string]string, f ...interface{}) error {
 	return l.Logf(message, CRIT, extras, f...)
 }
 
 // Alert logs message at an alert priority
-func (l *Log) Alert(message string, extras map[string]string) error {
+func (l *Log) Alert(message interface{}, extras map[string]string) error {
 	return l.Log(message, ALERT, extras)
 }
 
 // Alertf logs formated message at an alert priority
-func (l *Log) Alertf(message string, extras map[string]string, f ...interface{}) error {
+func (l *Log) Alertf(message interface{}, extras map[string]string, f ...interface{}) error {
 	return l.Logf(message, ALERT, extras, f...)
 }
 
 // Emergency logs message at an emergency priority
-func (l *Log) Emergency(message string, extras map[string]string) error {
+func (l *Log) Emergency(message interface{}, extras map[string]string) error {
 	return l.Log(message, EMERG, extras)
 }
 
 // Emergencyf logs formated message at an emergency priority
-func (l *Log) Emergencyf(message string, extras map[string]string, f ...interface{}) error {
+func (l *Log) Emergencyf(message interface{}, extras map[string]string, f ...interface{}) error {
 	return l.Logf(message, EMERG, extras, f...)
 }
 
@@ -255,18 +268,30 @@ func (l *Log) Destroy() {
 	}
 }
 
-func (l *Log) packEvent(message string, priority int) (*event.Event, error) {
+func (l *Log) packEvent(message interface{}, priority int) (*event.Event, error) {
 	if _, ok := l.priorities[priority]; !ok {
 		return nil, errors.New("Bad log priority")
 	}
 
 	e := &event.Event{
 		Timestamp:    time.Now().Format(l.timestampFormat),
-		Message:      message,
 		Priority:     priority,
 		PriorityName: l.priorities[priority],
 		Info:         make(map[string]string),
 	}
+
+	switch msg := message.(type) {
+	case string:
+		e.Message = msg
+	case error:
+		e.Message = fmt.Sprintf("%+s", msg)
+		e.Info["stack"] = fmt.Sprintf("%+v", msg)
+	case int:
+		e.Message = strconv.Itoa(msg)
+	default:
+		e.Message = "--- bad message format ---"
+	}
+
 	return e, nil
 }
 

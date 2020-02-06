@@ -99,5 +99,7 @@ func (s *Service) handleStatic(w http.ResponseWriter, r *http.Request) bool {
 
 // NewService creates a new service of type Static
 func NewService(options config.Config) (service.Interface, error) {
-	return &Service{priority: 2}, nil
+	return &Service{
+		priority: 2,
+	}, nil
 }

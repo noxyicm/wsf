@@ -47,6 +47,7 @@ type Config interface {
 	GetBoolDefault(key string, def bool) bool
 	GetKeys() []string
 	GetAll() map[string]interface{}
+	Set(key string, value interface{}) error
 	Merge(map[string]interface{}) error
 	Unmarshal(out interface{}) error
 }
@@ -94,7 +95,7 @@ func (c *Bridge) GetIntDefault(key string, def int) int {
 		return def
 	}
 
-	return v.(int)
+	return c.v.GetInt(key)
 }
 
 // GetString returns a string value
@@ -109,7 +110,7 @@ func (c *Bridge) GetStringDefault(key string, def string) string {
 		return def
 	}
 
-	return str.(string)
+	return c.v.GetString(key)
 }
 
 // GetBool returns a boolean value
@@ -124,7 +125,7 @@ func (c *Bridge) GetBoolDefault(key string, def bool) bool {
 		return def
 	}
 
-	return b.(bool)
+	return c.v.GetBool(key)
 }
 
 // GetKeys returns config keys

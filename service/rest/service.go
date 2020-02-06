@@ -348,7 +348,10 @@ func (s *Service) tlsAddr(host string, forcePort bool) string {
 
 // NewService creates a new service of type HTTP
 func NewService(cfg config.Config) (service.Interface, error) {
-	return &Service{serving: false, priority: 6}, nil
+	return &Service{
+		serving:  false,
+		priority: 6,
+	}, nil
 }
 
 type restService struct {

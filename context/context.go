@@ -2,6 +2,7 @@ package context
 
 import (
 	"context"
+	"sync"
 	"time"
 	"wsf/controller/request"
 	"wsf/controller/response"
@@ -43,24 +44,25 @@ type DefaultContext struct {
 	cancel   context.CancelFunc
 	request  request.Interface
 	response response.Interface
+	mu       sync.Mutex
 }
 
 // WithCancel returns a new context with cancel function
 func WithCancel(parent Context) (ctx Context, cancelFunc context.CancelFunc) {
 	c, cFunc := context.WithCancel(parent)
-	return c.(Context), cFunc
+	return &DefaultContext{context: c, cancel: cFunc}, cFunc
 }
 
 // WithDeadline returns a new context with deadline and cancel function
 func WithDeadline(parent Context, d time.Time) (ctx Context, cancelFunc context.CancelFunc) {
 	c, cFunc := context.WithDeadline(parent, d)
-	return c.(Context), cFunc
+	return &DefaultContext{context: c, cancel: cFunc}, cFunc
 }
 
 // WithTimeout returns a new context with timeout and cancel function
 func WithTimeout(parent Context, timeout time.Duration) (ctx Context, cancelFunc context.CancelFunc) {
 	c, cFunc := context.WithTimeout(parent, timeout)
-	return c.(Context), cFunc
+	return &DefaultContext{context: c, cancel: cFunc}, cFunc
 }
 
 // Background returns not-nil, empty context
@@ -75,6 +77,12 @@ func (c *DefaultContext) Deadline() (deadline time.Time, ok bool) {
 
 // Done is part of context.Context interface
 func (c *DefaultContext) Done() <-chan struct{} {
+	select {
+	default:
+	case <-c.context.Done():
+		return c.context.Done()
+	}
+
 	return c.context.Done()
 }
 

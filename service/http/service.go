@@ -63,6 +63,7 @@ type Service struct {
 	http         *http.Server
 	https        *http.Server
 	signalChan   chan os.Signal
+	externalChan chan interface{}
 	priority     int
 }
 
@@ -252,5 +253,8 @@ func (s *Service) tlsAddr(host string, forcePort bool) string {
 
 // NewService creates a new service of type HTTP
 func NewService(cfg config.Config) (service.Interface, error) {
-	return &Service{serving: false, priority: 0}, nil
+	return &Service{
+		serving:  false,
+		priority: 0,
+	}, nil
 }

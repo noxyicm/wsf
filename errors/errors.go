@@ -10,8 +10,7 @@ import (
 )
 
 type prettyerror struct {
-	msg   string
-	cause error
+	msg string
 	*stack
 }
 
@@ -26,10 +25,6 @@ func (p *prettyerror) Format(s fmt.State, verb rune) {
 	case 'v':
 		if s.Flag('+') {
 			io.WriteString(s, p.msg)
-			if p.cause != nil {
-				io.WriteString(s, ": "+p.cause.Error())
-			}
-
 			p.stack.Format(s, verb)
 			return
 		}
@@ -37,25 +32,49 @@ func (p *prettyerror) Format(s fmt.State, verb rune) {
 	case 's':
 		if s.Flag('+') {
 			io.WriteString(s, p.msg)
-			if p.cause != nil {
-				io.WriteString(s, ": "+p.cause.Error())
-			}
-
 			p.stack.Format(s, verb)
 			return
 		}
 
 		io.WriteString(s, p.msg)
-		if p.cause != nil {
-			io.WriteString(s, ": "+p.cause.Error())
-		}
 	case 'q':
-		if p.cause != nil {
-			fmt.Fprintf(s, "%q", p.msg+": "+p.cause.Error())
+		fmt.Fprintf(s, "%q", p.msg)
+	}
+}
+
+type wrappederror struct {
+	msg   string
+	cause error
+	*stack
+}
+
+// Error returns error message
+func (w *wrappederror) Error() string {
+	return w.msg + ": " + w.cause.Error()
+}
+
+func (w *wrappederror) Cause() error { return w.cause }
+
+// Format formats error
+func (w *wrappederror) Format(s fmt.State, verb rune) {
+	switch verb {
+	case 'v':
+		if s.Flag('+') {
+			io.WriteString(s, w.msg+": "+w.cause.Error())
+			w.stack.Format(s, verb)
+			return
+		}
+		fallthrough
+	case 's':
+		if s.Flag('+') {
+			io.WriteString(s, w.msg+": "+w.cause.Error())
+			w.stack.Format(s, verb)
 			return
 		}
 
-		fmt.Fprintf(s, "%q", p.msg)
+		io.WriteString(s, w.msg+": "+w.cause.Error())
+	case 'q':
+		fmt.Fprintf(s, "%q", w.msg+": "+w.cause.Error())
 	}
 }
 
@@ -119,7 +138,7 @@ func Wrap(err error, message string) error {
 		return nil
 	}
 
-	return &prettyerror{
+	return &wrappederror{
 		cause: err,
 		msg:   message,
 		stack: callers(),
@@ -134,7 +153,7 @@ func Wrapf(err error, format string, args ...interface{}) error {
 		return nil
 	}
 
-	return &prettyerror{
+	return &wrappederror{
 		cause: err,
 		msg:   fmt.Sprintf(format, args...),
 		stack: callers(),

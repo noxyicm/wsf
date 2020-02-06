@@ -8,6 +8,7 @@ import (
 	"wsf/errors"
 	"wsf/registry"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/mitchellh/mapstructure"
 )
 
@@ -36,7 +37,7 @@ type Row interface {
 	GetTime(key string) time.Time
 	Unmarshal(output interface{}) error
 	Populate(data map[string]interface{})
-	Prepare(row []sql.RawBytes, columns []*sql.ColumnType) error
+	Prepare(row *RowData) error
 	SetTable(table Table) error
 	Table() Table
 	IsEmpty() bool
@@ -165,10 +166,15 @@ func (r *DefaultRow) Populate(data map[string]interface{}) {
 }
 
 // Prepare initializes row
-func (r *DefaultRow) Prepare(row []sql.RawBytes, columns []*sql.ColumnType) (err error) {
-	if r.Data, err = PrepareRow(row, columns); err != nil {
-		return err
+func (r *DefaultRow) Prepare(row *RowData) (err error) {
+	if r.Tbl == nil {
+		return errors.New("DB.Row table reference must be set before prepare")
 	}
+
+	//if r.Data, err = PrepareRow(row, columns); err != nil {
+	//if r.Data, err = r.Tbl.GetAdapter().PrepareRow(row.Columns()); err != nil {
+	//	return err
+	//}
 
 	return nil
 }
@@ -293,6 +299,17 @@ func PrepareRow(row []sql.RawBytes, columns []*sql.ColumnType) (data map[string]
 					data[columns[i].Name()] = v.String
 				} else {
 					data[columns[i].Name()] = ""
+				}
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf(sql.NullTime{}) || columns[i].ScanType() == reflect.TypeOf(mysql.NullTime{}) {
+			v := sql.NullTime{}
+			v.Scan(string(col))
+			if v.Valid {
+				if v.Valid {
+					t := v.Time
+					data[columns[i].Name()] = t.Local()
+				} else {
+					data[columns[i].Name()] = time.Time{}
 				}
 			}
 		} else if columns[i].ScanType() == reflect.TypeOf(sql.RawBytes{}) {

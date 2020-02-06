@@ -181,14 +181,10 @@ func (a *Cockroach) GetOptions() *AdapterConfig {
 }
 
 // Select creates a new adapter specific select object
-func (a *Cockroach) Select() (Select, error) {
-	sel, err := NewSelectFromConfig(Options().Select)
-	if err != nil {
-		return nil, err
-	}
-
+func (a *Cockroach) Select() Select {
+	sel := NewSelectFromConfig(Options().Select)
 	sel.SetAdapter(a)
-	return sel, nil
+	return sel
 }
 
 // Insert inserts new row into table
@@ -383,10 +379,9 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 		return nil, errors.Wrap(err, "CockroachDB Error")
 	}
 
-	values := make([]sql.RawBytes, len(columns))
-	scanArgs := make([]interface{}, len(values))
-	for i := range values {
-		scanArgs[i] = &values[i]
+	scanArgs := make([]interface{}, len(columns))
+	for i := range columns {
+		scanArgs[i] = a.reference(columns[i].ScanType())
 	}
 
 	desc := make(map[string]*TableColumn)
@@ -395,9 +390,9 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 			return nil, errors.Wrap(err, "CockroachDB Error")
 		}
 
-		d, err := PrepareRow(values, columns)
-		if err != nil {
-			return nil, errors.Wrap(err, "CockroachDB Error")
+		d := make(map[string]interface{})
+		for i := range columns {
+			d[columns[i].Name()] = a.dereference(scanArgs[i])
 		}
 
 		row := &TableColumn{
@@ -457,10 +452,9 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 		return nil, errors.Wrap(err, "CockroachDB Error")
 	}
 
-	values = make([]sql.RawBytes, len(columns))
-	scanArgs = make([]interface{}, len(values))
-	for i := range values {
-		scanArgs[i] = &values[i]
+	scanArgs = make([]interface{}, len(columns))
+	for i := range columns {
+		scanArgs[i] = a.reference(columns[i].ScanType())
 	}
 
 	var i int64
@@ -469,9 +463,9 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 			return nil, errors.Wrap(err, "CockroachDB Error")
 		}
 
-		d, err := PrepareRow(values, columns)
-		if err != nil {
-			return nil, errors.Wrap(err, "CockroachDB Error")
+		d := make(map[string]interface{})
+		for i := range columns {
+			d[columns[i].Name()] = a.dereference(scanArgs[i])
 		}
 
 		if d["constraint_name"].(string) == "primary" {

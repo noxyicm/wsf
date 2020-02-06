@@ -163,5 +163,8 @@ func (s *Service) Dialer() (net.Conn, error) {
 
 // NewService creates a new service of type RPC
 func NewService(options config.Config) (service.Interface, error) {
-	return &Service{serving: false, priority: 1}, nil
+	return &Service{
+		serving:  false,
+		priority: 1,
+	}, nil
 }

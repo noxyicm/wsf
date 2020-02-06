@@ -55,16 +55,21 @@ func (c *Cipher) DecodeString(s string) (string, error) {
 }
 
 // Encode encrypts bytes array
-func (c *Cipher) Encode(encoding []byte) ([]byte, error) {
+func (c *Cipher) Encode(encoding []byte, useiv bool) ([]byte, error) {
 	block, err := aes.NewCipher(c.key)
 	if err != nil {
 		return nil, err
 	}
 
 	ciphertext := make([]byte, aes.BlockSize+len(encoding))
-	iv := ciphertext[:aes.BlockSize]
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		return nil, err
+	var iv []byte
+	if useiv {
+		iv = ciphertext[:aes.BlockSize]
+		if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+			return nil, err
+		}
+	} else {
+		iv = make([]byte, 0)
 	}
 
 	stream := cipher.NewCTR(block, iv)
@@ -73,16 +78,21 @@ func (c *Cipher) Encode(encoding []byte) ([]byte, error) {
 }
 
 // Decode decrypts bytes array
-func (c *Cipher) Decode(encoding []byte) ([]byte, error) {
+func (c *Cipher) Decode(encoding []byte, useiv bool) ([]byte, error) {
 	block, err := aes.NewCipher(c.key)
 	if err != nil {
 		return nil, err
 	}
 
 	ciphertext := make([]byte, aes.BlockSize+len(encoding))
-	iv := ciphertext[:aes.BlockSize]
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		return nil, err
+	var iv []byte
+	if useiv {
+		iv = ciphertext[:aes.BlockSize]
+		if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+			return nil, err
+		}
+	} else {
+		iv = make([]byte, 0)
 	}
 
 	result := make([]byte, len(encoding))
@@ -116,4 +126,52 @@ func NewCipher(key []byte) (*Cipher, error) {
 	return &Cipher{
 		key: key,
 	}, nil
+}
+
+// Encode encrypts bytes array
+func Encode(encoding []byte, key []byte, useiv bool) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	ciphertext := make([]byte, aes.BlockSize+len(encoding))
+	var iv []byte
+	if useiv {
+		iv = ciphertext[:aes.BlockSize]
+		if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+			return nil, err
+		}
+	} else {
+		iv = make([]byte, 0)
+	}
+
+	stream := cipher.NewCTR(block, iv)
+	stream.XORKeyStream(ciphertext[aes.BlockSize:], encoding)
+	return ciphertext, nil
+}
+
+// Decode decrypts bytes array
+func Decode(encoding []byte, key []byte, useiv bool) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	ciphertext := make([]byte, aes.BlockSize+len(encoding))
+	var iv []byte
+	if useiv {
+		iv = ciphertext[:aes.BlockSize]
+		if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+			return nil, err
+		}
+	} else {
+		iv = make([]byte, 0)
+	}
+
+	result := make([]byte, len(encoding))
+	stream := cipher.NewCTR(block, iv)
+	stream.XORKeyStream(result, ciphertext[aes.BlockSize:])
+
+	return result, nil
 }

@@ -4,6 +4,8 @@ import (
 	goctx "context"
 	"database/sql"
 	"fmt"
+	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -37,9 +39,18 @@ type Adapter interface {
 	Context() context.Context
 	SetContext(ctx context.Context) error
 	Connection(ctx context.Context) (Connection, error)
-	Select() (Select, error)
-	Query(ctx context.Context, sql Select) (Rowset, error)
-	QueryRow(ctx context.Context, sql Select) (Row, error)
+	Select() Select
+	//Query(ctx context.Context, sql Select) (Rowset, error)
+	Query(ctx context.Context, sql Select) ([]map[string]interface{}, error)
+	QueryInto(ctx context.Context, dbs Select, o interface{}) ([]interface{}, error)
+	//QueryRow(ctx context.Context, sql Select) (Row, error)
+	QueryRow(ctx context.Context, sql Select) (map[string]interface{}, error)
+	//PrepareRowset(rows *sql.Rows) ([]map[string]interface{}, error)
+	PrepareRowset(rows *sql.Rows) ([]map[string]interface{}, error)
+	//PrepareRow(row []sql.RawBytes, columns []*sql.ColumnType) (data map[string]interface{}, err error)
+	PrepareRow(rows *sql.Rows) (map[string]interface{}, error)
+	//PrepareRow(row *sql.Row) (*RowData, error)
+	//PrepareRow(row []*ColumnData) (map[string]interface{}, error)
 	//Profiler()
 	Insert(ctx context.Context, table string, data map[string]interface{}) (int, error)
 	Update(ctx context.Context, table string, data map[string]interface{}, cond map[string]interface{}) (bool, error)
@@ -138,17 +149,17 @@ func (a *DefaultAdapter) Connection(ctx context.Context) (conn Connection, err e
 }
 
 // Query runs a query
-func (a *DefaultAdapter) Query(ctx context.Context, dbs Select) (Rowset, error) {
+func (a *DefaultAdapter) Query(ctx context.Context, dbs Select) ([]map[string]interface{}, error) {
 	if a.Db == nil {
 		return nil, errors.New("Database is not initialized")
 	}
 
-	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
-	defer cancel()
-
 	if err := dbs.Err(); err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
+
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	defer cancel()
 
 	rows, err := a.Db.QueryContext(qctx, dbs.Assemble(), dbs.Binds()...)
 	if err != nil {
@@ -156,35 +167,92 @@ func (a *DefaultAdapter) Query(ctx context.Context, dbs Select) (Rowset, error) 
 	}
 	defer rows.Close()
 
-	rstConfig, ok := ctx.Value(context.RowsetConfigKey).(*RowsetConfig)
-	if !ok {
-		rstConfig = Options().Rowset
+	return a.PrepareRowset(rows)
+}
+
+// QueryInto runs a query and returns sql.Rows
+func (a *DefaultAdapter) QueryInto(ctx context.Context, dbs Select, o interface{}) ([]interface{}, error) {
+	if a.Db == nil {
+		return nil, errors.New("Database is not initialized")
 	}
 
-	rst, err := NewRowset(rstConfig.Type, rstConfig)
+	if err := dbs.Err(); err != nil {
+		return nil, errors.Wrap(err, "Database query Error")
+	}
+
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	defer cancel()
+
+	rows, err := a.Db.QueryContext(qctx, dbs.Assemble(), dbs.Binds()...)
 	if err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
 
-	if err := rst.Prepare(rows); err != nil {
-		return nil, errors.Wrap(err, "Database query Error")
+	t := reflect.TypeOf(o)
+	var v reflect.Value
+	if t.Kind() == reflect.Ptr {
+		v = reflect.ValueOf(t.Elem()).Elem()
+	} else if t.Kind() == reflect.Struct {
+		v = reflect.New(t)
+	} else {
+		return nil, errors.New("Nope")
 	}
 
-	return rst, nil
+	columns, err := rows.Columns()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(2)
+		return nil, err
+	}
+
+	rt := make([]interface{}, 0)
+	for rows.Next() {
+		values, err := a.resolveValues(columns, v.Elem())
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(2)
+			return nil, err
+		}
+
+		if err := rows.Scan(values...); err != nil {
+			fmt.Println(err)
+			os.Exit(2)
+		}
+
+		ptr := v.Interface()
+		rt = append(rt, ptr)
+	}
+	return rt, nil
+}
+
+// resolveValues returns slice of call arguments for service Init method
+func (a *DefaultAdapter) resolveValues(columns []string, o reflect.Value) (values []interface{}, err error) {
+	values = make([]interface{}, len(columns))
+	var valueField reflect.Value
+	for i := range columns {
+		if columns[i] == "id" {
+			valueField = o.FieldByName("ID")
+		} else {
+			valueField = o.FieldByName(strings.ToTitle(columns[i][:1]) + columns[i][1:])
+		}
+		//valueField := o.FieldByName(columns[i])
+		values[i] = valueField.Addr().Interface()
+	}
+	return
 }
 
 // QueryRow runs a query
-func (a *DefaultAdapter) QueryRow(ctx context.Context, dbs Select) (Row, error) {
+func (a *DefaultAdapter) QueryRow(ctx context.Context, dbs Select) (map[string]interface{}, error) {
 	if a.Db == nil {
 		return nil, errors.New("Database is not initialized")
 	}
 
-	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
-	defer cancel()
-
 	if err := dbs.Err(); err != nil {
 		return nil, errors.Wrap(err, "Database query Error")
 	}
+
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	defer cancel()
 
 	rows, err := a.Db.QueryContext(qctx, dbs.Assemble(), dbs.Binds()...)
 	if err != nil {
@@ -192,45 +260,7 @@ func (a *DefaultAdapter) QueryRow(ctx context.Context, dbs Select) (Row, error) 
 	}
 	defer rows.Close()
 
-	columns, err := rows.ColumnTypes()
-	if err != nil {
-		return nil, errors.Wrap(err, "Database query Error")
-	}
-
-	values := make([]sql.RawBytes, len(columns))
-	scanArgs := make([]interface{}, len(values))
-	for i := range values {
-		scanArgs[i] = &values[i]
-	}
-
-	for rows.Next() {
-		err = rows.Scan(scanArgs...)
-		if err != nil {
-			return nil, err
-		}
-
-		rwConfig, ok := ctx.Value(context.RowConfigKey).(*RowConfig)
-		if !ok {
-			rwConfig = Options().Row
-		}
-
-		rw, err := NewRow(rwConfig.Type, rwConfig)
-		if err != nil {
-			return nil, errors.Wrap(err, "Database query Error")
-		}
-
-		if err := rw.Prepare(values, columns); err != nil {
-			return nil, err
-		}
-
-		return rw, nil
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "Database query Error")
-	}
-
-	return nil, nil
+	return a.PrepareRow(rows)
 }
 
 // Insert inserts new row into table
@@ -480,8 +510,26 @@ func (a *DefaultAdapter) Quote(value interface{}) string {
 
 		return strings.Join(sl, ", ")
 
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+	case int:
 		return strconv.Itoa(value.(int))
+	case int8:
+		return strconv.Itoa(int(value.(int8)))
+	case int16:
+		return strconv.Itoa(int(value.(int16)))
+	case int32:
+		return strconv.Itoa(int(value.(int32)))
+	case int64:
+		return strconv.Itoa(int(value.(int64)))
+	case uint:
+		return strconv.Itoa(int(value.(uint)))
+	case uint8:
+		return strconv.Itoa(int(value.(uint8)))
+	case uint16:
+		return strconv.Itoa(int(value.(uint16)))
+	case uint32:
+		return strconv.Itoa(int(value.(uint32)))
+	case uint64:
+		return strconv.Itoa(int(value.(uint64)))
 
 	case float32:
 		return fmt.Sprintf("%f", value.(float32))
@@ -660,6 +708,196 @@ func (a *DefaultAdapter) FoldCase(s string) string {
 	return s
 }
 
+// PrepareRowset parses sql.Rows into mapstructure slice
+func (a *DefaultAdapter) PrepareRowset(rows *sql.Rows) ([]map[string]interface{}, error) {
+	columns, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, errors.Wrap(err, "Database prepare result Error")
+	}
+
+	scanArgs := make([]interface{}, len(columns))
+	for i := range columns {
+		scanArgs[i] = a.reference(columns[i].ScanType())
+	}
+
+	data := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		if err = rows.Scan(scanArgs...); err != nil {
+			return nil, err
+		}
+
+		rowdata := make(map[string]interface{})
+		for i := range columns {
+			rowdata[columns[i].Name()] = a.dereference(scanArgs[i])
+		}
+		data = append(data, rowdata)
+	}
+
+	if err := rows.Err(); err != nil {
+		if err == sql.ErrNoRows {
+			return data, nil
+		}
+
+		return nil, errors.Wrap(err, "Database prepare result Error")
+	}
+
+	return data, nil
+}
+
+// PrepareRow parses a RawBytes into map structure
+func (a *DefaultAdapter) PrepareRow(rows *sql.Rows) (map[string]interface{}, error) {
+	columns, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, errors.Wrap(err, "Database prepare result error")
+	}
+
+	scanArgs := make([]interface{}, len(columns))
+	for i := range columns {
+		scanArgs[i] = a.reference(columns[i].ScanType())
+	}
+
+	data := make(map[string]interface{})
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, errors.Wrap(err, "Database prepare result error")
+		}
+
+		return nil, nil
+	}
+
+	if err = rows.Scan(scanArgs...); err != nil {
+		return nil, errors.Wrap(err, "Database prepare result error")
+	}
+
+	for i := range columns {
+		data[columns[i].Name()] = a.dereference(scanArgs[i])
+	}
+
+	return data, nil
+}
+
+// PrepareRow parses a RawBytes into map structure
+/*func (a *DefaultAdapter) PrepareRow(row []sql.RawBytes, columns []*sql.ColumnType) (data map[string]interface{}, err error) {
+	err = nil
+	data = make(map[string]interface{})
+	for i, col := range row {
+		if columns[i].ScanType() == reflect.TypeOf(sql.NullBool{}) {
+			v := sql.NullBool{}
+			v.Scan(string(col))
+			if v.Valid {
+				if v.Valid {
+					data[columns[i].Name()] = v.Bool
+				} else {
+					data[columns[i].Name()] = false
+				}
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf(sql.NullInt64{}) {
+			v := sql.NullInt64{}
+			v.Scan(string(col))
+			if v.Valid {
+				if v.Valid {
+					data[columns[i].Name()] = v.Int64
+				} else {
+					data[columns[i].Name()] = 0
+				}
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf(sql.NullFloat64{}) {
+			v := sql.NullFloat64{}
+			v.Scan(string(col))
+			if v.Valid {
+				if v.Valid {
+					data[columns[i].Name()] = v.Float64
+				} else {
+					data[columns[i].Name()] = 0.0
+				}
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf(sql.NullString{}) {
+			v := sql.NullString{}
+			v.Scan(string(col))
+			if v.Valid {
+				if v.Valid {
+					data[columns[i].Name()] = v.String
+				} else {
+					data[columns[i].Name()] = ""
+				}
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf(sql.NullTime{}) {
+			v := sql.NullTime{}
+			v.Scan(string(col))
+			if v.Valid {
+				if v.Valid {
+					t := v.Time
+					data[columns[i].Name()] = t.Local()
+				} else {
+					data[columns[i].Name()] = time.Time{}
+				}
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf(sql.RawBytes{}) {
+			data[columns[i].Name()] = string(col)
+		} else if columns[i].ScanType() == reflect.TypeOf((int)(0)) {
+			if len(col) == 0 {
+				data[columns[i].Name()] = 0
+			} else {
+				data[columns[i].Name()], err = strconv.ParseInt(string(col), 10, 0)
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf((int8)(0)) {
+			if len(col) == 0 {
+				data[columns[i].Name()] = int8(0)
+			} else {
+				data[columns[i].Name()], err = strconv.ParseInt(string(col), 10, 8)
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf((int16)(0)) {
+			if len(col) == 0 {
+				data[columns[i].Name()] = int16(0)
+			} else {
+				data[columns[i].Name()], err = strconv.ParseInt(string(col), 10, 16)
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf((int32)(0)) {
+			if len(col) == 0 {
+				data[columns[i].Name()] = int32(0)
+			} else {
+				data[columns[i].Name()], err = strconv.ParseInt(string(col), 10, 32)
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf((int64)(0)) {
+			if len(col) == 0 {
+				data[columns[i].Name()] = int64(0)
+			} else {
+				data[columns[i].Name()], err = strconv.ParseInt(string(col), 10, 64)
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf((float32)(0)) {
+			if len(col) == 0 {
+				data[columns[i].Name()] = float32(0)
+			} else {
+				data[columns[i].Name()], err = strconv.ParseFloat(string(col), 32)
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf((float64)(0)) {
+			if len(col) == 0 {
+				data[columns[i].Name()] = float64(0)
+			} else {
+				data[columns[i].Name()], err = strconv.ParseFloat(string(col), 64)
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf(time.Time{}) {
+			if string(col) == "" {
+				data[columns[i].Name()] = time.Time{}
+			} else {
+				var t time.Time
+				t, err = time.Parse("2006-01-02T15:04:05Z", string(col))
+				data[columns[i].Name()] = t.Local()
+			}
+		} else if columns[i].ScanType() == reflect.TypeOf(true) {
+			data[columns[i].Name()], err = strconv.ParseBool(string(col))
+		} else {
+			data[columns[i].Name()] = string(col)
+		}
+
+		if err != nil {
+			return data, err
+		}
+	}
+
+	return data, err
+}*/
+
 // quotes identifier
 func (a *DefaultAdapter) quoteIdentifier(ident string, auto bool) string {
 	if !auto || a.AutoQuoteIdentifiers {
@@ -732,4 +970,95 @@ func (a *DefaultAdapter) whereExpr(cond interface{}) string {
 	}
 
 	return strings.Join(where, " AND ")
+}
+
+// returns a value from pointer
+func (a *DefaultAdapter) dereference(v interface{}) interface{} {
+	switch t := v.(type) {
+	case *bool:
+		return *t
+	case *sql.NullBool:
+		return t.Bool
+	case *[]byte:
+		return string(*t)
+	case *string:
+		return *t
+	case *sql.NullString:
+		return t.String
+	case *int:
+		return *t
+	case *int8:
+		return *t
+	case *int16:
+		return *t
+	case *int32:
+		return *t
+	case *int64:
+		return *t
+	case *sql.NullInt64:
+		return t.Int64
+	case *float32:
+		return *t
+	case *float64:
+		return *t
+	case *sql.NullFloat64:
+		return t.Float64
+	case *time.Time:
+		return *t
+	default:
+		return nil
+	}
+}
+
+// creates a pointer to value
+func (a *DefaultAdapter) reference(tp reflect.Type) interface{} {
+	if tp == reflect.TypeOf(sql.NullBool{}) {
+		var v sql.NullBool
+		return &v
+	} else if tp == reflect.TypeOf(sql.NullInt64{}) {
+		var v sql.NullInt64
+		return &v
+	} else if tp == reflect.TypeOf(sql.NullFloat64{}) {
+		var v sql.NullFloat64
+		return &v
+	} else if tp == reflect.TypeOf(sql.NullString{}) {
+		var v sql.NullString
+		return &v
+	} else if tp == reflect.TypeOf(sql.NullTime{}) {
+		var v time.Time
+		return &v
+	} else if tp == reflect.TypeOf(sql.RawBytes{}) {
+		var v []byte
+		return &v
+	} else if tp == reflect.TypeOf((int)(0)) {
+		var v int
+		return &v
+	} else if tp == reflect.TypeOf((int8)(0)) {
+		var v int8
+		return &v
+	} else if tp == reflect.TypeOf((int16)(0)) {
+		var v int16
+		return &v
+	} else if tp == reflect.TypeOf((int32)(0)) {
+		var v int32
+		return &v
+	} else if tp == reflect.TypeOf((int64)(0)) {
+		var v int64
+		return &v
+	} else if tp == reflect.TypeOf((float32)(0)) {
+		var v float32
+		return &v
+	} else if tp == reflect.TypeOf((float64)(0)) {
+		var v float64
+		return &v
+	} else if tp == reflect.TypeOf(time.Time{}) {
+		var v time.Time
+		return &v
+	} else if tp == reflect.TypeOf(true) {
+		var v bool
+		return &v
+	} else {
+		var v string
+		return &v
+	}
 }

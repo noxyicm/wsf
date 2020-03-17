@@ -23,7 +23,7 @@ type ManagerConfig struct {
 	Strict                  bool                `json:"strict"`
 	Storage                 config.Config       `json:"storage"`
 	Session                 config.Config       `json:"session"`
-	Valds                   []*validator.Config `json:"valds"`
+	Valds                   []*validator.Config `json:"validators"`
 }
 
 // Populate populates Config values using given Config source
@@ -66,6 +66,7 @@ func (c *ManagerConfig) Defaults() error {
 	c.Type = "default"
 	c.Priority = 15
 	c.SessionName = "WSFSESS"
+	c.EnableSetCookie = true
 	c.SessionIDLength = 16
 	c.SessionLifeTime = 900
 	c.Valds = make([]*validator.Config, 0)

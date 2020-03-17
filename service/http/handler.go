@@ -106,6 +106,7 @@ func (h *Handler) handleError(w http.ResponseWriter, r *http.Request, err error,
 
 // handleResponse triggers response event
 func (h *Handler) handleResponse(req request.Interface, rsp response.Interface, err error, start time.Time) {
+	//rsp.WriteCookies()
 	for hdr, val := range h.options.Headers {
 		rsp.SetHeader(hdr, val)
 	}

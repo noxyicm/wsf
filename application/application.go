@@ -2,7 +2,7 @@ package application
 
 import (
 	"os"
-	"strings"
+	"path/filepath"
 	"sync"
 	"wsf/application/bootstrap"
 	"wsf/config"
@@ -106,27 +106,31 @@ func (a *Application) throw(event int, ctx interface{}) {
 
 // SetRootPath sets a root path of application
 func SetRootPath(path string) {
-	config.AppRootPath = path
+	config.AppRootPath = filepath.FromSlash(path)
 }
 
 // SetAppPath sets a application path
-func SetAppPath(path string) {
-	config.AppPath = path
+func SetAppPath(path string) error {
+	config.AppPath = filepath.Join(config.AppRootPath, filepath.FromSlash(path))
+	return nil
 }
 
 // SetBasePath sets the absolute path to the app
-func SetBasePath(path string) {
-	config.BasePath = path
+func SetBasePath(path string) error {
+	config.BasePath = filepath.Join(config.AppRootPath, filepath.FromSlash(path))
+	return nil
 }
 
 // SetStaticPath sets an application static folder path
-func SetStaticPath(path string) {
-	config.StaticPath = path
+func SetStaticPath(path string) error {
+	config.StaticPath = filepath.Join(config.AppRootPath, filepath.FromSlash(path))
+	return nil
 }
 
 // SetCachePath sets an application cache folder path
-func SetCachePath(path string) {
-	config.CachePath = path
+func SetCachePath(path string) error {
+	config.CachePath = filepath.Join(config.AppRootPath, filepath.FromSlash(path))
+	return nil
 }
 
 // NewApplication Creates new Application struct
@@ -157,20 +161,19 @@ func NewApplication(environment string, options interface{}, override []string) 
 	app.logger = lg
 
 	var cfg config.Config
-	switch options.(type) {
+	switch o := options.(type) {
 	case string:
-		pathParts := strings.Split(options.(string), "/")
-		dir := strings.Join(pathParts[:len(pathParts)-1], "/")
-		fileParts := strings.Split(pathParts[len(pathParts)-1], ".")
-		filename := strings.Join(fileParts[:len(fileParts)-1], ".")
-		cfg, err = config.LoadConfig(options.(string), []string{dir}, filename, override)
+		dir := filepath.Dir(filepath.FromSlash(o))
+		filename := filepath.Base(o)
+		filename = filename[:len(filename)-len(filepath.Ext(filename))]
+		cfg, err = config.LoadConfig(o, []string{dir}, filename, override)
 
 	case map[string]interface{}:
 		err = errors.New("Unsupported yet")
 		//cfg, err = config.NewConfig(options.(map[string]interface{}), false)
 
 	case config.Config:
-		cfg = options.(config.Config)
+		cfg = o
 
 	default:
 		err = errors.New("Invalid options provided; must be location of config file or config object")
@@ -192,11 +195,18 @@ func NewApplication(environment string, options interface{}, override []string) 
 
 	config.AppEnv = acfg.Environment
 	SetRootPath(acfg.RootPath)
-	SetAppPath(acfg.AppPath)
-	SetBasePath(acfg.BasePath)
-	SetStaticPath(acfg.StaticPath)
 	err = os.Chdir(acfg.RootPath)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := SetAppPath(acfg.AppPath); err != nil {
+		return nil, err
+	}
+	if err := SetBasePath(acfg.BasePath); err != nil {
+		return nil, err
+	}
+	if err := SetStaticPath(acfg.StaticPath); err != nil {
 		return nil, err
 	}
 

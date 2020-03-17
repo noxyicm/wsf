@@ -8,7 +8,10 @@ import (
 type WorkerConfig struct {
 	Instances             int64
 	Precicion             int64
+	MaxTasks              int
 	MaxConsequetiveErrors int
+	Persistent            bool
+	AutoStart             bool
 }
 
 // Populate must populate Config values using given Config source. Must return error if Config is not valid
@@ -24,7 +27,10 @@ func (c *WorkerConfig) Populate(cfg config.Config) error {
 func (c *WorkerConfig) Defaults() error {
 	c.Instances = 1
 	c.Precicion = 100000
+	c.MaxTasks = 0
 	c.MaxConsequetiveErrors = 1
+	c.Persistent = false
+	c.AutoStart = true
 
 	return nil
 }

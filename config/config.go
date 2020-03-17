@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"wsf/errors"
 
@@ -41,10 +42,15 @@ type Config interface {
 	Get(name string) Config
 	GetInt(name string) int
 	GetIntDefault(name string, def int) int
+	GetInt64(name string) int64
+	GetInt64Default(name string, def int64) int64
 	GetString(name string) string
 	GetStringDefault(name string, def string) string
 	GetBool(key string) bool
 	GetBoolDefault(key string, def bool) bool
+	GetTime(name string) time.Time
+	GetTimeDefault(name string, def time.Time) time.Time
+	GetStringMap(key string) map[string]interface{}
 	GetKeys() []string
 	GetAll() map[string]interface{}
 	Set(key string, value interface{}) error
@@ -90,12 +96,25 @@ func (c *Bridge) GetInt(key string) int {
 
 // GetIntDefault returns a n int value or default value if empty
 func (c *Bridge) GetIntDefault(key string, def int) int {
-	v := c.v.Get(key)
-	if v == nil {
+	if !c.v.IsSet(key) {
 		return def
 	}
 
 	return c.v.GetInt(key)
+}
+
+// GetInt64 returns an int64 value
+func (c *Bridge) GetInt64(key string) int64 {
+	return c.v.GetInt64(key)
+}
+
+// GetInt64Default returns a n int value or default value if empty
+func (c *Bridge) GetInt64Default(key string, def int64) int64 {
+	if !c.v.IsSet(key) {
+		return def
+	}
+
+	return c.v.GetInt64(key)
 }
 
 // GetString returns a string value
@@ -105,8 +124,7 @@ func (c *Bridge) GetString(key string) string {
 
 // GetStringDefault returns a string value or default value if empty
 func (c *Bridge) GetStringDefault(key string, def string) string {
-	str := c.v.Get(key)
-	if str == nil {
+	if !c.v.IsSet(key) {
 		return def
 	}
 
@@ -120,12 +138,30 @@ func (c *Bridge) GetBool(key string) bool {
 
 // GetBoolDefault returns a boolean value or default value if empty
 func (c *Bridge) GetBoolDefault(key string, def bool) bool {
-	b := c.v.Get(key)
-	if b == nil {
+	if !c.v.IsSet(key) {
 		return def
 	}
 
 	return c.v.GetBool(key)
+}
+
+// GetTime returns a time.Time value
+func (c *Bridge) GetTime(key string) time.Time {
+	return c.v.GetTime(key)
+}
+
+// GetTimeDefault returns a time.Time value or default value if empty
+func (c *Bridge) GetTimeDefault(key string, def time.Time) time.Time {
+	if !c.v.IsSet(key) {
+		return def
+	}
+
+	return c.v.GetTime(key)
+}
+
+// GetStringMap returns a map[string]interface{} value
+func (c *Bridge) GetStringMap(key string) map[string]interface{} {
+	return c.v.GetStringMap(key)
 }
 
 // GetKeys returns config keys

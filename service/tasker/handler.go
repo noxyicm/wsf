@@ -12,6 +12,9 @@ type Handler interface {
 	New(*Task) (Handler, error)
 	StartRoutine(ctx context.Context, task *Task) error
 	Start(ctx context.Context)
+	Name() string
+	TaskID() int64
+	InChannel() (chan<- *Message, error)
 }
 
 // HandleTask creates a new instance of task specific handler and runs a routine for it

@@ -25,6 +25,7 @@ type File struct {
 	Backend
 	Options *FileConfig
 	GC      *FileGC
+	dir     string
 	mu      sync.Mutex
 	mul     sync.Mutex
 }
@@ -242,16 +243,18 @@ func NewFileBackendCache(options config.Config) (bi Interface, err error) {
 	cfg.Populate(options)
 	b.Options = cfg
 
-	if b.Options.Dir, err = filepath.Abs(b.Options.Dir); err != nil {
-		return nil, errors.Wrap(err, "Failed to create file backend cache object")
+	path := filepath.Join(config.AppRootPath, filepath.FromSlash(b.Options.Dir))
+	if p, err := filepath.EvalSymlinks(path); err == nil {
+		path = p
 	}
 
-	if _, err := os.Stat(b.Options.Dir); err != nil {
-		if err := os.MkdirAll(b.Options.Dir, 0775); err != nil {
+	if _, err := os.Stat(path); err != nil {
+		if err := os.MkdirAll(path, 0775); err != nil {
 			return nil, errors.Wrap(err, "Failed to create file backend cache object")
 		}
 	}
 
+	b.Options.Dir = path
 	if b.GC, err = NewFileGC(cfg); err != nil {
 		return nil, errors.Wrap(err, "Failed to create file backend cache gc object")
 	}

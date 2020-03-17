@@ -1,6 +1,10 @@
 package tasker
 
-import "time"
+import (
+	"time"
+	"wsf/config"
+	"wsf/errors"
+)
 
 // Task represents task
 type Task struct {
@@ -22,6 +26,7 @@ type Task struct {
 	Extras       string
 	ParsedExtras map[string]interface{}
 	Handler      string
+	Worker       string
 	Dataset      string
 	LastID       int
 	LastUpdate   time.Time
@@ -86,4 +91,44 @@ func (t *Task) ExecutionTime() time.Time {
 	}
 
 	return time.Date(year, month, day, t.Hour, t.Minute, t.Second, 0, time.Local)
+}
+
+// NewTask create a new task
+func NewTask(id int64, name, handler, worker string, data map[string]interface{}) *Task {
+	return &Task{
+		ID:           id,
+		State:        1,
+		Name:         name,
+		Date:         time.Time{},
+		Created:      time.Now(),
+		ParsedData:   data,
+		ParsedExtras: make(map[string]interface{}),
+		Handler:      handler,
+		Worker:       worker,
+		LastUpdate:   time.Time{},
+	}
+}
+
+// NewTaskFromConfig create a new task from config
+func NewTaskFromConfig(cfg config.Config) (*Task, error) {
+	hndlr := cfg.GetString("handler")
+	wrk := cfg.GetString("worker")
+	if hndlr == "" {
+		return nil, errors.New("Unable to create task. Handler is not defined")
+	} else if wrk == "" {
+		return nil, errors.New("Unable to create task. Worker is not defined")
+	}
+
+	return &Task{
+		ID:           cfg.GetInt64Default("id", time.Now().UnixNano()),
+		State:        1,
+		Name:         cfg.GetStringDefault("name", "unnamed task"),
+		Date:         cfg.GetTimeDefault("date", time.Time{}),
+		Created:      time.Now(),
+		ParsedData:   cfg.GetStringMap("data"),
+		ParsedExtras: make(map[string]interface{}),
+		Handler:      hndlr,
+		Worker:       wrk,
+		LastUpdate:   time.Time{},
+	}, nil
 }

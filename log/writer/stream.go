@@ -3,7 +3,9 @@ package writer
 import (
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
+	"wsf/config"
 	"wsf/errors"
 	"wsf/log/event"
 	"wsf/log/filter"
@@ -61,17 +63,22 @@ func NewStreamWriter(options *Config) (Interface, error) {
 	}
 
 	if v, ok := options.Params["stream"]; ok {
-		file, err := os.OpenFile(v.(string), w.mode, 0644)
+		path := filepath.Join(config.AppRootPath, filepath.FromSlash(v.(string)))
+		if p, err := filepath.EvalSymlinks(path); err == nil {
+			path = p
+		}
+
+		file, err := os.OpenFile(path, w.mode, 0644)
 		if err != nil {
-			file, err = os.OpenFile(v.(string), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			file, err = os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
-				parts := strings.Split(v.(string), "/")
+				parts := strings.Split(path, "/")
 				dir := strings.Join(parts[:len(parts)-1], "/")
 				if err := os.MkdirAll(dir, 0775); err != nil {
 					return nil, errors.Wrap(err, "Failed to create log stream writer")
 				}
 
-				file, err = os.OpenFile(v.(string), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				file, err = os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 				if err != nil {
 					return nil, errors.Wrap(err, "Failed to create log stream writer")
 				}

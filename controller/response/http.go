@@ -266,6 +266,10 @@ func (r *HTTP) Write() error {
 		} else {
 			r.Headers["Set-Cookie"][0] = r.Headers["Set-Cookie"][0] + "&" + cookiestr
 		}
+	} else {
+		for key := range r.Cookies {
+			http.SetCookie(r.Writer, r.Cookies[key])
+		}
 	}
 
 	for n, h := range r.Headers {

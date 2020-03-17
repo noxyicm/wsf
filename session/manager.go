@@ -105,20 +105,26 @@ func (m *Manager) Priority() int {
 
 // Init the session manager
 func (m *Manager) Init(options *ManagerConfig) (bool, error) {
-	m.mu.Lock()
-	m.Started = true
-	m.mu.Unlock()
+	m.Options = options
 
 	ccfg := &cache.Config{}
 	ccfg.Defaults()
 	ccfg.Populate(options.Storage)
-	if ok, err := m.Storage.Init(ccfg); !ok {
-		m.mu.Lock()
-		m.Started = false
-		m.mu.Unlock()
 
+	cch, err := cache.NewCore(options.Storage.GetString("type"), options.Storage)
+	if err != nil {
+		return false, errors.Wrap(err, "[DefaultSessionManager] Storage creation error")
+	}
+
+	m.Storage = cch
+
+	if ok, err := m.Storage.Init(ccfg); !ok {
 		return ok, err
 	}
+
+	m.mu.Lock()
+	m.Started = true
+	m.mu.Unlock()
 
 	return true, nil
 }
@@ -227,6 +233,25 @@ func (m *Manager) SessionClose(sid string) {
 		m.Storage.Save(encoded, sid, []string{sid}, m.Options.SessionLifeTime)
 	}
 
+	/*if m.Options.EnableSetCookie {
+		cookie := &http.Cookie{
+			Name:     m.Options.SessionName,
+			Value:    url.QueryEscape(sid),
+			Path:     "/",
+			HttpOnly: m.Options.HTTPOnly,
+			Secure:   rqs.IsSecure() && m.Options.Secure,
+			Domain:   config.App.GetString("application.Domain"),
+		}
+
+		if m.Options.SessionLifeTime > 0 {
+			cookie.MaxAge = int(m.Options.SessionLifeTime)
+			cookie.Expires = time.Now().Add(time.Duration(m.Options.SessionLifeTime) * time.Second)
+		}
+
+		rqs.AddCookie(cookie)
+		rsp.AddCookie(cookie)
+	}*/
+
 	m.Sessions.Delete(sid)
 }
 
@@ -319,12 +344,6 @@ func NewDefaultSessionManager(options *ManagerConfig) (ManagerInterface, error) 
 		return nil, errors.New("[DefaultSessionManager] Storage is not configured")
 	}
 
-	str, err := cache.NewCore(options.Storage.GetString("type"), options.Storage)
-	if err != nil {
-		return nil, errors.Wrap(err, "[DefaultSessionManager] Storage creation error")
-	}
-
-	sm.Storage = str
 	return sm, nil
 }
 

@@ -6,6 +6,8 @@ import (
 	"wsf/errors"
 )
 
+var broker *HelperBroker
+
 // HelperBroker stores and dispatches action helpers
 type HelperBroker struct {
 	controller Interface
@@ -133,5 +135,20 @@ func NewHelperBroker() (*HelperBroker, error) {
 	}
 
 	hb.stack = stack
+	broker = hb
 	return hb, nil
+}
+
+// SetBroker sets a helpers broker instance
+func SetBroker(hb *HelperBroker) {
+	broker = hb
+}
+
+// Broker returns a helpers broker instance
+func Broker() *HelperBroker {
+	if broker == nil {
+		broker, _ = NewHelperBroker()
+	}
+
+	return broker
 }

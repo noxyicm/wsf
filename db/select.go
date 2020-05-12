@@ -112,7 +112,7 @@ type Select interface {
 	Where(cond string, value interface{}) Select
 	OrWhere(cond string, value interface{}) Select
 	Limit(count int, offset int) Select
-	Order(order string) Select
+	Order(order interface{}) Select
 	Binds() []interface{}
 	Err() error
 	Clear() Select
@@ -175,7 +175,7 @@ type selectParts struct {
 	Where       []string
 	Group       []interface{}
 	Having      []interface{}
-	Order       []interface{}
+	Order       []string
 	LimitCount  int
 	LimitOffset int
 	ForUpdate   bool
@@ -336,7 +336,47 @@ func (s *DefaultSelect) Limit(count int, offset int) Select {
 }
 
 // Order sets order to the query
-func (s *DefaultSelect) Order(order string) Select {
+func (s *DefaultSelect) Order(order interface{}) Select {
+	switch orderpart := order.(type) {
+	case []*SQLExpr:
+		for _, cond := range orderpart {
+			s.Parts.Order = append(s.Parts.Order, cond.ToString())
+		}
+
+	case *SQLExpr:
+		s.Parts.Order = append(s.Parts.Order, orderpart.ToString())
+
+	case []string:
+		for _, cond := range orderpart {
+			parts := strings.Split(strings.TrimSpace(cond), " ")
+			if len(parts) == 1 {
+				s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0], true))
+			} else if len(parts) > 1 {
+				s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0]+" "+strings.ToUpper(parts[1]), true))
+			}
+		}
+
+	case string:
+		parts := strings.Split(strings.TrimSpace(orderpart), ",")
+		if len(parts) == 1 {
+			parts := strings.Split(strings.TrimSpace(parts[0]), " ")
+			if len(parts) == 1 {
+				s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0], true))
+			} else if len(parts) > 1 {
+				s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0]+" "+strings.ToUpper(parts[1]), true))
+			}
+		} else if len(parts) > 1 {
+			for _, cond := range parts {
+				parts := strings.Split(strings.TrimSpace(cond), " ")
+				if len(parts) == 1 {
+					s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0], true))
+				} else if len(parts) > 1 {
+					s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0]+" "+strings.ToUpper(parts[1]), true))
+				}
+			}
+		}
+	}
+
 	return s
 }
 
@@ -379,7 +419,7 @@ func (s *DefaultSelect) Clear() Select {
 	s.Parts.Where = []string{}
 	s.Parts.Group = []interface{}{}
 	s.Parts.Having = []interface{}{}
-	s.Parts.Order = []interface{}{}
+	s.Parts.Order = []string{}
 	s.Parts.LimitCount = 0
 	s.Parts.LimitOffset = 0
 	s.Parts.ForUpdate = false
@@ -397,7 +437,7 @@ func (s *DefaultSelect) Assemble() string {
 	sql = s.renderUnion(sql)
 	//sql = s.renderGroup(sql)
 	//sql = s.renderHaving(sql)
-	//sql = s.renderOrder(sql)
+	sql = s.renderOrder(sql)
 	sql = s.renderLimit(sql)
 	//sql = s.renderForupdate(sql)
 
@@ -757,7 +797,7 @@ func (s *DefaultSelect) renderFrom(sql string) string {
 
 // Render UNION clause
 func (s *DefaultSelect) renderUnion(sql string) string {
-	if len(s.Parts.Union) > 0 && len(s.Parts.Union) > 0 {
+	if len(s.Parts.From) > 0 && len(s.Parts.Union) > 0 {
 		for _, union := range s.Parts.Union {
 			sql = sql + " " + union.Type + " " + union.Target
 		}
@@ -770,6 +810,15 @@ func (s *DefaultSelect) renderUnion(sql string) string {
 func (s *DefaultSelect) renderWhere(sql string) string {
 	if len(s.Parts.From) > 0 && len(s.Parts.Where) > 0 {
 		sql = sql + " " + SQLWhere + " " + strings.Join(s.Parts.Where, " ")
+	}
+
+	return sql
+}
+
+// Render ORDER BY clause
+func (s *DefaultSelect) renderOrder(sql string) string {
+	if len(s.Parts.Order) > 0 {
+		sql = sql + " " + SQLOrderBy + " " + strings.Join(s.Parts.Order, ",")
 	}
 
 	return sql
@@ -835,7 +884,7 @@ func NewDefaultSelect(options *SelectConfig) (Select, error) {
 			Where:       []string{},
 			Group:       []interface{}{},
 			Having:      []interface{}{},
-			Order:       []interface{}{},
+			Order:       []string{},
 			LimitCount:  0,
 			LimitOffset: 0,
 			ForUpdate:   false,
@@ -861,7 +910,7 @@ func NewSelectEmpty() Select {
 			Where:       []string{},
 			Group:       []interface{}{},
 			Having:      []interface{}{},
-			Order:       []interface{}{},
+			Order:       []string{},
 			LimitCount:  0,
 			LimitOffset: 0,
 			ForUpdate:   false,

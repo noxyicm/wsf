@@ -16,7 +16,7 @@ const (
 	TYPEColorized = "colorized"
 
 	// ColorizedFormat is a default format for simple formatter
-	ColorizedFormat = "<white+hd>[%timestamp%]</reset> <%s>%priorityName% (%priority%): %message%</reset>\n"
+	ColorizedFormat = "<white+hd>[#timestamp#]</reset> <%s>#priorityName# (#priority#): #message#</reset>\n"
 
 	// EMERG represents emergency event
 	EMERG = 0 // Emergency: system is unusable
@@ -49,13 +49,18 @@ type ColorCli struct {
 // Format formats data into a single line to be written by the writer
 func (f *ColorCli) Format(e *event.Event) (string, error) {
 	out := f.format
-	out = strings.Replace(out, "%timestamp%", e.Timestamp, 1)
-	out = strings.Replace(out, "%priorityName%", e.PriorityName, 1)
-	out = strings.Replace(out, "%priority%", strconv.Itoa(e.Priority), 1)
-	out = strings.Replace(out, "%message%", e.Message, 1)
+	out = strings.Replace(out, "#timestamp#", e.Timestamp, 1)
+	out = strings.Replace(out, "#priorityName#", e.PriorityName, 1)
+	out = strings.Replace(out, "#priority#", strconv.Itoa(e.Priority), 1)
+	out = strings.Replace(out, "#message#", e.Message, 1)
 
 	for key, value := range e.Info {
-		out = strings.Replace(out, "%"+key+"%", value, 1)
+		out = strings.Replace(out, "#"+key+"#", value, 1)
+	}
+
+	m := rest.FindAllString(out, -1)
+	for i := range m {
+		out = strings.Replace(out, m[i], "", 1)
 	}
 
 	switch e.Priority {

@@ -1,12 +1,14 @@
 package formatter
 
 import (
+	"regexp"
 	"wsf/errors"
 	"wsf/log/event"
 )
 
 var (
 	buildHandlers = map[string]func(map[string]interface{}) (Interface, error){}
+	rest          = regexp.MustCompile(`\#(.+)\#`)
 )
 
 // Interface represents message formatter

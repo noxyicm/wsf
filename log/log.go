@@ -170,8 +170,11 @@ func (l *Log) Logf(message interface{}, priority int, extras map[string]string, 
 	case string:
 		m = fmt.Sprintf(msg, f...)
 	case error:
-		m = fmt.Sprintf(fmt.Sprintf("%+s", msg), f...)
-		extras["stack"] = fmt.Sprintf(fmt.Sprintf("%+v", msg), f...)
+		if l.options.Verbose {
+			m = fmt.Sprintf(fmt.Sprintf("%+v", msg), f...)
+		} else {
+			m = fmt.Sprintf(fmt.Sprintf("%s", msg), f...)
+		}
 	case int:
 		m = fmt.Sprintf(strconv.Itoa(msg), f...)
 	default:
@@ -284,8 +287,11 @@ func (l *Log) packEvent(message interface{}, priority int) (*event.Event, error)
 	case string:
 		e.Message = msg
 	case error:
-		e.Message = fmt.Sprintf("%+s", msg)
-		e.Info["stack"] = fmt.Sprintf("%+v", msg)
+		if l.options.Verbose {
+			e.Message = fmt.Sprintf("%+v", msg)
+		} else {
+			e.Message = fmt.Sprintf("%s", msg)
+		}
 	case int:
 		e.Message = strconv.Itoa(msg)
 	default:
@@ -297,6 +303,8 @@ func (l *Log) packEvent(message interface{}, priority int) (*event.Event, error)
 
 // NewLog creates new logger
 func NewLog(options config.Config) (*Log, error) {
+	defer recover()
+
 	cfg := &Config{}
 	cfg.Defaults()
 	cfg.Populate(options)

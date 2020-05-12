@@ -24,19 +24,24 @@ func init() {
 // Stream writes log events to a stream
 type Stream struct {
 	writer
+
 	stream *os.File
 	mode   int
 }
 
 // Write writes message to log
 func (w *Stream) Write(e *event.Event) error {
-	for _, filter := range w.filters {
+	if !w.Enable {
+		return nil
+	}
+
+	for _, filter := range w.Filters {
 		if !filter.Accept(e) {
 			return nil
 		}
 	}
 
-	message, err := w.formatter.Format(e)
+	message, err := w.Formatter.Format(e)
 	if err == nil {
 		if _, err := w.stream.Write([]byte(message)); err != nil {
 			return err
@@ -56,6 +61,7 @@ func (w *Stream) Shutdown() {
 // NewStreamWriter creates stream writer
 func NewStreamWriter(options *Config) (Interface, error) {
 	w := &Stream{}
+	w.Enable = options.Enable
 	if v, ok := options.Params["mode"]; ok {
 		w.mode = v.(int)
 	} else {
@@ -92,7 +98,7 @@ func NewStreamWriter(options *Config) (Interface, error) {
 	if err != nil {
 		return nil, err
 	}
-	w.formatter = frt
+	w.Formatter = frt
 
 	for _, filterParams := range options.Filters {
 		flt, err := filter.NewFilter(filterParams)
@@ -100,7 +106,7 @@ func NewStreamWriter(options *Config) (Interface, error) {
 			return nil, err
 		}
 
-		w.filters = append(w.filters, flt)
+		w.Filters = append(w.Filters, flt)
 	}
 
 	return w, nil

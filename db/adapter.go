@@ -347,7 +347,7 @@ func (a *DefaultAdapter) Update(ctx context.Context, table string, data map[stri
 
 	where := a.whereExpr(cond)
 
-	sql := "UPDATE " + a.QuoteIdentifier(table, true) + " SET (" + strings.Join(set, ", ") + ")"
+	sql := "UPDATE " + a.QuoteIdentifier(table, true) + " SET " + strings.Join(set, ", ") + ""
 	if where != "" {
 		sql = sql + " WHERE " + where
 	}

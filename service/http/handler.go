@@ -44,6 +44,7 @@ func (h *Handler) throw(event int, ctx interface{}) {
 // ServeHTTP Serves a HTTP request
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	defer h.recover(w, r, start)
 
 	if h.options.MaxRequestSize != 0 {
 		if length := r.Header.Get("content-length"); length != "" {
@@ -126,6 +127,12 @@ func (h *Handler) handleResponse(req request.Interface, rsp response.Interface, 
 
 	h.throw(EventHTTPResponse, event.NewResponse(req, rsp, err, start))
 	rsp.Write()
+}
+
+func (h *Handler) recover(w http.ResponseWriter, r *http.Request, start time.Time) {
+	if rec := recover(); rec != nil {
+		h.handleError(w, r, errors.Wrap(rec.(error), "[REST] Unxpected error equired"), start)
+	}
 }
 
 // NewHandler creates a new handler

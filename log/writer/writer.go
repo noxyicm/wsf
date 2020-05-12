@@ -15,31 +15,32 @@ var (
 type Interface interface {
 	AddFilter(filter.Interface) error
 	SetFormatter(formatter.Interface) error
-	Formatter() formatter.Interface
+	GetFormatter() formatter.Interface
 	Write(*event.Event) error
 	Shutdown()
 }
 
 type writer struct {
-	filters   []filter.Interface
-	formatter formatter.Interface
+	Enable    bool
+	Filters   []filter.Interface
+	Formatter formatter.Interface
 }
 
 // AddFilter adds filter to writer
 func (w *writer) AddFilter(f filter.Interface) error {
-	w.filters = append(w.filters, f)
+	w.Filters = append(w.Filters, f)
 	return nil
 }
 
 // SetFormatter sets formater for this writer
 func (w *writer) SetFormatter(frmt formatter.Interface) error {
-	w.formatter = frmt
+	w.Formatter = frmt
 	return nil
 }
 
 // Formatter returns writer formatter
-func (w *writer) Formatter() formatter.Interface {
-	return w.formatter
+func (w *writer) GetFormatter() formatter.Interface {
+	return w.Formatter
 }
 
 // NewWriter creates a new writer specified by type
@@ -57,7 +58,7 @@ func NewWriter(options *Config) (Interface, error) {
 		return f(options)
 	}
 
-	return nil, errors.Errorf("Unrecognized writer type \"%v\"", writerType)
+	return nil, errors.Errorf("Unrecognized writer type '%v'", writerType)
 }
 
 // Register registers a handler for writer creation

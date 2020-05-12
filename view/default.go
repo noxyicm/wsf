@@ -83,7 +83,7 @@ func (v *Default) Setup() (bool, error) {
 // PrepareLayouts parses a layout templates files
 func (v *Default) PrepareLayouts() error {
 	for _, path := range v.paths["layouts"] {
-		err := utils.WalkDirectoryDeep(config.AppPath+path, config.AppPath+path, v.ReadLayouts)
+		err := utils.WalkDirectoryDeep(filepath.Join(config.AppPath, filepath.FromSlash(path)), filepath.Join(config.AppPath, filepath.FromSlash(path)), v.ReadLayouts)
 		if err != nil {
 			switch err.(type) {
 			case *os.PathError:
@@ -136,7 +136,7 @@ func (v *Default) ReadLayouts(path string, info os.FileInfo, err error) error {
 // PrepareTemplates parses a templates files
 func (v *Default) PrepareTemplates() error {
 	for _, path := range v.paths["templates"] {
-		err := utils.WalkDirectoryDeep(config.AppPath+path, config.AppPath+path, v.ReadTemplates)
+		err := utils.WalkDirectoryDeep(filepath.Join(config.AppPath, filepath.FromSlash(path)), filepath.Join(config.AppPath, filepath.FromSlash(path)), v.ReadTemplates)
 		if err != nil {
 			switch err.(type) {
 			case *os.PathError:

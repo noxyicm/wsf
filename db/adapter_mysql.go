@@ -51,6 +51,8 @@ func (a *MySQL) Setup() {
 		"LIKE",
 		"AND",
 		"OR",
+		"DESC",
+		"ASC",
 		"=",
 		"!=",
 		">",
@@ -236,6 +238,14 @@ func (a *MySQL) PrepareRowset(rows *sql.Rows) ([]map[string]interface{}, error) 
 
 // PrepareRow parses a RawBytes into map structure
 func (a *MySQL) PrepareRow(rows *sql.Rows) (map[string]interface{}, error) {
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, errors.Wrap(err, "MySQL prepare result error")
+		}
+
+		return nil, nil
+	}
+
 	columns, err := rows.ColumnTypes()
 	if err != nil {
 		return nil, errors.Wrap(err, "MySQL prepare result error")
@@ -247,14 +257,6 @@ func (a *MySQL) PrepareRow(rows *sql.Rows) (map[string]interface{}, error) {
 	}
 
 	data := make(map[string]interface{})
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return nil, errors.Wrap(err, "MySQL prepare result error")
-		}
-
-		return nil, nil
-	}
-
 	if err = rows.Scan(scanArgs...); err != nil {
 		return nil, errors.Wrap(err, "MySQL prepare result error")
 	}

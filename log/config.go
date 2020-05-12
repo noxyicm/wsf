@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Priority        int
 	Enable          bool
+	Verbose         bool
 	TimestampFormat string
 	Writers         map[string]*writer.Config
 	Filters         map[string]map[string]interface{}
@@ -42,6 +43,7 @@ func (c *Config) Populate(cfg config.Config) error {
 func (c *Config) Defaults() error {
 	c.Priority = 1
 	c.Enable = true
+	c.Verbose = false
 	c.TimestampFormat = time.RFC3339
 
 	c.Writers = make(map[string]*writer.Config)

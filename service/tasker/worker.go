@@ -18,17 +18,41 @@ const (
 	// TaskStatusFail represents task that is failed
 	TaskStatusFail = 500
 
-	// MessageAddTask type 1
+	// MessageReport indicates that task has something to say
+	MessageReport = 0
+
+	// MessageAddTask indicates that task must be added to queue
 	MessageAddTask = 1
 
-	// MessageModifyTask type 2
-	MessageModifyTask = 2
+	// MessageTaskAdded indicates that task has been added to queue
+	MessageTaskAdded = 2
 
-	// MessageStopTask type 3
-	MessageStopTask = 3
+	// MessageStartTask indicates that task must be started
+	MessageStartTask = 3
 
-	// MessageReport type 11
-	MessageReport = 11
+	// MessageTaskStarted indicates that task has been started
+	MessageTaskStarted = 4
+
+	// MessageModifyTask indicates that task must be modified
+	MessageModifyTask = 5
+
+	// MessageTaskModified indicates that task has been modified
+	MessageTaskModified = 6
+
+	// MessageStopTask indicates that task must be stoped
+	MessageStopTask = 7
+
+	// MessageTaskStoped indicates that task has been stoped
+	MessageTaskStoped = 8
+
+	// MessageRemoveTask indicates that task must be removed from queue
+	MessageRemoveTask = 9
+
+	// MessageTaskRemoved indicates that task has been removed from queue
+	MessageTaskRemoved = 10
+
+	// MessageTaskDone indicates that task has been done
+	MessageTaskDone = 11
 
 	// MessageWorkerStart asd
 	MessageWorkerStart = 100

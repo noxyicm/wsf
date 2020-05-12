@@ -6,6 +6,7 @@ import (
 
 // Config represents writer configuration
 type Config struct {
+	Enable    bool
 	Params    map[string]interface{}
 	Formatter map[string]interface{}
 	Filters   []map[string]interface{}
@@ -18,6 +19,7 @@ func (c *Config) Populate(cfg config.Config) error {
 
 // Defaults sets configuration default values
 func (c *Config) Defaults() error {
+	c.Enable = true
 	c.Params = map[string]interface{}{
 		"type": "null",
 	}

@@ -21,7 +21,7 @@ type Mock struct {
 
 // Write writes message to log
 func (w *Mock) Write(e *event.Event) error {
-	for _, filter := range w.filters {
+	for _, filter := range w.Filters {
 		if !filter.Accept(e) {
 			return nil
 		}

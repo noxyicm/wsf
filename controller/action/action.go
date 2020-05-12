@@ -44,7 +44,7 @@ type Interface interface {
 	Params() map[string]interface{}
 	ClearParam(name string) bool
 	ClearParams() bool
-	NewHelperBroker() error
+	SetHelperBroker() error
 	HelperBroker() *HelperBroker
 	HasHelper(name string) bool
 	Helper(name string) helper.Interface
@@ -108,11 +108,15 @@ func (c *Controller) Dispatch(ctrl interface{}, m reflect.Method) error {
 	return nil
 }
 
-// NewHelperBroker sets helper broker
-func (c *Controller) NewHelperBroker() (err error) {
-	c.Hlpr, err = NewHelperBroker()
-	if err != nil {
-		return err
+// SetHelperBroker sets helper broker
+func (c *Controller) SetHelperBroker() (err error) {
+	if broker != nil {
+		c.Hlpr = broker
+	} else {
+		c.Hlpr, err = NewHelperBroker()
+		if err != nil {
+			return err
+		}
 	}
 
 	c.Hlpr.SetController(c)

@@ -12,6 +12,7 @@ type Handler interface {
 	New(*Task) (Handler, error)
 	StartRoutine(ctx context.Context, task *Task) error
 	Start(ctx context.Context)
+	Stop()
 	Name() string
 	TaskID() int64
 	InChannel() (chan<- *Message, error)

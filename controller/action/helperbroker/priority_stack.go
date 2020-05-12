@@ -130,12 +130,12 @@ func (s *PriorityStack) NextFreeHigherPriority(priority int) int {
 		i++
 	}
 
-	found := false
-	for {
-		if found {
-			break
-		}
+	if i == 0 {
+		return priority
+	}
 
+	found := false
+	for !found {
 		for _, v := range priorities {
 			if v != priority {
 				found = true
@@ -159,12 +159,12 @@ func (s *PriorityStack) NextFreeLowerPriority(priority int) int {
 		i++
 	}
 
-	found := false
-	for {
-		if found {
-			break
-		}
+	if i == 0 {
+		return priority
+	}
 
+	found := false
+	for !found {
 		for _, v := range priorities {
 			if v != priority {
 				found = true

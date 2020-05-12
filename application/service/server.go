@@ -168,7 +168,7 @@ func (s *server) Serve(ctx context.Context) error {
 			continue
 		}
 
-		s.throw(EventDebug, fmt.Sprintf("Service '%s' started", b.name))
+		s.throw(EventDebug, fmt.Sprintf("Trying to start service '%s'", b.name))
 		go func(b *bus) {
 			b.setStatus(StatusServing)
 			defer b.setStatus(StatusStopped)

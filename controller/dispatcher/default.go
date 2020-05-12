@@ -49,8 +49,7 @@ func (d *Default) Dispatch(ctx context.Context, rqs request.Interface, rsp respo
 
 	d.PopulateController(ctx, ctrl, rqs, rsp, d.invokeParams)
 	actctrl := ctrl.(action.Interface)
-	err = actctrl.NewHelperBroker()
-	if err != nil {
+	if err := actctrl.SetHelperBroker(); err != nil {
 		return true, err
 	}
 

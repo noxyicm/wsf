@@ -141,25 +141,6 @@ func NewApplication(environment string, options interface{}, override []string) 
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	logOptions := config.NewBridge()
-	logOptions.Merge(map[string]interface{}{
-		"writers": map[string]interface{}{
-			"default": map[string]interface{}{
-				"params": map[string]interface{}{
-					"type": "stdout",
-				},
-				"formatter": map[string]interface{}{
-					"type": "colorized",
-				},
-			},
-		},
-	})
-	lg, err := log.NewLog(logOptions)
-	if err != nil {
-		return nil, err
-	}
-	app.logger = lg
-
 	var cfg config.Config
 	switch o := options.(type) {
 	case string:
@@ -180,7 +161,7 @@ func NewApplication(environment string, options interface{}, override []string) 
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Unable to crate application")
 	}
 
 	config.App = cfg
@@ -197,22 +178,28 @@ func NewApplication(environment string, options interface{}, override []string) 
 	SetRootPath(acfg.RootPath)
 	err = os.Chdir(acfg.RootPath)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Unable to crate application")
 	}
 
 	if err := SetAppPath(acfg.AppPath); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Unable to crate application")
 	}
 	if err := SetBasePath(acfg.BasePath); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Unable to crate application")
 	}
 	if err := SetStaticPath(acfg.StaticPath); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Unable to crate application")
 	}
+
+	lg, err := log.NewLog(cfg.Get("resources").Get("log").Get("syslog"))
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to crate application")
+	}
+	app.logger = lg
 
 	app.bootstrap, err = bootstrap.NewBootstrap(cfg)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Unable to crate application")
 	}
 	app.bootstrap.AddListener(app.throw)
 	app.AddListener(func(event int, ctx interface{}) {

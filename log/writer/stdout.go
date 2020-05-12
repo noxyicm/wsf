@@ -23,13 +23,17 @@ type Stdout struct {
 
 // Write writes message to log
 func (w *Stdout) Write(e *event.Event) error {
-	for _, filter := range w.filters {
+	if !w.Enable {
+		return nil
+	}
+
+	for _, filter := range w.Filters {
 		if !filter.Accept(e) {
 			return nil
 		}
 	}
 
-	message, err := w.formatter.Format(e)
+	message, err := w.Formatter.Format(e)
 	if err == nil {
 		fmt.Print(message)
 	} else {
@@ -46,12 +50,12 @@ func (w *Stdout) Shutdown() {
 // NewStdoutWriter creates mock writer
 func NewStdoutWriter(options *Config) (Interface, error) {
 	w := &Stdout{}
-
+	w.Enable = options.Enable
 	frt, err := formatter.NewFormatter(options.Formatter)
 	if err != nil {
 		return nil, err
 	}
-	w.formatter = frt
+	w.Formatter = frt
 
 	for _, filterParams := range options.Filters {
 		flt, err := filter.NewFilter(filterParams)
@@ -59,7 +63,7 @@ func NewStdoutWriter(options *Config) (Interface, error) {
 			return nil, err
 		}
 
-		w.filters = append(w.filters, flt)
+		w.Filters = append(w.Filters, flt)
 	}
 
 	return w, nil

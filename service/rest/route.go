@@ -64,6 +64,7 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *router.RouteM
 	path := rqs.PathInfo()
 	path = strings.Replace(path, r.service.RoutePrefix(), "", 1)
 	path = strings.Trim(path, r.URIDelimiter)
+	path = r.service.RoutePrefix() + path
 	params := rqs.Params()
 	values := make(map[string]string)
 

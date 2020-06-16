@@ -1,7 +1,6 @@
 package layout
 
 import (
-	"fmt"
 	"wsf/context"
 	"wsf/controller/action/helper"
 	"wsf/controller/plugin"
@@ -77,8 +76,6 @@ func (p *Plugin) PreDispatch(ctx context.Context, rqs request.Interface, rsp res
 
 // PostDispatch routine
 func (p *Plugin) PostDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
-	return true, nil
-	fmt.Println("layout_plugin.PostDispatch")
 	l := p.GetLayout()
 	if l == nil {
 		return false, errors.New("[Layout] Layout object for plugin is not set")
@@ -106,7 +103,7 @@ func (p *Plugin) PostDispatch(ctx context.Context, rqs request.Interface, rsp re
 	}
 
 	for k, v := range content {
-		ctx.SetDataValue(k, v)
+		ctx.SetParam(k, v)
 	}
 
 	fullContent := make([]byte, 0)

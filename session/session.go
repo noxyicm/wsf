@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/json"
 	"wsf/config"
 	"wsf/errors"
 )
@@ -30,6 +31,9 @@ type Interface interface {
 	Get(key string) interface{}
 	Set(key string, data interface{}) error
 	Unset(key string) bool
+	All() map[string]interface{}
+	Marshal() ([]byte, error)
+	Unmarshal(data []byte) error
 }
 
 // NewSession creates a new session from given type and options
@@ -55,26 +59,26 @@ func NewSessionFromConfig(options *Config) (Interface, error) {
 }
 
 // RegisterSession registers a handler for session manager creation
-func RegisterSession(sessionType string, handler func(*Config) (Interface, error)) {
+func RegisterSession(sessionType string, handler func(*Config) (Interface, error)) error {
 	if _, ok := buildSessionHandlers[sessionType]; ok {
-		panic("[Session] Session of type '" + sessionType + "' is already registered")
+		return errors.Errorf("Session of type '%s' is already registered", sessionType)
 	}
 
 	buildSessionHandlers[sessionType] = handler
+	return nil
 }
 
-// Session is a default session struct
+// Session is a default session
 type Session struct {
-	Options           *Config
-	Started           bool
-	Writable          bool
-	Readable          bool
-	WriteClosed       bool
-	Destroyed         bool
-	Strict            bool
-	Secure            bool
-	RememberMeSeconds int
-	Data              map[string]interface{}
+	Options     *Config
+	Started     bool
+	Writable    bool
+	Readable    bool
+	WriteClosed bool
+	Destroyed   bool
+	Strict      bool
+	Secure      bool
+	Data        map[string]interface{}
 }
 
 // IsSecure returns whether session is secure
@@ -134,6 +138,28 @@ func (s *Session) Unset(key string) bool {
 
 	delete(s.Data, key)
 	return true
+}
+
+// All returns all session params
+func (s *Session) All() map[string]interface{} {
+	m := s.Data
+	return m
+}
+
+// Marshal session into json
+func (s *Session) Marshal() ([]byte, error) {
+	return json.Marshal(s.Data)
+}
+
+// Unmarshal session from json
+func (s *Session) Unmarshal(data []byte) error {
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+
+	s.Data = m
+	return nil
 }
 
 // NewDefaultSession creates a new default session handler

@@ -21,40 +21,56 @@ const (
 
 	// UploadErrorExtension - forbidden file extension
 	UploadErrorExtension = 7
+
+	// UploadErrorUploded - file already received
+	UploadErrorUploded = 8
 )
 
 // Transfer manages files transfers
 type Transfer struct {
 	cfg  *Config
 	tree Tree
-	list []*File
 }
 
-// MarshalJSON marshal tree tree into JSON
+// MarshalJSON marshal tree into JSON
 func (t *Transfer) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.tree)
 }
 
 // Upload moves all uploaded files to temp directory
-func (t *Transfer) Upload() {
+func (t *Transfer) Upload() error {
+	var err error
 	var wg sync.WaitGroup
-	for _, f := range t.list {
-		wg.Add(1)
-		go func(f *File) {
-			defer wg.Done()
-			f.Upload(t.cfg)
-		}(f)
+	for _, v := range t.tree {
+		if v, ok := v.(Tree); ok {
+			for _, f := range v {
+				if f, ok := f.(*File); ok {
+					wg.Add(1)
+					go func(f *File) {
+						defer wg.Done()
+						if er := f.Upload(t.cfg); er != nil {
+							err = er
+						}
+					}(f)
+				}
+			}
+		}
 	}
 
 	wg.Wait()
+	return err
 }
 
 // Clear deletes all temporary files
 func (t *Transfer) Clear() error {
-	for _, f := range t.list {
-		if f.TempFilename != "" && exists(f.TempFilename) {
-			if err := os.Remove(f.TempFilename); err != nil {
-				return err
+	for _, v := range t.tree {
+		if v, ok := v.(Tree); ok {
+			for _, f := range v {
+				if f, ok := f.(*File); ok && f.TempFilename != "" && exists(f.TempFilename) {
+					if err := os.Remove(f.TempFilename); err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}
@@ -62,14 +78,14 @@ func (t *Transfer) Clear() error {
 	return nil
 }
 
-// Append appends provided slice of files into transfer
-func (t *Transfer) Append(files []*File) {
-	t.list = append(t.list, files...)
+// Push pushes provided slice of files into tree recursively
+func (t *Transfer) Push(key string, files *File) {
+	t.tree.Push(key, files)
 }
 
-// Push pushes provided slice of files into tree recursively
-func (t *Transfer) Push(key string, files []*File) {
-	t.tree.push(key, files)
+// Get retrives file from tree
+func (t *Transfer) Get(key string) *File {
+	return t.tree.Get(key)
 }
 
 // NewTransfer creates new file transfer
@@ -77,7 +93,6 @@ func NewTransfer(cfg *Config) (*Transfer, error) {
 	t := &Transfer{
 		cfg:  cfg,
 		tree: make(Tree),
-		list: make([]*File, 0),
 	}
 
 	return t, nil

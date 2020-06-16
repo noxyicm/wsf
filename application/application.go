@@ -150,8 +150,10 @@ func NewApplication(environment string, options interface{}, override []string) 
 		cfg, err = config.LoadConfig(o, []string{dir}, filename, override)
 
 	case map[string]interface{}:
-		err = errors.New("Unsupported yet")
-		//cfg, err = config.NewConfig(options.(map[string]interface{}), false)
+		cfg, err = config.NewDefaultBridge()
+		if err == nil {
+			err = cfg.Merge(o)
+		}
 
 	case config.Config:
 		cfg = o

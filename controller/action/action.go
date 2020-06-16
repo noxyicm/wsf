@@ -2,16 +2,14 @@ package action
 
 import (
 	"net/http"
-	"os"
-	"path/filepath"
 	"reflect"
 	"wsf/context"
 	"wsf/controller/action/helper"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
+	"wsf/log"
 	"wsf/registry"
-	"wsf/session"
 	"wsf/utils"
 	"wsf/view"
 )
@@ -27,71 +25,66 @@ var (
 
 // Interface controller interface
 type Interface interface {
-	Init() error
-	SetRequest(req request.Interface)
-	Request() request.Interface
-	SetResponse(rsp response.Interface)
-	Response() response.Interface
-	SetSession(s session.Interface)
-	Session() session.Interface
-	SetContext(ctx context.Context)
-	Context() context.Context
-	SetParams(params map[string]interface{}) error
-	SetParam(name string, value interface{}) error
-	Param(name string) interface{}
-	ParamString(name string) string
-	ParamBool(name string) bool
-	Params() map[string]interface{}
-	ClearParam(name string) bool
-	ClearParams() bool
-	SetHelperBroker() error
+	Init(ctx context.Context) error
+	SetLogger(l *log.Log) error
+	Logger() *log.Log
 	HelperBroker() *HelperBroker
 	HasHelper(name string) bool
 	Helper(name string) helper.Interface
-	Dispatch(ctrl interface{}, m reflect.Method) error
-	Render() error
+	Dispatch(ctx context.Context, ctrl Interface, m reflect.Method) error
+	Render(ctx context.Context) error
 	SetView(v view.Interface) error
 	SetViewSuffix(suffix string) error
 	View() view.Interface
-	Invoke(ctrl interface{}, m reflect.Method) error
+	Invoke(ctx context.Context, ctrl Interface, m reflect.Method) error
 	GetResource(name string) interface{}
 }
 
 // Controller controller
 type Controller struct {
+	logger       *log.Log
 	InvokeParams map[string]interface{}
 	Rqs          request.Interface
 	Rsp          response.Interface
-	Ctx          context.Context
-	Sess         session.Interface
 	Hlpr         *HelperBroker
 	ViewSuffix   string
 	Vw           view.Interface
 }
 
+// SetLogger attaches log writer
+func (c *Controller) SetLogger(l *log.Log) error {
+	c.logger = l
+	return nil
+}
+
+// Logger retreives attached log writer
+func (c *Controller) Logger() *log.Log {
+	return c.logger
+}
+
 // Dispatch processes action call
-func (c *Controller) Dispatch(ctrl interface{}, m reflect.Method) error {
+func (c *Controller) Dispatch(ctx context.Context, ctrl Interface, m reflect.Method) error {
 	// Notify helpers of action preDispatch state
-	err := c.Hlpr.NotifyPreDispatch()
+	err := c.Hlpr.NotifyPreDispatch(ctx)
 	if err != nil {
 		return err
 	}
 
-	err = c.PreDispatch()
+	err = c.PreDispatch(ctx)
 	if err != nil {
 		return err
 	}
 
-	if c.Rqs.IsDispatched() {
+	if ctx.Request().IsDispatched() {
 		// If pre-dispatch hooks introduced a redirect then stop dispatch
-		if !c.Rsp.IsRedirect() {
-			err = c.Invoke(ctrl, m)
+		if !ctx.Response().IsRedirect() {
+			err = c.Invoke(ctx, ctrl, m)
 			if err != nil {
 				return err
 			}
 		}
 
-		err = c.PostDispatch()
+		err = c.PostDispatch(ctx)
 		if err != nil {
 			return err
 		}
@@ -100,7 +93,7 @@ func (c *Controller) Dispatch(ctrl interface{}, m reflect.Method) error {
 	// whats actually important here is that this action controller is
 	// shutting down, regardless of dispatching; notify the helpers of this
 	// state
-	err = c.Hlpr.NotifyPostDispatch()
+	err = c.Hlpr.NotifyPostDispatch(ctx)
 	if err != nil {
 		return err
 	}
@@ -119,7 +112,6 @@ func (c *Controller) SetHelperBroker() (err error) {
 		}
 	}
 
-	c.Hlpr.SetController(c)
 	return nil
 }
 
@@ -139,55 +131,10 @@ func (c *Controller) Helper(name string) helper.Interface {
 	return h
 }
 
-// SetRequest sets request
-func (c *Controller) SetRequest(req request.Interface) {
-	c.Rqs = req
-}
-
-// Request returns request
-func (c *Controller) Request() request.Interface {
-	return c.Rqs
-}
-
-// SetResponse sets response
-func (c *Controller) SetResponse(rsp response.Interface) {
-	c.Rsp = rsp
-}
-
-// Response returns response
-func (c *Controller) Response() response.Interface {
-	return c.Rsp
-}
-
-// SetSession sets session
-func (c *Controller) SetSession(s session.Interface) {
-	c.Sess = s
-}
-
-// Session returns session
-func (c *Controller) Session() session.Interface {
-	return c.Sess
-}
-
-// SetContext sets context
-func (c *Controller) SetContext(ctx context.Context) {
-	c.Ctx = ctx
-}
-
-// Context returns context
-func (c *Controller) Context() context.Context {
-	return c.Ctx
-}
-
 // SetLayout sets a layout
-func (c *Controller) SetLayout(name string) error {
-	c.Ctx.SetValue(context.LayoutKey, name)
+func (c *Controller) SetLayout(ctx context.Context, name string) error {
+	ctx.SetParam(context.LayoutKey, name)
 	return nil
-}
-
-// DisableLayout disables the layout
-func (c *Controller) DisableLayout() {
-	c.Ctx.SetValue(context.LayoutEnabledKey, false)
 }
 
 // SetParams sets parameters to pass to handlers
@@ -257,12 +204,12 @@ func (c *Controller) ClearParams() bool {
 }
 
 // Init initializes controller
-func (c *Controller) Init() error {
+func (c *Controller) Init(ctx context.Context) error {
 	return nil
 }
 
 // Render renders response
-func (c *Controller) Render() error {
+func (c *Controller) Render(ctx context.Context) error {
 	return nil
 }
 
@@ -284,12 +231,12 @@ func (c *Controller) View() view.Interface {
 }
 
 // Invoke calls an action
-func (c *Controller) Invoke(ctrl interface{}, m reflect.Method) error {
+func (c *Controller) Invoke(ctx context.Context, ctrl Interface, m reflect.Method) error {
 	if err := c.verifySignature(m); err != nil {
 		return err
 	}
 
-	values, err := c.resolveValues(ctrl, m)
+	values, err := c.resolveValues(m, ctrl, ctx)
 	if err != nil {
 		return err
 	}
@@ -302,8 +249,8 @@ func (c *Controller) Invoke(ctrl interface{}, m reflect.Method) error {
 	return out[0].Interface().(error)
 }
 
-// GetViewScript returns path to view script
-func (c *Controller) GetViewScript(action string, noController bool) (string, error) {
+// ViewScript returns path to view script
+func (c *Controller) ViewScript(ctx context.Context, action string, noController bool) (string, error) {
 	if !c.ParamBool("noViewRenderer") && c.Hlpr.HasHelper("viewRenderer") {
 		viewRenderer, err := c.Hlpr.GetHelper("viewRenderer")
 		if err != nil {
@@ -314,10 +261,14 @@ func (c *Controller) GetViewScript(action string, noController bool) (string, er
 			viewRenderer.(*helper.ViewRenderer).SetNoController(noController)
 		}
 
-		return viewRenderer.(*helper.ViewRenderer).GetViewScript(action, nil)
+		return viewRenderer.(*helper.ViewRenderer).ViewScript(map[string]string{
+			"module":     ctx.Request().ModuleName(),
+			"controller": ctx.Request().ControllerName(),
+			"action":     ctx.Request().ActionName(),
+		})
 	}
 
-	rqs := c.Request()
+	rqs := ctx.Request()
 	if action == "" {
 		action = rqs.ActionName()
 	}
@@ -342,17 +293,25 @@ func (c *Controller) GetResource(name string) interface{} {
 }
 
 // PreDispatch fires before action invocation
-func (c *Controller) PreDispatch() error {
+func (c *Controller) PreDispatch(ctx context.Context) error {
 	return nil
 }
 
 // PostDispatch fires after action invocation
-func (c *Controller) PostDispatch() error {
+func (c *Controller) PostDispatch(ctx context.Context) error {
 	return nil
 }
 
 // verifySignature checks if action method has valid signature
 func (c *Controller) verifySignature(m reflect.Method) error {
+	if m.Type.NumIn() < 1 {
+		return errors.Errorf("Action ( %s ) must have atleast 1 value", m.Name)
+	}
+
+	if !m.Type.In(1).Implements(reflect.TypeOf((*context.Context)(nil)).Elem()) {
+		return errors.Errorf("Action ( %s ) first argument must implement context.Context interface", m.Name)
+	}
+
 	if m.Type.NumOut() != 1 {
 		return errors.Errorf("Action ( %s ) must have exact 1 return value", m.Name)
 	}
@@ -365,33 +324,50 @@ func (c *Controller) verifySignature(m reflect.Method) error {
 }
 
 // resolveValues returns slice of call arguments for service Init method
-func (c *Controller) resolveValues(ctrl interface{}, m reflect.Method) (values []reflect.Value, err error) {
+func (c *Controller) resolveValues(m reflect.Method, args ...interface{}) (values []reflect.Value, err error) {
 	for i := 0; i < m.Type.NumIn(); i++ {
 		v := m.Type.In(i)
 
-		switch {
-		case v.ConvertibleTo(reflect.ValueOf(ctrl).Type()):
-			values = append(values, reflect.ValueOf(ctrl))
+		//switch {
+		//case v.ConvertibleTo(reflect.TypeOf(ctrl)):
+		//	values = append(values, reflect.ValueOf(ctrl))
 
-		default:
-			value, err := c.resolveValue(v)
+		//case v.Implements(reflect.TypeOf((*context.Context)(nil)).Elem()):
+		//	values = append(values, reflect.ValueOf(cfg))
+
+		//default:
+		if len(args) > i {
+			value, err := c.resolveValue(v, args[i])
 			if err != nil {
 				return nil, err
 			}
 
 			values = append(values, value)
+		} else {
+			values = append(values, reflect.Value{})
 		}
+		//}
 	}
 
 	return
 }
 
-func (c *Controller) resolveValue(v reflect.Type) (reflect.Value, error) {
+func (c *Controller) resolveValue(v reflect.Type, arg interface{}) (reflect.Value, error) {
 	value := reflect.Value{}
+	if v.ConvertibleTo(reflect.TypeOf(arg)) {
+		value = reflect.ValueOf(arg)
+	} else if v.Kind() == reflect.Interface && reflect.TypeOf(arg).Implements(v) {
+		value = reflect.ValueOf(arg)
+	}
+
+	if !value.IsValid() {
+		value = reflect.New(v).Elem()
+	}
+
 	return value, nil
 }
 
-func (c *Controller) initView() (vi view.Interface, err error) {
+/*func (c *Controller) initView() (vi view.Interface, err error) {
 	if !c.ParamBool("noViewRenderer") && c.Hlpr.HasHelper("viewRenderer") {
 		return nil, nil
 	}
@@ -417,4 +393,19 @@ func (c *Controller) initView() (vi view.Interface, err error) {
 
 	registry.Set("view", c.Vw)
 	return c.Vw, nil
+}*/
+
+// NewController creates an instance of action controller
+func NewController() (c *Controller, err error) {
+	c = &Controller{
+		Hlpr: Broker(),
+	}
+
+	untypedLog := registry.GetResource("syslog")
+	if untypedLog == nil {
+		return nil, errors.New("Log resource is required")
+	}
+	c.SetLogger(untypedLog.(*log.Log))
+
+	return c, nil
 }

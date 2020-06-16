@@ -66,7 +66,9 @@ func (c *ManagerConfig) Defaults() error {
 	c.Type = "default"
 	c.Priority = 15
 	c.SessionName = "WSFSESS"
-	c.EnableSetCookie = true
+	c.EnableSetCookie = false
+	c.EnableSidInHTTPHeader = false
+	c.EnableSidInURLQuery = false
 	c.SessionIDLength = 16
 	c.SessionLifeTime = 900
 	c.Valds = make([]*validator.Config, 0)

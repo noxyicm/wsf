@@ -4,8 +4,12 @@ import "wsf/config"
 
 // Config represents router configuration
 type Config struct {
-	Type string
-	File string
+	Type              string
+	File              string
+	URIDelimiter      string
+	URIVariable       string
+	URIRegexDelimiter string
+	UseDefaultRoutes  bool
 }
 
 // Populate populates Config values using given Config source
@@ -21,6 +25,9 @@ func (c *Config) Populate(cfg config.Config) error {
 func (c *Config) Defaults() error {
 	c.Type = "default"
 	c.File = "routes.json"
+	c.URIDelimiter = "/"
+	c.URIVariable = ":"
+	c.URIRegexDelimiter = ""
 	return nil
 }
 

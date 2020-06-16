@@ -20,7 +20,7 @@ type Service struct {
 	options  *Config
 	stop     chan interface{}
 	rpc      *rpc.Server
-	lsns     []func(event int, ctx interface{})
+	lsns     []func(event int, ctx service.Event)
 	mu       sync.Mutex
 	serving  bool
 	priority int
@@ -38,7 +38,7 @@ func (s *Service) Init(options *Config) (bool, error) {
 }
 
 // AddListener attaches server event watcher
-func (s *Service) AddListener(l func(event int, ctx interface{})) {
+func (s *Service) AddListener(l func(event int, ctx service.Event)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -46,7 +46,7 @@ func (s *Service) AddListener(l func(event int, ctx interface{})) {
 }
 
 // throw handles service, server and pool events.
-func (s *Service) throw(event int, ctx interface{}) {
+func (s *Service) throw(event int, ctx service.Event) {
 	for _, l := range s.lsns {
 		l(event, ctx)
 	}

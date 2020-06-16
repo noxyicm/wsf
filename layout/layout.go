@@ -286,12 +286,11 @@ func (l *DefaultLayout) SetInflector(inf *filter.Inflector) error {
 // GetInflector returns inflector
 func (l *DefaultLayout) GetInflector() *filter.Inflector {
 	if l.Inflector == nil {
-		inflc, err := filter.NewInflector()
+		inf, err := filter.NewInflector()
 		if err != nil {
 			return nil
 		}
 
-		inf := inflc.(*filter.Inflector)
 		inf.AddRules(map[string]interface{}{
 			":script": []interface{}{
 				"Word_CamelCaseToDash",

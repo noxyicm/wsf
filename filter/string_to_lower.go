@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/pkg/errors"
+	"wsf/errors"
 )
 
 func init() {

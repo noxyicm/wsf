@@ -13,19 +13,10 @@ import (
 const (
 	// TYPERoute represents default route
 	TYPERoute = "route"
-
-	// URIDelimiter represents uri separator
-	URIDelimiter = "/"
-
-	// URIVariable represents prefix poiting to variable
-	URIVariable = ":"
-
-	// URIRegexDelimiter represents pointer to regex expresion
-	URIRegexDelimiter = ""
 )
 
 var (
-	buildRouteHandlers = map[string]func(string, map[string]string, map[string]string) (RouteInterface, error){}
+	buildRouteHandlers = map[string]func(*RouteConfig, string, map[string]string, map[string]string) RouteInterface{}
 )
 
 func init() {
@@ -40,27 +31,25 @@ type RouteInterface interface {
 
 // Route is
 type Route struct {
-	URIDelimiter   string
-	URIVariable    string
-	RegexDelimiter string
-	method         string
-	path           string
-	action         string
-	module         string
-	controller     string
-	params         []string
-	isTranslated   bool
-	variables      map[int]string
-	parts          []string
-	translatable   []string
-	defaults       map[string]string
-	requirements   map[string]string
-	values         map[string]string
-	wildcardData   map[string]string
-	defaultRegex   *regexp.Regexp
-	staticCount    int
+	Options      *RouteConfig
+	Method       string
+	Path         string
+	Action       string
+	Module       string
+	Controller   string
+	Params       []string
+	IsTranslated bool
+	Vars         map[int]string
+	Parts        []string
+	Translatable []string
+	Defs         map[string]string
+	Requirements map[string]string
+	Values       map[string]string
+	WildcardData map[string]string
+	DefaultRegex *regexp.Regexp
+	StaticCount  int
 	//translator
-	locale string
+	Loc string
 }
 
 // Match matches provided path against this route
@@ -71,19 +60,24 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *RouteMatch) {
 	//}
 
 	path := req.PathInfo()
+	if r.Options.ModulePrefix != "" {
+		path = strings.Replace(path, r.Options.ModulePrefix, "", 1)
+		path = strings.Trim(path, r.Options.URIDelimiter)
+		path = r.Options.ModulePrefix + path
+	}
 	pathStaticCount := 0
 	values := make(map[string]string)
 	matchedPath := ""
 
 	if !partial {
-		path = strings.Trim(path, r.URIDelimiter)
+		path = strings.Trim(path, r.Options.URIDelimiter)
 	}
 
 	if path != "" {
-		pathParts := strings.Split(path, r.URIDelimiter)
+		pathParts := strings.Split(path, r.Options.URIDelimiter)
 		for pos, part := range pathParts {
 			// Path is longer than a route, it's not a match
-			if len(r.parts) <= pos {
+			if len(r.Parts) <= pos {
 				if partial {
 					break
 				} else {
@@ -91,31 +85,31 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *RouteMatch) {
 				}
 			}
 
-			matchedPath = matchedPath + part + r.URIDelimiter
+			matchedPath = matchedPath + part + r.Options.URIDelimiter
 			// If it's a wildcard, get the rest of URL as wildcard data and stop matching
-			if r.parts[pos] == "*" {
+			if r.Parts[pos] == "*" {
 				count := len(pathParts)
 				for i := pos; i < count; i += 2 {
 					variable, _ := url.QueryUnescape(pathParts[i])
-					if !utils.MapSSKeyExists(variable, r.wildcardData) && !utils.MapSSKeyExists(variable, r.defaults) && !utils.MapSSKeyExists(variable, values) {
+					if !utils.MapSSKeyExists(variable, r.WildcardData) && !utils.MapSSKeyExists(variable, r.Defs) && !utils.MapSSKeyExists(variable, values) {
 						if count <= i+1 {
-							r.wildcardData[variable], _ = url.QueryUnescape(pathParts[i+1])
+							r.WildcardData[variable], _ = url.QueryUnescape(pathParts[i+1])
 						} else {
-							r.wildcardData[variable] = ""
+							r.WildcardData[variable] = ""
 						}
 					}
 				}
 
-				matchedPath = strings.Join(pathParts, r.URIDelimiter)
+				matchedPath = strings.Join(pathParts, r.Options.URIDelimiter)
 				break
 			}
 
-			name := r.variables[pos]
+			name := r.Vars[pos]
 			part, _ = url.QueryUnescape(part)
 
 			// Translate value if required
-			routePart := r.parts[pos]
-			if r.isTranslated && (routePart[0:1] == "@" && routePart[1:2] != "@" && name == "") || name != "" && utils.InSSlice(name, r.translatable) {
+			routePart := r.Parts[pos]
+			if r.IsTranslated && (routePart[0:1] == "@" && routePart[1:2] != "@" && name == "") || name != "" && utils.InSSlice(name, r.Translatable) {
 				if routePart[0:1] == "@" {
 					routePart = routePart[1:]
 				}
@@ -154,23 +148,23 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *RouteMatch) {
 	}
 
 	// Check if all static mappings have been matched
-	if r.staticCount != pathStaticCount {
+	if r.StaticCount != pathStaticCount {
 		return false, nil
 	}
 
-	values = utils.MapSSMerge(values, r.wildcardData)
-	values = utils.MapSSMerge(values, r.defaults)
+	values = utils.MapSSMerge(values, r.WildcardData)
+	values = utils.MapSSMerge(values, r.Defs)
 
-	for _, value := range r.variables {
+	for _, value := range r.Vars {
 		if _, ok := values[value]; !ok {
 			return false, nil
 		} else if values[value] == "" {
-			values[value] = r.defaults[value]
+			values[value] = r.Defs[value]
 		}
 	}
 
-	r.path = strings.TrimRight(matchedPath, r.URIDelimiter)
-	r.values = values
+	r.Path = strings.TrimRight(matchedPath, r.Options.URIDelimiter)
+	r.Values = values
 
 	return true, &RouteMatch{Values: values, Match: true}
 }
@@ -203,8 +197,8 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 	urlParts := make(map[int]string)
 	flag := false
 
-	for key, part := range r.parts {
-		name := r.variables[key]
+	for key, part := range r.Parts {
+		name := r.Vars[key]
 		useDefault := false
 		if name != "" && utils.MapSSKeyExists(name, data) && data[name] == "" {
 			useDefault = true
@@ -214,23 +208,23 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 			if utils.MapSSKeyExists(name, data) && data[name] != "" && !useDefault {
 				value = data[name]
 				delete(data, name)
-			} else if !reset && !useDefault && utils.MapSSKeyExists(name, r.values) && r.values[name] != "" {
-				value = r.values[name]
-			} else if !reset && !useDefault && utils.MapSSKeyExists(name, r.wildcardData) && r.wildcardData[name] != "" {
-				value = r.wildcardData[name]
-			} else if utils.MapSSKeyExists(name, r.defaults) {
-				value = r.defaults[name]
+			} else if !reset && !useDefault && utils.MapSSKeyExists(name, r.Values) && r.Values[name] != "" {
+				value = r.Values[name]
+			} else if !reset && !useDefault && utils.MapSSKeyExists(name, r.WildcardData) && r.WildcardData[name] != "" {
+				value = r.WildcardData[name]
+			} else if utils.MapSSKeyExists(name, r.Defs) {
+				value = r.Defs[name]
 			} else {
 				return "", errors.Errorf("Value %s is not specified", name)
 			}
 
-			if r.isTranslated && utils.InSSlice(name, r.translatable) {
+			if r.IsTranslated && utils.InSSlice(name, r.Translatable) {
 				//urlParts[key] = r.translator.Translate(value, locale)
 			} else {
 				urlParts[key] = value
 			}
 		} else if part != "*" {
-			if r.isTranslated && part[0:1] == "@" {
+			if r.IsTranslated && part[0:1] == "@" {
 				if part[1:2] != "@" {
 					//urlParts[key] = r.translator.Translate(part[1:], locale)
 				} else {
@@ -245,11 +239,11 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 			}
 		} else {
 			if !reset {
-				data = utils.MapSSMerge(data, r.wildcardData)
+				data = utils.MapSSMerge(data, r.WildcardData)
 			}
 
 			for variable, val := range data {
-				if val != "" && ((utils.MapSSKeyExists(name, r.defaults) && r.defaults[name] != "") || val != r.defaults[variable]) {
+				if val != "" && ((utils.MapSSKeyExists(name, r.Defs) && r.Defs[name] != "") || val != r.Defs[variable]) {
 					key++
 					urlParts[key] = variable
 					key++
@@ -263,10 +257,10 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 	path := ""
 	for key, value := range utils.ReverseMapIS(urlParts) {
 		defaultValue := ""
-		if len(r.variables) > key && r.variables[key] != "" {
-			defaultValue = r.Default(r.variables[key])
+		if len(r.Vars) > key && r.Vars[key] != "" {
+			defaultValue = r.Default(r.Vars[key])
 
-			if r.isTranslated && defaultValue != "" && utils.InSSlice(r.variables[key], r.translatable) {
+			if r.IsTranslated && defaultValue != "" && utils.InSSlice(r.Vars[key], r.Translatable) {
 				//defaultValue = r.translator.Translate(defaultValue, locale)
 			}
 		}
@@ -276,18 +270,18 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 			if encode {
 				v = url.QueryEscape(value)
 			}
-			path = r.URIDelimiter + v + path
+			path = r.Options.URIDelimiter + v + path
 			flag = true
 		}
 	}
 
-	return strings.Trim(path, r.URIDelimiter), nil
+	return strings.Trim(path, r.Options.URIDelimiter), nil
 }
 
 // Default returns default value if defined
 func (r *Route) Default(key string) string {
-	if utils.MapSSKeyExists(key, r.defaults) && r.defaults[key] != "" {
-		return r.defaults[key]
+	if utils.MapSSKeyExists(key, r.Defs) && r.Defs[key] != "" {
+		return r.Defs[key]
 	}
 
 	return ""
@@ -295,18 +289,18 @@ func (r *Route) Default(key string) string {
 
 // Defaults returns map of default values
 func (r *Route) Defaults() map[string]string {
-	return r.defaults
+	return r.Defs
 }
 
 // Variables returns map of variables
 func (r *Route) Variables() map[int]string {
-	return r.variables
+	return r.Vars
 }
 
 // Locale returns route locale
 func (r *Route) Locale() string {
-	if r.locale != "" {
-		return r.locale
+	if r.Loc != "" {
+		return r.Loc
 	}
 
 	return ""
@@ -319,77 +313,79 @@ type RouteMatch struct {
 }
 
 // NewRouteRoute creates a new route structure
-func NewRouteRoute(route string, defaults map[string]string, reqs map[string]string) (RouteInterface, error) {
+func NewRouteRoute(options *RouteConfig, route string, defaults map[string]string, reqs map[string]string) RouteInterface {
 	r := &Route{
-		URIDelimiter:   URIDelimiter,
-		URIVariable:    URIVariable,
-		RegexDelimiter: URIRegexDelimiter,
-		variables:      make(map[int]string),
-		parts:          make([]string, 0),
-		translatable:   make([]string, 0),
-		defaults:       defaults,
-		requirements:   reqs,
-		values:         make(map[string]string),
-		wildcardData:   make(map[string]string),
-		defaultRegex:   nil,
+		Options:      options,
+		Vars:         make(map[int]string),
+		Parts:        make([]string, 0),
+		Translatable: make([]string, 0),
+		Defs:         defaults,
+		Requirements: reqs,
+		Values:       make(map[string]string),
+		WildcardData: make(map[string]string),
+		DefaultRegex: nil,
 	}
 
-	route = strings.Trim(route, r.URIDelimiter)
+	route = strings.Trim(route, r.Options.URIDelimiter)
 	if route != "" {
-		routeParts := strings.Split(route, r.URIDelimiter)
-		r.parts = make([]string, len(routeParts))
-		r.variables = make(map[int]string)
+		routeParts := strings.Split(route, r.Options.URIDelimiter)
+		r.Parts = make([]string, len(routeParts))
 		for pos, part := range routeParts {
-			if part[0:1] == r.URIVariable && part[1:2] != r.URIVariable {
+			if part[0:1] == r.Options.URIVariable && part[1:2] != r.Options.URIVariable {
 				name := part[1:]
 				if name[0:1] == "@" && name[1:2] != "@" {
 					name = name[1:]
-					r.translatable = append(r.translatable, name)
-					r.isTranslated = true
+					r.Translatable = append(r.Translatable, name)
+					r.IsTranslated = true
 				}
 
 				if v, ok := reqs[name]; ok {
-					r.parts[pos] = v
+					r.Parts[pos] = v
 				} else {
-					r.parts[pos] = ""
+					r.Parts[pos] = ""
 				}
-				r.variables[pos] = name
+				r.Vars[pos] = name
 			} else {
-				if part[0:1] == r.URIVariable {
+				if part[0:1] == r.Options.URIVariable {
 					part = part[1:]
 				}
 
 				if part[0:1] == "@" && part[1:2] != "@" {
-					r.isTranslated = true
+					r.IsTranslated = true
 				}
 
-				r.parts[pos] = part
+				r.Parts[pos] = part
 				if part != "*" {
-					r.staticCount++
+					r.StaticCount++
 				}
 			}
 		}
 	}
 
-	return r, nil
+	return r
 }
 
 // FromConfig creates a new route from config
-func FromConfig(cfg config.Config) (*Route, error) {
+func FromConfig(options config.Config) (*Route, error) {
 	r := &Route{}
+
+	cfg := &RouteConfig{}
+	cfg.Defaults()
+	cfg.Populate(options)
+	r.Options = cfg
 	return r, nil
 }
 
 // NewRoute creates a new router specified by type
-func NewRoute(routeType string, route string, defaults map[string]string, reqs map[string]string) (RouteInterface, error) {
+func NewRoute(routeType string, options *RouteConfig, route string, defaults map[string]string, reqs map[string]string) (RouteInterface, error) {
 	if f, ok := buildRouteHandlers[routeType]; ok {
-		return f(route, defaults, reqs)
+		return f(options, route, defaults, reqs), nil
 	}
 
 	return nil, errors.Errorf("Unrecognized route type \"%v\"", routeType)
 }
 
 // RegisterRoute registers a route type for router creation
-func RegisterRoute(routeType string, handler func(string, map[string]string, map[string]string) (RouteInterface, error)) {
+func RegisterRoute(routeType string, handler func(*RouteConfig, string, map[string]string, map[string]string) RouteInterface) {
 	buildRouteHandlers[routeType] = handler
 }

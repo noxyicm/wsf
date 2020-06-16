@@ -2,7 +2,6 @@ package modules
 
 import (
 	"path/filepath"
-	"reflect"
 	"wsf/controller/action"
 	"wsf/errors"
 	"wsf/filter"
@@ -11,25 +10,48 @@ import (
 	"wsf/view"
 )
 
+// Interface defines a module
+type Interface interface {
+	Name() string
+	Order() int
+	RegisterController(controllerName string, controller action.Interface) error
+	Controller(name string) (action.Interface, error)
+	RegisterScriptPath(controllerName string) error
+	Resource(name string) interface{}
+	InitControllers() error
+	InitPlugins() error
+	InitRoutes() error
+	InitActionHelpers() error
+}
+
 // Module represents a module
 type Module struct {
-	Name         string
-	Order        int
+	name         string
+	order        int
 	ViewPathSpec string
-	controllers  map[string]reflect.Type
-	handlers     map[string]action.Interface
+	controllers  map[string]action.Interface
+}
+
+// Name returns module name
+func (m *Module) Name() string {
+	return m.name
+}
+
+// Order returns module order
+func (m *Module) Order() int {
+	return m.order
 }
 
 // RegisterController registers action controller
-func (m *Module) RegisterController(controller string, controllerType reflect.Type) error {
-	m.controllers[controller] = controllerType
+func (m *Module) RegisterController(controllerName string, controller action.Interface) error {
+	m.controllers[controllerName] = controller
 
-	m.RegisterScriptPath(controller)
+	m.RegisterScriptPath(controllerName)
 	return nil
 }
 
-// ControllerType returns controller type by its name
-func (m *Module) ControllerType(name string) (reflect.Type, error) {
+// Controller returns controller type by its name
+func (m *Module) Controller(name string) (action.Interface, error) {
 	if v, ok := m.controllers[name]; ok {
 		return v, nil
 	}
@@ -49,20 +71,19 @@ func (m *Module) RegisterScriptPath(controllerName string) error {
 		return errors.New("View resource does not implements \"wsf/view\".Interface")
 	}
 
-	inf, err := filter.NewInflector()
+	inflector, err := filter.NewInflector()
 	if err != nil {
-		return nil
+		return errors.Wrap(err, "Unable to add controller path for view templates")
 	}
 
-	inflector := inf.(*filter.Inflector)
 	uts, err := word.NewUnderscoreToSeparator("/")
 	if err != nil {
-		return nil
+		return errors.Wrap(err, "Unable to add controller path for view templates")
 	}
 
 	rrc, err := filter.NewRegexpReplace(`\.`, "-")
 	if err != nil {
-		return nil
+		return errors.Wrap(err, "Unable to add controller path for view templates")
 	}
 
 	inflector.AddRules(map[string]interface{}{
@@ -73,29 +94,47 @@ func (m *Module) RegisterScriptPath(controllerName string) error {
 	inflector.SetTarget(v.GetBasePath())
 
 	controllerPath, err := inflector.Filter(map[string]string{
-		"module":     m.Name,
+		"module":     m.name,
 		"controller": controllerName,
 	})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Unable to add controller path for view templates")
 	}
 
 	v.AddTemplatePath(filepath.FromSlash(controllerPath.(string)))
-
 	return nil
 }
 
-// GetResource returns a registered resource from registry
-func (m *Module) GetResource(name string) interface{} {
+// Resource returns a registered resource from registry
+func (m *Module) Resource(name string) interface{} {
 	return registry.GetResource(name)
 }
 
+// InitControllers runs the controller initialization
+func (m *Module) InitControllers() error {
+	return nil
+}
+
+// InitPlugins runs the controller initialization
+func (m *Module) InitPlugins() error {
+	return nil
+}
+
+// InitRoutes runs the controller initialization
+func (m *Module) InitRoutes() error {
+	return nil
+}
+
+// InitActionHelpers runs the controller initialization
+func (m *Module) InitActionHelpers() error {
+	return nil
+}
+
 // NewModule creates new module struct
-func NewModule(name string, order int) (*Module, error) {
+func NewModule(order int, name string) *Module {
 	return &Module{
-		Name:        name,
-		Order:       order,
-		controllers: make(map[string]reflect.Type),
-		handlers:    make(map[string]action.Interface),
-	}, nil
+		name:        name,
+		order:       order,
+		controllers: make(map[string]action.Interface),
+	}
 }

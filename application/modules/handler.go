@@ -10,16 +10,17 @@ import (
 
 var (
 	buildHandlers         = map[string]func(*Config) (Handler, error){}
-	buildModules          = map[int]string{}
-	buildModulesCallbacks = map[string]func(m *Module) error{}
+	buildModules          = map[string]func(order int, name string) (Interface, error){}
+	buildModulesOrder     = map[int]string{}
+	buildModulesCallbacks = map[string]func(m Interface) error{}
 )
 
 // Handler represents module handler interface
 type Handler interface {
 	Bootstrap() error
-	Modules() map[string]*Module
-	Module(name string) *Module
-	RegisterModule(order int, name string, callback func(*Module)) error
+	Modules() map[string]Interface
+	Module(name string) Interface
+	RegisterModule(order int, name string, constructor func(order int, name string) (Interface, error), callback func(Interface) error) (err error)
 	Priority() int
 }
 
@@ -27,26 +28,45 @@ type handler struct {
 	options     *Config
 	namespace   string
 	moduleOrder map[int]string
-	modules     map[string]*Module
+	modules     map[string]Interface
 }
 
 // Init initializes handler and its modules
 func (h *handler) Init(options config.Config) (bool, error) {
-	h.moduleOrder = buildModules
+	h.moduleOrder = buildModulesOrder
 	for mo, mn := range h.moduleOrder {
-		m, err := NewModule(mn, mo)
-		if err != nil {
-			return false, errors.Errorf("Unable to create module '%s'\n", mn)
-		}
+		if constr, ok := buildModules[mn]; ok {
+			m, err := constr(mo, mn)
+			if err != nil {
+				return false, errors.Errorf("Unable to create module '%s'", mn)
+			}
 
-		h.modules[mn] = m
+			h.modules[mn] = m
+		} else {
+			return false, errors.Errorf("No constructor for module '%s'", mn)
+		}
 	}
 
 	for mn, md := range h.modules {
-		if v, ok := buildModulesCallbacks[mn]; ok {
-			err := v(md)
-			if err != nil {
-				return false, err
+		if err := md.InitControllers(); err != nil {
+			return false, errors.Wrapf(err, "Unabele to initialize module '%s'", mn)
+		}
+
+		if err := md.InitPlugins(); err != nil {
+			return false, errors.Wrapf(err, "Unabele to initialize module '%s'", mn)
+		}
+
+		if err := md.InitRoutes(); err != nil {
+			return false, errors.Wrapf(err, "Unabele to initialize module '%s'", mn)
+		}
+
+		if err := md.InitActionHelpers(); err != nil {
+			return false, errors.Wrapf(err, "Unabele to initialize module '%s'", mn)
+		}
+
+		if v, ok := buildModulesCallbacks[mn]; ok && v != nil {
+			if err := v(md); err != nil {
+				return false, errors.Wrapf(err, "Unabele to initialize module '%s'", mn)
 			}
 		}
 	}
@@ -55,12 +75,12 @@ func (h *handler) Init(options config.Config) (bool, error) {
 }
 
 // Modules returns handler modules
-func (h *handler) Modules() map[string]*Module {
+func (h *handler) Modules() map[string]Interface {
 	return h.modules
 }
 
 // Module returns specific module
-func (h *handler) Module(name string) *Module {
+func (h *handler) Module(name string) Interface {
 	if v, ok := h.modules[name]; ok {
 		return v
 	}
@@ -74,35 +94,31 @@ func (h *handler) Priority() int {
 }
 
 // NewHandler creates a new module handler specified by type
-func NewHandler(moduleType string, options config.Config) (Handler, error) {
+func NewHandler(typ string, options config.Config) (Handler, error) {
 	cfg := &Config{}
 	cfg.Defaults()
 	cfg.Populate(options)
 
-	if f, ok := buildHandlers[moduleType]; ok {
+	if f, ok := buildHandlers[typ]; ok {
 		return f(cfg)
 	}
 
-	return nil, errors.Errorf("Unrecognized module handler type \"%v\"", moduleType)
+	return nil, errors.Errorf("Unrecognized module handler type \"%v\"", typ)
 }
 
-// Register registers a handler for module handler creation
-func Register(moduleType string, handler func(*Config) (Handler, error)) {
-	buildHandlers[moduleType] = handler
+// Register registers a handler constructor for module handler creation
+func Register(typ string, handler func(*Config) (Handler, error)) {
+	buildHandlers[typ] = handler
 }
 
 // RegisterModule registers a module in handler
-func RegisterModule(order int, name string, callback func(m *Module) error) error {
-	//, callback func(*Module)
-	//if handler := registry.Get("moduleHandler"); handler != nil {
-	//	return handler.(Handler).RegisterModule(order, name, callback)
-	//}
-
-	if _, ok := buildModules[order]; ok {
-		order = len(buildModules)
+func RegisterModule(order int, name string, constructor func(order int, name string) (Interface, error), callback func(m Interface) error) error {
+	if _, ok := buildModulesOrder[order]; ok {
+		order = len(buildModulesOrder)
 	}
 
-	buildModules[order] = name
+	buildModulesOrder[order] = name
+	buildModules[name] = constructor
 	buildModulesCallbacks[name] = callback
 	return nil
 }

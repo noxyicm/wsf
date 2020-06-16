@@ -3,7 +3,6 @@ package controller
 import (
 	"wsf/config"
 	"wsf/controller/dispatcher"
-	"wsf/controller/router"
 	"wsf/errors"
 	"wsf/log"
 )
@@ -16,7 +15,7 @@ type Config struct {
 	ErrorHandling   bool
 	Logger          *log.Log
 	Dispatcher      *dispatcher.Config
-	Router          *router.Config
+	Router          config.Config
 }
 
 // Populate populates Config values using given Config source
@@ -31,12 +30,7 @@ func (c *Config) Populate(cfg config.Config) error {
 	}
 
 	if c.Router == nil {
-		c.Router = &router.Config{}
-	}
-
-	c.Router.Defaults()
-	if rcfg := cfg.Get("router"); rcfg != nil {
-		c.Router.Populate(rcfg)
+		c.Router = config.NewBridge()
 	}
 
 	if err := cfg.Unmarshal(c); err != nil {
@@ -56,8 +50,15 @@ func (c *Config) Defaults() error {
 	c.Dispatcher = &dispatcher.Config{}
 	c.Dispatcher.Defaults()
 
-	c.Router = &router.Config{}
-	c.Router.Defaults()
+	c.Router = config.NewBridge()
+	c.Router.Merge(map[string]interface{}{
+		"type":              "default",
+		"file":              "routes.json",
+		"uridelimiter":      "/",
+		"urivariable":       ":",
+		"uriregexdelimiter": "",
+		"moduleprefix":      "",
+	})
 	return nil
 }
 

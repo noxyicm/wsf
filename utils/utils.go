@@ -55,17 +55,27 @@ func FetchIndexes(s string) []string {
 type DataTree map[string]interface{}
 
 // Push pushes value into data tree
-func (d DataTree) Push(k string, v []string) {
+func (d DataTree) Push(k string, v interface{}) {
 	keys := FetchIndexes(k)
 	if len(keys) <= MaxTreeLevel {
 		d.Mount(keys, v)
 	}
 }
 
+// Get retreives a value from tree
+func (d DataTree) Get(k string) interface{} {
+	keys := FetchIndexes(k)
+	if len(keys) <= MaxTreeLevel {
+		return d.Unmount(keys)
+	}
+
+	return nil
+}
+
 // Mount mounts data tree recursively
-func (d DataTree) Mount(i []string, v []string) {
+func (d DataTree) Mount(i []string, v interface{}) {
 	if len(i) == 1 {
-		d[i[0]] = v[0]
+		d[i[0]] = v
 		return
 	}
 
@@ -81,6 +91,23 @@ func (d DataTree) Mount(i []string, v []string) {
 
 	d[i[0]] = make(DataTree)
 	d[i[0]].(DataTree).Mount(i[1:], v)
+}
+
+// Unmount retrives data from tree recursively
+func (d DataTree) Unmount(i []string) interface{} {
+	if len(i) == 1 {
+		return d[i[0]]
+	}
+
+	if len(i) == 2 && i[1] == "" {
+		return d[i[0]]
+	}
+
+	if p, ok := d[i[0]]; ok {
+		return p.(DataTree).Unmount(i[1:])
+	}
+
+	return nil
 }
 
 // Less determines wherethere a is less than b

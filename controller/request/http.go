@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"wsf/application/file"
 	"wsf/controller/request/attributes"
@@ -21,7 +22,8 @@ const (
 
 // HTTP maps net/http requests to PSR7 compatible structure and managed state of temporary uploaded files
 type HTTP struct {
-	Request
+	*Request
+
 	original   *http.Request
 	Protocol   string                 `json:"protocol"`
 	Method     string                 `json:"method"`
@@ -34,6 +36,7 @@ type HTTP struct {
 	Parsed     bool                   `json:"parsed"`
 	Uploads    *file.Transfer         `json:"uploads"`
 	Attributes map[string]interface{} `json:"attributes"`
+	FormData   utils.DataTree
 	fileCfg    *file.Config
 }
 
@@ -58,43 +61,60 @@ func (r *HTTP) SetDispatched(is bool) error {
 	return nil
 }
 
-// ParseUploads parses request uploads into file transfer structure
-func (r *HTTP) ParseUploads(rqs *http.Request) error {
-	t, err := file.NewTransfer(r.fileCfg)
-	if err != nil {
-		return err
-	}
-
-	for k, v := range rqs.MultipartForm.File {
-		files := make([]*file.File, 0, len(v))
-		for _, f := range v {
-			files = append(files, file.NewUpload(f))
+// ParseMultipart parses request uploads into file transfer structure
+func (r *HTTP) ParseMultipart(rqs *http.Request) error {
+	if rqs.MultipartForm != nil {
+		for k, v := range rqs.MultipartForm.Value {
+			r.FormData.Push(k, v)
 		}
 
-		t.Append(files)
-		t.Push(k, files)
+		if len(rqs.MultipartForm.File) > 0 {
+			t, err := file.NewTransfer(r.fileCfg)
+			if err != nil {
+				return err
+			}
+
+			for k, v := range rqs.MultipartForm.File {
+				for i, f := range v {
+					t.Push(k+"["+strconv.Itoa(i)+"]", file.NewUpload(f))
+				}
+			}
+
+			if err := t.Upload(); err != nil {
+				return err
+			}
+
+			for k, v := range rqs.MultipartForm.File {
+				f := make([]map[string]interface{}, len(v))
+				for i := range v {
+					if fd := t.Get(k + "[" + strconv.Itoa(i) + "]"); fd != nil {
+						f[i] = map[string]interface{}{
+							"name":    fd.Name,
+							"size":    fd.Size,
+							"mime":    fd.Mime,
+							"tmpName": fd.TempFilename,
+						}
+					}
+				}
+
+				r.FormData.Push(k, f)
+			}
+		}
 	}
 
-	r.Uploads = t
+	r.Body = r.FormData
 	return nil
 }
 
 // ParseData parses request into data tree
 func (r *HTTP) ParseData(rqs *http.Request) error {
-	data := make(utils.DataTree)
 	if rqs.PostForm != nil {
 		for k, v := range rqs.PostForm {
-			data.Push(k, v)
+			r.FormData.Push(k, v)
 		}
 	}
 
-	if rqs.MultipartForm != nil {
-		for k, v := range rqs.MultipartForm.Value {
-			data.Push(k, v)
-		}
-	}
-
-	r.Body = data
+	r.Body = r.FormData
 	return nil
 }
 
@@ -142,6 +162,7 @@ func (r *HTTP) Destroy() {
 	r.Uploads = nil
 	r.Attributes = make(map[string]interface{})
 	r.fileCfg = nil
+	r.FormData = make(utils.DataTree)
 
 	r.Clear()
 }
@@ -292,6 +313,7 @@ func (r *HTTP) clientIP() string {
 // NewHTTPRequest creates new PSR7 compatible request using net/http request
 func NewHTTPRequest(r *http.Request, cfg *file.Config, proxyed bool) (ri Interface, err error) {
 	req := &HTTP{
+		Request:    &Request{},
 		original:   r,
 		Protocol:   r.Proto,
 		Method:     r.Method,
@@ -303,6 +325,7 @@ func NewHTTPRequest(r *http.Request, cfg *file.Config, proxyed bool) (ri Interfa
 		UserAgent:  r.UserAgent(),
 		Attributes: attributes.All(r),
 		fileCfg:    cfg,
+		FormData:   make(utils.DataTree),
 	}
 
 	req.Cks = make(map[string]*http.Cookie)
@@ -341,7 +364,7 @@ func NewHTTPRequest(r *http.Request, cfg *file.Config, proxyed bool) (ri Interfa
 			return nil, err
 		}
 
-		req.ParseUploads(r)
+		req.ParseMultipart(r)
 		fallthrough
 	case contentFormData:
 		if err = r.ParseForm(); err != nil {

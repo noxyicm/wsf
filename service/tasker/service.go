@@ -2,7 +2,9 @@ package tasker
 
 import (
 	goctx "context"
+	"fmt"
 	"sync"
+	"time"
 	"wsf/config"
 	"wsf/context"
 	"wsf/errors"
@@ -24,6 +26,7 @@ var (
 
 // Service is Worker service
 type Service struct {
+	id                  int64
 	Options             *Config
 	Logger              *log.Log
 	name                string
@@ -44,7 +47,7 @@ type Service struct {
 	autostartingWorkers int
 	autostartedWorkers  int
 	inExitSequence      bool
-	lsns                []func(event int, ctx interface{})
+	lsns                []func(event int, ctx service.Event)
 	mu                  sync.Mutex
 	mur                 sync.RWMutex
 	mux                 sync.Mutex
@@ -74,7 +77,7 @@ func (s *Service) Priority() int {
 }
 
 // AddListener attaches server event watcher
-func (s *Service) AddListener(l func(event int, ctx interface{})) {
+func (s *Service) AddListener(l func(event int, ctx service.Event)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -82,7 +85,7 @@ func (s *Service) AddListener(l func(event int, ctx interface{})) {
 }
 
 // throw handles service, server and pool events.
-func (s *Service) throw(event int, ctx interface{}) {
+func (s *Service) throw(event int, ctx service.Event) {
 	for _, l := range s.lsns {
 		l(event, ctx)
 	}
@@ -92,11 +95,13 @@ func (s *Service) throw(event int, ctx interface{}) {
 func (s *Service) Serve(ctx context.Context) (err error) {
 	s.mu.Lock()
 	s.ctx, s.cancel = context.WithCancel(ctx)
+	s.inChan = make(chan *Message)
+	s.serving = true
 	s.mu.Unlock()
 
 	s.beginWatch()
 	if err := s.watchContext(s.ctx); err != nil {
-		s.stopWatch()
+		s.stop()
 		return errors.Wrap(err, "["+s.name+"] Unable to serve service")
 	}
 
@@ -118,8 +123,8 @@ func (s *Service) Serve(ctx context.Context) (err error) {
 	}
 
 	if potentialWorkers == 0 {
-		s.stopWatch()
-		return errors.New("[" + s.name + "] No workers defined")
+		s.stop()
+		return errors.New("[" + s.name + "] Stopped. No workers defined")
 	}
 
 	s.mu.Lock()
@@ -152,21 +157,15 @@ func (s *Service) Serve(ctx context.Context) (err error) {
 	s.Logger.Info("["+s.name+"] Started", nil)
 
 	if s.runingWorkers < 1 && !s.Options.Persistent {
-		s.stopWatch()
-		s.Logger.Info("["+s.name+"] Stoped. No persistent tasks", nil)
+		s.stop()
+		s.Logger.Info("["+s.name+"] All tasks done. Stoped", nil)
 		return nil
 	}
-
-	s.mu.Lock()
-	s.serving = true
-	s.inChan = make(chan *Message, 1)
-	s.mu.Unlock()
 
 MainLoop:
 	for {
 		select {
 		case <-s.stopChan:
-			s.done()
 			break MainLoop
 
 		case msg, ok := <-s.inChan:
@@ -216,16 +215,9 @@ MainLoop:
 		}
 	}
 
-	<-s.exitChan
-	s.mu.Lock()
-	s.serving = false
-	close(s.inChan)
-	s.inChan = nil
-	s.mu.Unlock()
+	s.stop()
 
 	s.Logger.Info("["+s.name+"] Stoped", nil)
-	//close(s.returnChan)
-	//s.returnChan = nil
 	return nil
 }
 
@@ -239,15 +231,30 @@ func (s *Service) Stop() {
 	if serving {
 		s.Logger.Info("["+s.name+"] Waiting for all routines to exit...", nil)
 		s.ctx.Cancel()
+		<-s.exitChan
 	}
 
-	//<-s.returnChan
+	s.mu.Lock()
+	s.serving = false
+	s.mu.Unlock()
+}
+
+// ID implements waiter interface
+func (s *Service) ID() int64 {
+	return s.id
 }
 
 // InChannel returns channel for receiving messages
 func (s *Service) InChannel() (chan<- *Message, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if !s.serving {
 		return nil, errors.New("[" + s.name + "] Service is not serving. Income channel is not avaliable at this time")
+	}
+
+	if s.inChan == nil {
+		s.inChan = make(chan *Message)
 	}
 
 	return s.inChan, nil
@@ -262,12 +269,17 @@ func (s *Service) SetOutChannel(out chan *Message) error {
 // Wait returns channel for sending messages
 func (s *Service) Wait() <-chan *Message {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.serving || s.inExitSequence {
+		return nil
+	}
+
 	if s.outChan == nil {
 		s.outChan = make(chan *Message, 2)
 	}
 
 	c := s.outChan
-	s.mu.Unlock()
 	return c
 }
 
@@ -286,6 +298,24 @@ func (s *Service) Worker(workerName string, indx int) (Worker, error) {
 	return nil, errors.Errorf("[%s] Worker by name '%s' is not registered", s.name, workerName)
 }
 
+func (s *Service) stop() {
+	s.mu.Lock()
+	s.inExitSequence = true
+	s.mu.Unlock()
+
+	if s.inChan != nil {
+		close(s.inChan)
+	}
+
+	s.stopWatch()
+
+	<-s.exitChan
+
+	if s.outChan != nil {
+		close(s.outChan)
+	}
+}
+
 func (s *Service) postStartPhase() error {
 	if len(s.Options.Tasks) > 0 {
 		for _, tcfg := range s.Options.Tasks {
@@ -295,7 +325,7 @@ func (s *Service) postStartPhase() error {
 				continue
 			}
 
-			msg := &Message{Type: MessageAddTask, Task: *task}
+			msg := &Message{Type: MessageStartTask, Task: *task}
 			wrk, err := s.lazyWorker(msg.Task.Worker)
 			if err != nil {
 				s.Logger.Error(errors.Wrapf(err, "[%s] Unable to handle root task '%d'", s.name, tcfg.GetInt64("id")), nil)
@@ -414,15 +444,20 @@ func (s *Service) beginWatch() {
 	go func() {
 		for {
 			var ctx context.Context
+			var ok bool
 			select {
-			case ctx = <-watcher:
+			case ctx, ok = <-watcher:
+				if !ok {
+					return
+				}
 			case <-s.stopChan:
 				return
 			}
 
 			select {
 			case <-ctx.Done():
-				close(s.stopChan)
+				fmt.Println("Service.beginWatch() <-ctx.Done()")
+				s.stopWatch()
 			case <-s.stopChan:
 				return
 			}
@@ -477,21 +512,8 @@ func (s *Service) beginWatch() {
 			}(wt)
 		}
 
-		close(s.exitChan)
-		s.mur.Lock()
-		s.exitChan = nil
-		s.mur.Unlock()
+		s.done()
 		return
-	}()
-
-	go func() {
-		for {
-			select {
-			case <-s.doneChan:
-				s.stopWatch()
-				return
-			}
-		}
 	}()
 }
 
@@ -504,11 +526,12 @@ func (s *Service) stopWatch() {
 		return
 	}
 
-	close(s.waiterChan)
-
 	s.mu.Lock()
-	s.watchChan = nil
+	close(s.waiterChan)
 	s.waiterChan = nil
+	close(s.watchChan)
+	s.watchChan = nil
+	close(s.stopChan)
 	s.stopChan = nil
 	s.watching = false
 	s.mu.Unlock()
@@ -518,15 +541,18 @@ func (s *Service) done() {
 	s.mur.Lock()
 	runningWorkers := s.runingWorkers
 	exiting := s.inExitSequence
+	serving := s.serving
 	s.mur.Unlock()
 
-	if runningWorkers < 1 && exiting {
-		close(s.doneChan)
+	if !serving || s.exitChan == nil {
+		return
+	}
+
+	if runningWorkers < 1 && (exiting || s.waiterChan == nil || !s.Options.Persistent) {
 		s.mur.Lock()
-		s.doneChan = nil
+		close(s.exitChan)
+		s.exitChan = nil
 		s.mur.Unlock()
-	} else if runningWorkers < 1 && !s.Options.Persistent {
-		s.Stop()
 	}
 }
 
@@ -558,6 +584,7 @@ func (s *Service) watchContext(ctx context.Context) error {
 // NewService creates a new service of type Tasker
 func NewService(cfg config.Config) (service.Interface, error) {
 	return &Service{
+		id:             time.Now().UnixNano(),
 		name:           "Tasker",
 		workers:        make(map[string][]Worker),
 		inExitSequence: false,

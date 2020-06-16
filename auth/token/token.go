@@ -233,6 +233,11 @@ func (t *Token) Invalidate() error {
 	return t.storage.Error()
 }
 
+// Lifetime returns a token life time
+func (t *Token) Lifetime() int {
+	return int(TokenLifeTime)
+}
+
 func (t *Token) parseParameters(rsp response.Interface) map[string]interface{} {
 	return make(map[string]interface{})
 }

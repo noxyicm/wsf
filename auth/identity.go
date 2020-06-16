@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"wsf/config"
 	"wsf/errors"
 )
@@ -25,9 +26,17 @@ func init() {
 // Identity represents auth identity interface
 type Identity interface {
 	Setup() error
+	ID() int
+	Role() string
+	RoleID() int
 	Set(map[string]interface{})
 	Get(key string) interface{}
 	GetInt(key string) int
+	GetString(key string) string
+	GetBool(key string) bool
+	Map() map[string]interface{}
+	Marshal() ([]byte, error)
+	Unmarshal(data []byte) error
 }
 
 // NewIdentity creates a new auth identity from given type and options
@@ -69,6 +78,21 @@ func (i *DefaultIdentity) Setup() error {
 	return nil
 }
 
+// ID returns identity identifier
+func (i *DefaultIdentity) ID() int {
+	return i.GetInt("id")
+}
+
+// Role returns identity role name
+func (i *DefaultIdentity) Role() string {
+	return i.GetString("role")
+}
+
+// RoleID returns identity role identifier
+func (i *DefaultIdentity) RoleID() int {
+	return i.GetInt("roleID")
+}
+
 // Set identity data
 func (i *DefaultIdentity) Set(m map[string]interface{}) {
 	i.Data = m
@@ -81,7 +105,50 @@ func (i *DefaultIdentity) Get(key string) interface{} {
 
 // GetInt returns an identity value by its key as int
 func (i *DefaultIdentity) GetInt(key string) int {
-	return i.Data[key].(int)
+	if v, ok := i.Data[key].(int); ok {
+		return v
+	}
+
+	return 0
+}
+
+// GetString returns an identity value by its key as string
+func (i *DefaultIdentity) GetString(key string) string {
+	if v, ok := i.Data[key].(string); ok {
+		return v
+	}
+
+	return ""
+}
+
+// GetBool returns an identity value by its key as bool
+func (i *DefaultIdentity) GetBool(key string) bool {
+	if v, ok := i.Data[key].(bool); ok {
+		return v
+	}
+
+	return false
+}
+
+// Map maps identity data to mapstructure
+func (i *DefaultIdentity) Map() map[string]interface{} {
+	return i.Data
+}
+
+// Marshal identity into json
+func (i *DefaultIdentity) Marshal() ([]byte, error) {
+	return json.Marshal(i.Data)
+}
+
+// Unmarshal identity from json
+func (i *DefaultIdentity) Unmarshal(data []byte) error {
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+
+	i.Data = m
+	return nil
 }
 
 // NewIdentityDefault creates a new default auth identity

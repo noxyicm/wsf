@@ -85,7 +85,7 @@ func (s *server) Register(name string, typ string, svc service.Interface) {
 	}
 
 	registry.Set("service."+name, svc)
-	s.throw(EventDebug, fmt.Sprintf("Service '%s' registered", name))
+	s.throw(EventDebug, service.DebugEvent(fmt.Sprintf("Service '%s' registered", name)))
 }
 
 // Init configures all underlying services with given configuration
@@ -110,7 +110,7 @@ func (s *server) Init(cfg config.Config) error {
 
 		if ok, err := s.initService(b.service, cfg.Get(b.typ).Get(b.name)); err != nil {
 			if err == errNoConfig {
-				s.throw(EventError, fmt.Sprintf("Service '%s' disabled: %v\n", b.name, errNoConfig))
+				s.throw(EventError, service.ErrorEvent(errors.Wrapf(errNoConfig, "Service '%s' disabled", b.name)))
 				continue
 			}
 
@@ -119,7 +119,7 @@ func (s *server) Init(cfg config.Config) error {
 			b.setStatus(StatusOK)
 			b.service.AddListener(s.throw)
 		} else {
-			s.throw(EventError, "Service '"+b.name+"' disabled. No configuration has been provided")
+			s.throw(EventError, service.ErrorEvent(errors.New("Service '"+b.name+"' disabled. No configuration has been provided")))
 		}
 	}
 
@@ -168,7 +168,7 @@ func (s *server) Serve(ctx context.Context) error {
 			continue
 		}
 
-		s.throw(EventDebug, fmt.Sprintf("Trying to start service '%s'", b.name))
+		s.throw(EventDebug, service.DebugEvent(fmt.Sprintf("Trying to start service '%s'", b.name)))
 		go func(b *bus) {
 			b.setStatus(StatusServing)
 			defer b.setStatus(StatusStopped)
@@ -190,6 +190,7 @@ func (s *server) Serve(ctx context.Context) error {
 
 		// found an error in one of the services, stopping the rest of running services
 		if err := result.(error); err != nil {
+			s.throw(EventError, service.ErrorEvent(errors.Wrap(err, "Error while trying to start services")))
 			s.Stop()
 			return err
 		}
@@ -205,7 +206,7 @@ func (s *server) Stop() {
 			b.service.Stop()
 			b.setStatus(StatusStopped)
 
-			s.throw(EventDebug, fmt.Sprintf("Service '%s' stopped", b.name))
+			s.throw(EventDebug, service.DebugEvent(fmt.Sprintf("Service '%s' stopped", b.name)))
 		}
 	}
 }
@@ -219,9 +220,9 @@ func (s *server) Listen(l func(event int, ctx interface{})) {
 }
 
 // throw invokes event handler if any
-func (s *server) throw(event int, ctx interface{}) {
+func (s *server) throw(event int, ctx service.Event) {
 	if s.lsn != nil {
-		s.lsn(event, ctx)
+		s.lsn(event, ctx.Message())
 	}
 }
 

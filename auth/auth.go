@@ -9,9 +9,11 @@ import (
 
 // Public constants
 const (
-	TYPEAuthDefault = "default"
+	TYPEDefault = "default"
 
-	IdentityKey = "identity"
+	ROLEGuest = "guest"
+	ROLEUser  = "user"
+	ROLEAdmin = "admin"
 )
 
 var (
@@ -21,21 +23,22 @@ var (
 )
 
 func init() {
-	Register(TYPEAuthDefault, NewDefaultAuth)
+	Register(TYPEDefault, NewDefaultAuth)
 }
 
 // Interface is an auth interface
 type Interface interface {
-	Setup() error
 	Priority() int
+	Init(options *Config) (bool, error)
 	GetOptions() *Config
 	SetStorage(strg Storage) error
 	GetStorage() Storage
 	Authenticate(ctx context.Context, adp Adapter) Result
-	HasIdentity(idnt string) bool
-	Identity(idnt string) (Identity, error)
-	ClearIdentity(idnt string) bool
+	HasIdentity(ctx context.Context) bool
+	Identity(ctx context.Context) Identity
+	ClearIdentity(ctx context.Context) bool
 	ClearIdentityes() bool
+	CreateIdentity(data map[string]interface{}) (Identity, error)
 }
 
 // NewAuth creates a new auth from given type and options
@@ -69,19 +72,20 @@ func (a *DefaultAuth) Priority() int {
 	return a.Options.Priority
 }
 
-// Setup the object
-func (a *DefaultAuth) Setup() (err error) {
+// Init the object
+func (a *DefaultAuth) Init(options *Config) (ok bool, err error) {
+	a.Options = options
 	a.Adapter, err = NewAdapterFromConfig(a.Options.Adapter.Type, a.Options.Adapter)
 	if err != nil {
-		return err
+		return ok, err
 	}
 
 	a.Storage, err = NewStorageFromConfig(a.Options.Storage.Type, a.Options.Storage)
 	if err != nil {
-		return err
+		return ok, err
 	}
 
-	return nil
+	return true, nil
 }
 
 // GetOptions returns an auth options
@@ -102,38 +106,51 @@ func (a *DefaultAuth) GetStorage() Storage {
 
 // Authenticate performs an authentication attempt
 func (a *DefaultAuth) Authenticate(ctx context.Context, adp Adapter) Result {
-	result := a.Adapter.Authenticate(ctx)
-	idnt := ctx.Value(IdentityKey)
+	var result Result
+	if adp != nil {
+		result = adp.Authenticate(ctx)
+	} else {
+		result = a.Adapter.Authenticate(ctx)
+	}
 
-	if a.HasIdentity(idnt.(string)) {
-		a.ClearIdentity(idnt.(string))
+	if a.HasIdentity(ctx) {
+		a.ClearIdentity(ctx)
 	}
 
 	if result.Valid() {
-		a.GetStorage().Write(idnt.(string), result.GetIdentity())
+		a.GetStorage().Write(ctx, result.GetIdentity().Map())
 	}
 
 	return result
 }
 
 // HasIdentity returns true if and only if an identity is available from storage
-func (a *DefaultAuth) HasIdentity(idnt string) bool {
-	return !a.GetStorage().IsEmpty(idnt)
+func (a *DefaultAuth) HasIdentity(ctx context.Context) bool {
+	return !a.GetStorage().IsEmpty(ctx)
 }
 
 // Identity returns the identity from storage or null if no identity is available
-func (a *DefaultAuth) Identity(idnt string) (Identity, error) {
-	storage := a.GetStorage()
-	if storage.IsEmpty(idnt) {
-		return nil, errors.Errorf("Storage does not contain identity '%s'", idnt)
+func (a *DefaultAuth) Identity(ctx context.Context) Identity {
+	if a.GetStorage().IsEmpty(ctx) {
+		return a.Guest()
 	}
 
-	return a.GetStorage().Read(idnt)
+	data, err := a.GetStorage().Read(ctx)
+	if err != nil {
+		return a.Guest()
+	}
+
+	idnt, err := a.CreateIdentity(data)
+	if err != nil {
+		return a.Guest()
+	}
+
+	return idnt
 }
 
 // ClearIdentity clears the identity from persistent storage
-func (a *DefaultAuth) ClearIdentity(idnt string) bool {
-	return a.GetStorage().Clear(idnt)
+func (a *DefaultAuth) ClearIdentity(ctx context.Context) bool {
+	return a.GetStorage().Clear(ctx)
 }
 
 // ClearIdentityes clears the storage
@@ -141,11 +158,38 @@ func (a *DefaultAuth) ClearIdentityes() bool {
 	return a.GetStorage().ClearAll()
 }
 
+// CreateIdentity creates auth specific identity
+func (a *DefaultAuth) CreateIdentity(data map[string]interface{}) (Identity, error) {
+	return NewIdentityFromConfig(Options().Identity, data)
+}
+
+// Guest returns new guest identity
+func (a *DefaultAuth) Guest() Identity {
+	idnt, err := NewIdentityFromConfig(a.Options.Identity, map[string]interface{}{
+		"id":         0,
+		"role":       ROLEGuest,
+		"roleID":     0,
+		"instanceID": 0,
+		"name":       "Guest",
+	})
+	if err != nil {
+		idnt, _ := NewIdentityDefault(a.Options.Identity, map[string]interface{}{
+			"id":         0,
+			"role":       ROLEGuest,
+			"roleID":     0,
+			"instanceID": 0,
+			"name":       "Guest",
+		})
+		return idnt
+	}
+
+	return idnt
+}
+
 // NewDefaultAuth creates a default auth object
 func NewDefaultAuth(options *Config) (Interface, error) {
 	a := &DefaultAuth{}
 	a.Options = options
-	a.Setup()
 
 	return a, nil
 }

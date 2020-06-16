@@ -11,8 +11,9 @@ var (
 
 // Interface is a session validator interface
 type Interface interface {
+	Name() string
 	Setup() error
-	Valid() error
+	Valid(params map[string]interface{}) error
 }
 
 // NewValidator creates a new validator

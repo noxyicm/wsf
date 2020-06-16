@@ -1,6 +1,7 @@
 package action
 
 import (
+	"wsf/context"
 	"wsf/controller/action/helper"
 	"wsf/controller/action/helperbroker"
 	"wsf/errors"
@@ -10,23 +11,7 @@ var broker *HelperBroker
 
 // HelperBroker stores and dispatches action helpers
 type HelperBroker struct {
-	controller Interface
-	stack      *helperbroker.PriorityStack
-}
-
-// SetController sets action controller
-func (h *HelperBroker) SetController(ctrl Interface) error {
-	h.controller = ctrl
-	for _, v := range h.stack.Helpers() {
-		v.SetController(ctrl)
-	}
-
-	return nil
-}
-
-// Controller returns action controller
-func (h *HelperBroker) Controller() Interface {
-	return h.controller
+	stack *helperbroker.PriorityStack
 }
 
 // AddHelper pushs helper into stack
@@ -69,10 +54,6 @@ func (h *HelperBroker) GetHelper(name string) (helper.Interface, error) {
 	}
 
 	if hlpr, err := helper.NewHelper(name); err == nil {
-		if err := hlpr.SetController(h.controller); err != nil {
-			return nil, err
-		}
-
 		if err := h.AddHelper(hlpr); err != nil {
 			return nil, err
 		}
@@ -99,9 +80,9 @@ func (h *HelperBroker) ResetHelpers() {
 }
 
 // NotifyPreDispatch notifyes action helpers of preDispatch state
-func (h *HelperBroker) NotifyPreDispatch() error {
+func (h *HelperBroker) NotifyPreDispatch(ctx context.Context) error {
 	for _, v := range h.stack.Helpers() {
-		err := v.PreDispatch()
+		err := v.PreDispatch(ctx)
 		if err != nil {
 			return err
 		}
@@ -111,9 +92,9 @@ func (h *HelperBroker) NotifyPreDispatch() error {
 }
 
 // NotifyPostDispatch notifyes action helpers of postDispatch state
-func (h *HelperBroker) NotifyPostDispatch() error {
+func (h *HelperBroker) NotifyPostDispatch(ctx context.Context) error {
 	for _, v := range h.stack.Helpers() {
-		err := v.PostDispatch()
+		err := v.PostDispatch(ctx)
 		if err != nil {
 			return err
 		}

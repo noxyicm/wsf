@@ -3,12 +3,10 @@ package rest
 import (
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 	"wsf/controller/request"
 	"wsf/controller/router"
 	"wsf/errors"
-	"wsf/service"
 	"wsf/utils"
 )
 
@@ -23,29 +21,10 @@ func init() {
 
 // Route is a restfull route
 type Route struct {
-	URIDelimiter   string
-	URIVariable    string
-	RegexDelimiter string
-	prefix         string
-	path           string
-	action         string
-	module         string
-	controller     string
-	params         []string
-	isTranslated   bool
-	variables      map[int]string
-	parts          []string
-	translatable   []string
-	defaults       map[string]string
-	requirements   map[string]string
-	values         map[string]string
-	wildcardData   map[string]string
-	defaultRegex   *regexp.Regexp
-	service        *Service
-	matchedPath    string
-	staticCount    int
-	//translator
-	locale string
+	router.Route
+
+	Prefix string
+	Path   string
 }
 
 // Match matches provided path against this route
@@ -57,26 +36,19 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *router.RouteM
 		return false, nil
 	}
 
-	if r.service == nil {
-		return false, nil
-	}
-
 	path := rqs.PathInfo()
-	path = strings.Replace(path, r.service.RoutePrefix(), "", 1)
-	path = strings.Trim(path, r.URIDelimiter)
-	path = r.service.RoutePrefix() + path
+	path = strings.Replace(path, r.Options.ModulePrefix, "", 1)
+	path = strings.Trim(path, r.Options.URIDelimiter)
+	path = r.Options.ModulePrefix + path
 	params := rqs.Params()
 	values := make(map[string]string)
 
 	if path != "" {
-		parts := strings.Split(path, r.URIDelimiter)
+		parts := strings.Split(path, r.Options.URIDelimiter)
 		if len(parts) < 2 {
 			return false, nil
 		}
 
-		if !r.service.IsRestfull(parts[0] + "." + parts[1]) {
-			return false, nil
-		}
 		values[rqs.ModuleKey()], _ = utils.ShiftSSlice(&parts)
 		values[rqs.ControllerKey()], _ = utils.ShiftSSlice(&parts)
 		values[rqs.ActionKey()] = "get"
@@ -140,12 +112,8 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *router.RouteM
 		}
 	}
 
-	r.values = utils.MapSSMerge(values, params)
-	result := utils.MapSSMerge(r.defaults, r.values)
-
-	if partial && len(result) > 0 {
-		r.matchedPath = rqs.PathInfo()
-	}
+	r.Values = utils.MapSSMerge(values, params)
+	result := utils.MapSSMerge(r.Defs, r.Values)
 
 	return true, &router.RouteMatch{Values: result, Match: true}
 }
@@ -179,8 +147,8 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 	urlParts := make(map[int]string)
 	flag := false
 
-	for key, part := range r.parts {
-		name := r.variables[key]
+	for key, part := range r.Parts {
+		name := r.Vars[key]
 		useDefault := false
 		if name != "" && utils.MapSSKeyExists(name, data) && data[name] == "" {
 			useDefault = true
@@ -190,23 +158,23 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 			if utils.MapSSKeyExists(name, data) && data[name] != "" && !useDefault {
 				value = data[name]
 				delete(data, name)
-			} else if !reset && !useDefault && utils.MapSSKeyExists(name, r.values) && r.values[name] != "" {
-				value = r.values[name]
-			} else if !reset && !useDefault && utils.MapSSKeyExists(name, r.wildcardData) && r.wildcardData[name] != "" {
-				value = r.wildcardData[name]
-			} else if utils.MapSSKeyExists(name, r.defaults) {
-				value = r.defaults[name]
+			} else if !reset && !useDefault && utils.MapSSKeyExists(name, r.Values) && r.Values[name] != "" {
+				value = r.Values[name]
+			} else if !reset && !useDefault && utils.MapSSKeyExists(name, r.WildcardData) && r.WildcardData[name] != "" {
+				value = r.WildcardData[name]
+			} else if utils.MapSSKeyExists(name, r.Defs) {
+				value = r.Defs[name]
 			} else {
 				return "", errors.Errorf("Value %s is not specified", name)
 			}
 
-			if r.isTranslated && utils.InSSlice(name, r.translatable) {
+			if r.IsTranslated && utils.InSSlice(name, r.Translatable) {
 				//urlParts[key] = r.translator.Translate(value, locale)
 			} else {
 				urlParts[key] = value
 			}
 		} else if part != "*" {
-			if r.isTranslated && part[0:1] == "@" {
+			if r.IsTranslated && part[0:1] == "@" {
 				if part[1:2] != "@" {
 					//urlParts[key] = r.translator.Translate(part[1:], locale)
 				} else {
@@ -221,11 +189,11 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 			}
 		} else {
 			if !reset {
-				data = utils.MapSSMerge(data, r.wildcardData)
+				data = utils.MapSSMerge(data, r.WildcardData)
 			}
 
 			for variable, val := range data {
-				if val != "" && ((utils.MapSSKeyExists(name, r.defaults) && r.defaults[name] != "") || val != r.defaults[variable]) {
+				if val != "" && ((utils.MapSSKeyExists(name, r.Defs) && r.Defs[name] != "") || val != r.Defs[variable]) {
 					key++
 					urlParts[key] = variable
 					key++
@@ -239,10 +207,10 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 	path := ""
 	for key, value := range utils.ReverseMapIS(urlParts) {
 		defaultValue := ""
-		if len(r.variables) > key && r.variables[key] != "" {
-			defaultValue = r.Default(r.variables[key])
+		if len(r.Vars) > key && r.Vars[key] != "" {
+			defaultValue = r.Default(r.Vars[key])
 
-			if r.isTranslated && defaultValue != "" && utils.InSSlice(r.variables[key], r.translatable) {
+			if r.IsTranslated && defaultValue != "" && utils.InSSlice(r.Vars[key], r.Translatable) {
 				//defaultValue = r.translator.Translate(defaultValue, locale)
 			}
 		}
@@ -252,85 +220,30 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 			if encode {
 				v = url.QueryEscape(value)
 			}
-			path = r.URIDelimiter + v + path
+			path = r.Options.URIDelimiter + v + path
 			flag = true
 		}
 	}
 
-	return strings.Trim(path, r.URIDelimiter), nil
+	return strings.Trim(path, r.Options.URIDelimiter), nil
 }
 
 // Default returns default value if defined
 func (r *Route) Default(key string) string {
-	if utils.MapSSKeyExists(key, r.defaults) && r.defaults[key] != "" {
-		return r.defaults[key]
+	if utils.MapSSKeyExists(key, r.Defs) && r.Defs[key] != "" {
+		return r.Defs[key]
 	}
 
 	return ""
 }
 
-// SetService sets a route service
-func (r *Route) SetService(svc service.Interface) error {
-	if svcs, ok := svc.(*Service); ok {
-		r.service = svcs
-	}
-
-	return errors.Errorf("Not a valid service provided")
-}
-
 // NewRestRoute creates a new route structure
-func NewRestRoute(route string, defaults map[string]string, reqs map[string]string) (router.RouteInterface, error) {
+func NewRestRoute(options *router.RouteConfig, route string, defaults map[string]string, reqs map[string]string) router.RouteInterface {
 	r := &Route{
-		URIDelimiter:   router.URIDelimiter,
-		URIVariable:    router.URIVariable,
-		RegexDelimiter: router.URIRegexDelimiter,
-		variables:      make(map[int]string),
-		parts:          make([]string, 0),
-		translatable:   make([]string, 0),
-		defaults:       defaults,
-		requirements:   reqs,
-		values:         make(map[string]string),
-		wildcardData:   make(map[string]string),
-		defaultRegex:   nil,
+		Route: *router.NewRouteRoute(options, route, defaults, reqs).(*router.Route),
 	}
 
-	//route = strings.Replace(route, r.service.RoutePrefix(), "", 1)
-	route = strings.Trim(route, r.URIDelimiter)
-	if route != "" {
-		routeParts := strings.Split(route, r.URIDelimiter)
-		r.parts = make([]string, len(routeParts))
-		r.variables = make(map[int]string)
-		for pos, part := range routeParts {
-			if part[0:1] == r.URIVariable && part[1:2] != r.URIVariable {
-				name := part[1:]
-				if name[0:1] == "@" && name[1:2] != "@" {
-					name = name[1:]
-					r.translatable = append(r.translatable, name)
-					r.isTranslated = true
-				}
+	r.Options.ModulePrefix = route
 
-				if v, ok := reqs[name]; ok {
-					r.parts[pos] = v
-				} else {
-					r.parts[pos] = ""
-				}
-				r.variables[pos] = name
-			} else {
-				if part[0:1] == r.URIVariable {
-					part = part[1:]
-				}
-
-				if part[0:1] == "@" && part[1:2] != "@" {
-					r.isTranslated = true
-				}
-
-				r.parts[pos] = part
-				if part != "*" {
-					r.staticCount++
-				}
-			}
-		}
-	}
-
-	return r, nil
+	return r
 }

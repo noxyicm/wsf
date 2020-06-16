@@ -9,7 +9,7 @@ const (
 )
 
 func init() {
-	RegisterSession(TYPESessionToken, NewTokenSession)
+	RegisterSession(TYPESessionToken, NewSessionToken)
 }
 
 // Token is a session handler
@@ -17,8 +17,8 @@ type Token struct {
 	Session
 }
 
-// NewTokenSession creates a new token session handler
-func NewTokenSession(options *Config) (Interface, error) {
+// NewSessionToken creates a new token session handler
+func NewSessionToken(options *Config) (Interface, error) {
 	s := &Token{}
 	s.Options = options
 	s.Data = make(map[string]interface{})

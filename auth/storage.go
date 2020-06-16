@@ -2,6 +2,7 @@ package auth
 
 import (
 	"wsf/config"
+	"wsf/context"
 	"wsf/errors"
 )
 
@@ -12,10 +13,10 @@ var (
 // Storage represents auth storage interface
 type Storage interface {
 	Setup() error
-	IsEmpty(idnt string) bool
-	Read(idnt string) (Identity, error)
-	Write(idnt string, contents Identity) error
-	Clear(idnt string) bool
+	IsEmpty(ctx context.Context) bool
+	Read(ctx context.Context) (map[string]interface{}, error)
+	Write(ctx context.Context, contents map[string]interface{}) error
+	Clear(ctx context.Context) bool
 	ClearAll() bool
 }
 

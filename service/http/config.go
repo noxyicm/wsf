@@ -72,7 +72,7 @@ func (c *Config) Defaults() error {
 				"file": map[string]interface{}{
 					"params": map[string]interface{}{
 						"type":   "stream",
-						"stream": "logs/access.log",
+						"stream": "/logs/access.log",
 					},
 					"formatter": map[string]interface{}{
 						"type": "httpaccess",

@@ -17,14 +17,16 @@ func init() {
 
 // Default struct
 type Default struct {
-	Bootstrap
+	*Bootstrap
 
 	mu sync.Mutex
 }
 
 // NewDefaultBootstrap creates boostrap struct
 func NewDefaultBootstrap(options *Config) (Interface, error) {
-	b := &Default{}
+	b := &Default{
+		Bootstrap: NewInnerBootstrap(),
+	}
 	b.SetOptions(options)
 
 	b.Resources = resource.NewRegistry()

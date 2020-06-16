@@ -5,7 +5,7 @@ import "wsf/config"
 // AdapterConfig defines set of adapter variables
 type AdapterConfig struct {
 	Type                string
-	TableName           string
+	Source              string
 	IdentityColumn      string
 	CredentialColumn    string
 	CredentialTreatment string

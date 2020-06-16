@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
+	"wsf/utils"
 )
 
 // Interface represents a net/http request maped to PSR7 compatible structure
@@ -78,6 +80,8 @@ func (r *Request) SetParam(name string, value interface{}) error {
 func (r *Request) Param(name string) interface{} {
 	if v, ok := r.Prms[name]; ok {
 		return v
+	} else if b, ok := r.Body.(utils.DataTree); ok {
+		return b.Get(name)
 	}
 
 	return nil
@@ -85,35 +89,17 @@ func (r *Request) Param(name string) interface{} {
 
 // ParamString returns request parameter as string
 func (r *Request) ParamString(name string) string {
-	if v, ok := r.Prms[name]; ok {
-		if v, ok := v.(string); ok {
-			return v
-		}
-	}
-
-	return ""
+	return r.ParamStringDefault(name, "")
 }
 
 // ParamInt returns request parameter as int
 func (r *Request) ParamInt(name string) int {
-	if v, ok := r.Prms[name]; ok {
-		if v, ok := v.(int); ok {
-			return v
-		}
-	}
-
-	return 0
+	return r.ParamIntDefault(name, 0)
 }
 
 // ParamBool returns request parameter as bool
 func (r *Request) ParamBool(name string) bool {
-	if v, ok := r.Prms[name]; ok {
-		if v, ok := v.(bool); ok {
-			return v
-		}
-	}
-
-	return false
+	return r.ParamBoolDefault(name, false)
 }
 
 // ParamStringDefault returns request parameter as string or d
@@ -121,6 +107,12 @@ func (r *Request) ParamStringDefault(name string, d string) string {
 	if v, ok := r.Prms[name]; ok {
 		if v, ok := v.(string); ok {
 			return v
+		}
+	} else if b, ok := r.Body.(utils.DataTree); ok {
+		if v, ok := b.Get(name).([]string); ok {
+			if len(v) > 0 {
+				return v[0]
+			}
 		}
 	}
 
@@ -133,6 +125,14 @@ func (r *Request) ParamIntDefault(name string, d int) int {
 		if v, ok := v.(int); ok {
 			return v
 		}
+	} else if b, ok := r.Body.(utils.DataTree); ok {
+		if v, ok := b.Get(name).([]string); ok {
+			if len(v) > 0 {
+				if v, err := strconv.Atoi(v[0]); err == nil {
+					return v
+				}
+			}
+		}
 	}
 
 	return d
@@ -144,6 +144,14 @@ func (r *Request) ParamBoolDefault(name string, d bool) bool {
 		if v, ok := v.(bool); ok {
 			return v
 		}
+	} else if b, ok := r.Body.(utils.DataTree); ok {
+		if v, ok := b.Get(name).([]string); ok {
+			if len(v) > 0 {
+				if v, err := strconv.ParseBool(v[0]); err == nil {
+					return v
+				}
+			}
+		}
 	}
 
 	return d
@@ -151,7 +159,18 @@ func (r *Request) ParamBoolDefault(name string, d bool) bool {
 
 // Params returns request parameters
 func (r *Request) Params() map[string]interface{} {
-	return r.Prms
+	p := make(map[string]interface{})
+	if b, ok := r.Body.(utils.DataTree); ok {
+		for k, v := range b {
+			p[k] = v
+		}
+	}
+
+	for k, v := range r.Prms {
+		p[k] = v
+	}
+
+	return p
 }
 
 // ModuleKey returns module key

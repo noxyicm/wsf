@@ -23,3 +23,50 @@ type ControllerWithExceptionInterface interface {
 	ThrowExceptions() bool
 	ErrorHandling()
 }
+
+// Abstract is a extendable plugin base
+type Abstract struct {
+	name string
+}
+
+// Name returns plugin name
+func (p *Abstract) Name() string {
+	return p.name
+}
+
+// RouteStartup routine
+func (p *Abstract) RouteStartup(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return true, nil
+}
+
+// RouteShutdown routine
+func (p *Abstract) RouteShutdown(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return true, nil
+}
+
+// DispatchLoopStartup routine
+func (p *Abstract) DispatchLoopStartup(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return true, nil
+}
+
+// PreDispatch routine
+func (p *Abstract) PreDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return true, nil
+}
+
+// PostDispatch routine
+func (p *Abstract) PostDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return true, nil
+}
+
+// DispatchLoopShutdown routine
+func (p *Abstract) DispatchLoopShutdown(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	return true, nil
+}
+
+// NewAbstract creates a new abstract plugin
+func NewAbstract(name string) *Abstract {
+	return &Abstract{
+		name: name,
+	}
+}

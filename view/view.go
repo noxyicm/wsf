@@ -56,10 +56,9 @@ type view struct {
 	paths                          map[string]map[string]string
 	helpers                        map[string]helper.Interface
 	params                         map[string]interface{}
-	//templates                      map[string]*TemplateData
-	templates map[string]*template.Template
-	layouts   map[string]*TemplateData
-	template  *template.Template
+	templates                      map[string]*template.Template
+	layouts                        map[string]*TemplateData
+	template                       *template.Template
 }
 
 // GetPaths returns all registered script pathes

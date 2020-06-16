@@ -33,7 +33,7 @@ func (s *Service) Init(options *Config, h *wsfhttp.Service) (bool, error) {
 }
 
 // AddListener attaches server event watcher
-func (s *Service) AddListener(l func(event int, ctx interface{})) {
+func (s *Service) AddListener(l func(event int, ctx service.Event)) {
 	return
 }
 

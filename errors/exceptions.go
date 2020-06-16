@@ -2,7 +2,6 @@ package errors
 
 import (
 	"fmt"
-	"wsf/controller/request"
 )
 
 // Exception constants
@@ -58,7 +57,7 @@ func (e *ControllerActionException) Code() int {
 // Exception represents an exception
 type Exception struct {
 	Typ         int
-	Request     request.Interface
+	Request     interface{}
 	Encountered int
 	Original    error
 }

@@ -17,13 +17,34 @@ var (
 type Interface interface {
 	Name() string
 	Init(options map[string]interface{}) error
-	PreDispatch() error
-	PostDispatch() error
-	SetController(ctrl ControllerInterface) error
-	Controller() ControllerInterface
-	Request() request.Interface
-	Response() response.Interface
-	Session() session.Interface
+	PreDispatch(ctx context.Context) error
+	PostDispatch(ctx context.Context) error
+}
+
+// Abstract is a base for action helpers
+type Abstract struct {
+	name             string
+	actionController ControllerInterface
+}
+
+// Name returns helper name
+func (h *Abstract) Name() string {
+	return h.name
+}
+
+// Init the helper
+func (h *Abstract) Init(options map[string]interface{}) error {
+	return nil
+}
+
+// PreDispatch do dispatch preparations
+func (h *Abstract) PreDispatch(ctx context.Context) error {
+	return nil
+}
+
+// PostDispatch do dispatch aftermath
+func (h *Abstract) PostDispatch(ctx context.Context) error {
+	return nil
 }
 
 // NewHelper creates a new action helper specified by type
@@ -33,6 +54,13 @@ func NewHelper(helperType string) (Interface, error) {
 	}
 
 	return nil, errors.Errorf("Unrecognized helper type \"%v\"", helperType)
+}
+
+// NewHelperAbstract as
+func NewHelperAbstract(name string) *Abstract {
+	return &Abstract{
+		name: name,
+	}
 }
 
 // Register registers a handler for action helper creation

@@ -3,7 +3,7 @@ package session
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
@@ -18,8 +18,8 @@ import (
 
 // Public contants
 const (
-	// TYPEDefaultSessionManager is a type of session manager
-	TYPEDefaultSessionManager = "default"
+	// TYPESessionManagerDefault is a type of session manager
+	TYPESessionManagerDefault = "default"
 
 	IDKey = "sessionID"
 	Key   = "session"
@@ -38,21 +38,23 @@ var (
 )
 
 func init() {
-	Register(TYPEDefaultSessionManager, NewDefaultSessionManager)
+	Register(TYPESessionManagerDefault, NewDefaultSessionManager)
 }
 
 // ManagerInterface represents session manager interface
 type ManagerInterface interface {
 	Priority() int
 	Init(options *ManagerConfig) (bool, error)
+	Options() *ManagerConfig
 	IsStarted() bool
 	GetSID(req request.Interface) (string, error)
 	NewSID() (string, error)
 	SessionStart(req request.Interface, rsp response.Interface) (Interface, string, error)
-	SessionClose(sid string)
+	SessionClose(sid string) error
 	SessionGet(sid string) (Interface, bool)
 	SessionDestroy(rqs request.Interface, rsp response.Interface)
 	SessionExist(sid string) bool
+	SessionSave(sid string) error
 	SessionLoad(sid string, s Interface) error
 	SessionAll() int
 	RegisterValidator(v validator.Interface) error
@@ -88,7 +90,7 @@ func Register(managerType string, handler func(*ManagerConfig) (ManagerInterface
 
 // Manager is a default session manager
 type Manager struct {
-	Options    *ManagerConfig
+	Opts       *ManagerConfig
 	Started    bool
 	Secure     bool
 	Strict     bool
@@ -100,12 +102,12 @@ type Manager struct {
 
 // Priority returns a priority of resource
 func (m *Manager) Priority() int {
-	return m.Options.Priority
+	return m.Opts.Priority
 }
 
 // Init the session manager
 func (m *Manager) Init(options *ManagerConfig) (bool, error) {
-	m.Options = options
+	m.Opts = options
 
 	ccfg := &cache.Config{}
 	ccfg.Defaults()
@@ -129,6 +131,11 @@ func (m *Manager) Init(options *ManagerConfig) (bool, error) {
 	return true, nil
 }
 
+// Options returns session manager config options
+func (m *Manager) Options() *ManagerConfig {
+	return m.Opts
+}
+
 // IsStarted returns true if manager initialized
 func (m *Manager) IsStarted() bool {
 	return m.Started
@@ -136,18 +143,18 @@ func (m *Manager) IsStarted() bool {
 
 // GetSID returns a session id if registered
 func (m *Manager) GetSID(rqs request.Interface) (string, error) {
-	if sid := rqs.Cookie(m.Options.SessionName); sid != "" {
+	if sid := rqs.Cookie(m.Opts.SessionName); sid != "" {
 		return url.QueryUnescape(sid)
 	}
 
-	if m.Options.EnableSidInURLQuery {
-		if sid := rqs.Param(m.Options.SessionName); sid != nil {
+	if m.Opts.EnableSidInURLQuery {
+		if sid := rqs.Param(m.Opts.SessionName); sid != nil {
 			return sid.(string), nil
 		}
 	}
 
-	if m.Options.EnableSidInHTTPHeader {
-		if sid := rqs.Header(m.Options.SessionNameInHTTPHeader); sid != "" {
+	if m.Opts.EnableSidInHTTPHeader {
+		if sid := rqs.Header(m.Opts.SessionNameInHTTPHeader); sid != "" {
 			return sid, nil
 		}
 	}
@@ -157,13 +164,13 @@ func (m *Manager) GetSID(rqs request.Interface) (string, error) {
 
 // NewSID returns a new session id
 func (m *Manager) NewSID() (string, error) {
-	b := make([]byte, m.Options.SessionIDLength)
+	b := make([]byte, m.Opts.SessionIDLength)
 	n, err := rand.Read(b)
 	if n != len(b) || err != nil {
 		return "", errors.New("[Session] Could not successfully read from the system CSPRNG")
 	}
 
-	return m.Options.SessionIDPrefix + hex.EncodeToString(b), nil
+	return m.Opts.SessionIDPrefix + hex.EncodeToString(b), nil
 }
 
 // SessionStart starts a new session
@@ -184,75 +191,91 @@ func (m *Manager) SessionStart(rqs request.Interface, rsp response.Interface) (I
 		return s.(Interface), sid, nil
 	}
 
-	s, err := NewSession(m.Options.Session.GetString("type"), m.Options.Session)
+	s, err := NewSession(m.Opts.Session.GetString("type"), m.Opts.Session)
 	if err != nil {
 		return nil, "", errors.Wrap(err, "[Session] Unable to start session")
 	}
 
 	if m.SessionExist(sid) {
 		if err = m.SessionLoad(sid, s); err != nil {
-			return nil, "", errors.Wrap(err, "[Session] Unable to load session")
+			sid, err = m.NewSID()
+			if err != nil {
+				return nil, "", errors.Wrap(err, "[Session] Unable to start session")
+			}
+		}
+	} else {
+		sid, err = m.NewSID()
+		if err != nil {
+			return nil, "", errors.Wrap(err, "[Session] Unable to start session")
 		}
 	}
 
-	if m.Options.EnableSetCookie {
+	if m.Opts.EnableSetCookie {
 		cookie := &http.Cookie{
-			Name:     m.Options.SessionName,
+			Name:     m.Opts.SessionName,
 			Value:    url.QueryEscape(sid),
 			Path:     "/",
-			HttpOnly: m.Options.HTTPOnly,
-			Secure:   rqs.IsSecure() && m.Options.Secure,
+			HttpOnly: m.Opts.HTTPOnly,
+			Secure:   rqs.IsSecure() && m.Opts.Secure,
 			Domain:   config.App.GetString("application.Domain"),
 		}
 
-		if m.Options.SessionLifeTime > 0 {
-			cookie.MaxAge = int(m.Options.SessionLifeTime)
-			cookie.Expires = time.Now().Add(time.Duration(m.Options.SessionLifeTime) * time.Second)
+		if m.Opts.SessionLifeTime > 0 {
+			cookie.MaxAge = int(m.Opts.SessionLifeTime)
+			cookie.Expires = time.Now().Add(time.Duration(m.Opts.SessionLifeTime) * time.Second)
 		}
 
 		rqs.AddCookie(cookie)
 		rsp.AddCookie(cookie)
 	}
 
-	if m.Options.EnableSidInHTTPHeader {
-		rqs.AddHeader(m.Options.SessionNameInHTTPHeader, sid)
-		rsp.AddHeader(m.Options.SessionNameInHTTPHeader, sid)
+	if m.Opts.EnableSidInHTTPHeader {
+		rqs.AddHeader(m.Opts.SessionNameInHTTPHeader, sid)
+		rsp.AddHeader(m.Opts.SessionNameInHTTPHeader, sid)
 	}
 
 	m.Sessions.Store(sid, s)
 	return s, sid, nil
 }
 
-// SessionClose writes and cleses a session
-func (m *Manager) SessionClose(sid string) {
+// SessionClose writes and closes a session
+func (m *Manager) SessionClose(sid string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if s, ok := m.Sessions.Load(sid); ok {
-		encoded, _ := json.Marshal(s.(Interface))
-		m.Storage.Save(encoded, sid, []string{sid}, m.Options.SessionLifeTime)
+		encoded, err := s.(Interface).Marshal()
+		fmt.Println(string(encoded))
+		if err != nil {
+			return errors.Wrap(err, "Unable to save sassion")
+		}
+
+		if !m.Storage.Save(encoded, sid, []string{sid}, m.Opts.SessionLifeTime) {
+			return errors.Wrap(m.Storage.Error(), "Unable to save sassion")
+		}
 	}
 
-	/*if m.Options.EnableSetCookie {
-		cookie := &http.Cookie{
-			Name:     m.Options.SessionName,
-			Value:    url.QueryEscape(sid),
-			Path:     "/",
-			HttpOnly: m.Options.HTTPOnly,
-			Secure:   rqs.IsSecure() && m.Options.Secure,
-			Domain:   config.App.GetString("application.Domain"),
-		}
-
-		if m.Options.SessionLifeTime > 0 {
-			cookie.MaxAge = int(m.Options.SessionLifeTime)
-			cookie.Expires = time.Now().Add(time.Duration(m.Options.SessionLifeTime) * time.Second)
-		}
-
-		rqs.AddCookie(cookie)
-		rsp.AddCookie(cookie)
-	}*/
-
 	m.Sessions.Delete(sid)
+	return nil
+}
+
+// SessionSave writes a session
+func (m *Manager) SessionSave(sid string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if s, ok := m.Sessions.Load(sid); ok {
+		encoded, err := s.(Interface).Marshal()
+		if err != nil {
+			return errors.Wrap(err, "Unable to save sassion")
+		}
+
+		if !m.Storage.Save(encoded, sid, []string{sid}, m.Opts.SessionLifeTime) {
+			return errors.Wrap(m.Storage.Error(), "Unable to save sassion")
+		}
+	}
+
+	return nil
 }
 
 // SessionGet returns a cached session
@@ -274,8 +297,8 @@ func (m *Manager) SessionDestroy(rqs request.Interface, rsp response.Interface) 
 	m.Sessions.Delete(sid)
 	m.Storage.Remove(sid)
 
-	if m.Options.EnableSetCookie {
-		cookie := rqs.RawCookie(m.Options.SessionName)
+	if m.Opts.EnableSetCookie {
+		cookie := rqs.RawCookie(m.Opts.SessionName)
 		if cookie == nil {
 			return
 		}
@@ -287,9 +310,9 @@ func (m *Manager) SessionDestroy(rqs request.Interface, rsp response.Interface) 
 		rsp.AddCookie(cookie)
 	}
 
-	if m.Options.EnableSidInHTTPHeader {
-		rqs.RemoveHeader(m.Options.SessionNameInHTTPHeader)
-		rsp.RemoveHeader(m.Options.SessionNameInHTTPHeader)
+	if m.Opts.EnableSidInHTTPHeader {
+		rqs.RemoveHeader(m.Opts.SessionNameInHTTPHeader)
+		rsp.RemoveHeader(m.Opts.SessionNameInHTTPHeader)
 	}
 
 	return
@@ -307,8 +330,14 @@ func (m *Manager) SessionLoad(sid string, s Interface) error {
 		return m.Storage.Error()
 	}
 
-	if err := json.Unmarshal(data, s); err != nil {
+	if err := s.Unmarshal(data); err != nil {
 		return err
+	}
+
+	for _, vld := range m.Validators {
+		if err := vld.Valid(s.All()); err != nil {
+			return errors.Wrap(err, "Unable to load session")
+		}
 	}
 
 	return nil
@@ -328,7 +357,7 @@ func (m *Manager) RegisterValidator(v validator.Interface) error {
 // NewDefaultSessionManager creates a new default session manager
 func NewDefaultSessionManager(options *ManagerConfig) (ManagerInterface, error) {
 	sm := &Manager{
-		Options: options,
+		Opts: options,
 	}
 
 	for _, vcfg := range options.Valds {
@@ -337,6 +366,7 @@ func NewDefaultSessionManager(options *ManagerConfig) (ManagerInterface, error) 
 			return nil, err
 		}
 
+		v.Setup()
 		sm.Validators = append(sm.Validators, v)
 	}
 

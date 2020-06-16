@@ -2,6 +2,7 @@ package auth
 
 import (
 	"sync"
+	"wsf/context"
 	"wsf/errors"
 	"wsf/session"
 )
@@ -33,53 +34,65 @@ func (s *SessionStorage) Setup() error {
 }
 
 // IsEmpty returns true if storage is empty
-func (s *SessionStorage) IsEmpty(idnt string) bool {
+func (s *SessionStorage) IsEmpty(ctx context.Context) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if sess, ok := s.Session.SessionGet(idnt); ok {
-		return !sess.Has(s.Member)
+	untypedSessID := ctx.Value(context.SessionIDKey)
+	if sessID, ok := untypedSessID.(string); ok {
+		if sess, ok := s.Session.SessionGet(sessID); ok {
+			return !sess.Has(s.Member)
+		}
 	}
 
 	return true
 }
 
 // Read data from storage
-func (s *SessionStorage) Read(idnt string) (Identity, error) {
+func (s *SessionStorage) Read(ctx context.Context) (map[string]interface{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if sess, ok := s.Session.SessionGet(idnt); ok {
-		contents := sess.Get(s.Member)
-		if contents == nil {
-			return nil, errors.New("Empty identity")
+	untypedSessID := ctx.Value(context.SessionIDKey)
+	if sessID, ok := untypedSessID.(string); ok {
+		if sess, ok := s.Session.SessionGet(sessID); ok {
+			contents := sess.Get(s.Member)
+			if contents == nil {
+				return nil, errors.New("Empty identity")
+			} else if v, ok := contents.(map[string]interface{}); ok {
+				return v, nil
+			}
 		}
-
-		return contents.(Identity), nil
 	}
 
-	return nil, errors.Errorf("Session '%s' does not exist", idnt)
+	return nil, errors.New("Identity does not exist")
 }
 
 // Write data to storage
-func (s *SessionStorage) Write(idnt string, contents Identity) error {
+func (s *SessionStorage) Write(ctx context.Context, contents map[string]interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if sess, ok := s.Session.SessionGet(idnt); ok {
-		return sess.Set(s.Member, contents)
+	untypedSessID := ctx.Value(context.SessionIDKey)
+	if sessID, ok := untypedSessID.(string); ok {
+		if sess, ok := s.Session.SessionGet(sessID); ok {
+			return sess.Set(s.Member, contents)
+		}
 	}
 
-	return errors.Errorf("Session '%s' does not exist", idnt)
+	return errors.New("Identity does not exist")
 }
 
 // Clear storage
-func (s *SessionStorage) Clear(idnt string) bool {
+func (s *SessionStorage) Clear(ctx context.Context) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if sess, ok := s.Session.SessionGet(idnt); ok {
-		return sess.Unset(s.Member)
+	untypedSessID := ctx.Value(context.SessionIDKey)
+	if sessID, ok := untypedSessID.(string); ok {
+		if sess, ok := s.Session.SessionGet(sessID); ok {
+			return sess.Unset(s.Member)
+		}
 	}
 
 	return false

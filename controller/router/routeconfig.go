@@ -4,13 +4,17 @@ import "wsf/config"
 
 // RouteConfig represents router configuration
 type RouteConfig struct {
-	Type       string
-	Path       string
-	Module     string
-	Controller string
-	Action     string
-	Default    map[string]interface{}
-	Locale     string
+	Type              string
+	URIDelimiter      string
+	URIVariable       string
+	URIRegexDelimiter string
+	ModulePrefix      string
+	Path              string
+	Module            string
+	Controller        string
+	Action            string
+	Default           map[string]interface{}
+	Locale            string
 }
 
 // Populate populates Config values using given Config source
@@ -26,6 +30,10 @@ func (c *RouteConfig) Populate(cfg config.Config) error {
 func (c *RouteConfig) Defaults() error {
 	c.Type = "default"
 	c.Default = make(map[string]interface{})
+	c.URIDelimiter = "/"
+	c.URIVariable = ":"
+	c.URIRegexDelimiter = ""
+	c.ModulePrefix = ""
 	return nil
 }
 

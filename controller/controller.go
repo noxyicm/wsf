@@ -53,7 +53,7 @@ func (c *Controller) Init(options *Config) (b bool, err error) {
 		return false, err
 	}
 
-	c.router, err = router.NewRouter(options.Router.Type, options.Router)
+	c.router, err = router.NewRouter(options.Router.GetString("type"), options.Router)
 	if err != nil {
 		return false, err
 	}

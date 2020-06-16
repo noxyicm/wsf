@@ -248,7 +248,7 @@ func (i *Inflector) getRule(rule interface{}) (Interface, error) {
 }
 
 // NewInflector creates new default inflector filter
-func NewInflector() (Interface, error) {
+func NewInflector() (*Inflector, error) {
 	inf := &Inflector{
 		rules:                       NewRuleStack(),
 		targetReplacementIdentifier: ":",
@@ -259,7 +259,7 @@ func NewInflector() (Interface, error) {
 }
 
 // NewInflectorConfig creates new inflector filter from config
-func NewInflectorConfig(options config.Config) (Interface, error) {
+func NewInflectorConfig(options config.Config) (*Inflector, error) {
 	inf := &Inflector{
 		target:                      options.GetString("target"),
 		rules:                       NewRuleStack(),

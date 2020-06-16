@@ -140,10 +140,10 @@ func (v *Default) PrepareTemplates() error {
 		if err != nil {
 			switch err.(type) {
 			case *os.PathError:
-				v.Logger.Warningf("[View] Unable to read template directory: %v", nil, err.Error())
+				v.Logger.Warning(errors.Wrap(err, "[View] Unable to read template directory"), nil)
 
 			default:
-				return err
+				return errors.Wrap(err, "[View] Unable to read template directory")
 			}
 		}
 	}

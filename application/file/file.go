@@ -1,6 +1,8 @@
 package file
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -14,26 +16,32 @@ type File struct {
 	Error        int    `json:"error"`
 	TempFilename string `json:"tmpName"`
 	header       *multipart.FileHeader
+	received     bool
 }
 
 // Upload moves file content into temporary file
 func (f *File) Upload(cfg *Config) error {
+	if f.received {
+		f.Error = UploadErrorUploded
+		return errors.New("File '" + f.Name + "' already received")
+	}
+
 	if !cfg.Allowed(f.Name) {
 		f.Error = UploadErrorExtension
-		return nil
+		return errors.New("File '" + f.Name + "' has unsupported extension")
 	}
 
 	file, err := f.header.Open()
 	if err != nil {
 		f.Error = UploadErrorNoFile
-		return err
+		return fmt.Errorf("Unable to upload file '%s': %v", f.Name, err)
 	}
 	defer file.Close()
 
-	tmp, err := ioutil.TempFile(cfg.TmpDir(), "upload")
+	tmp, err := ioutil.TempFile(cfg.TmpDir(), "")
 	if err != nil {
 		f.Error = UploadErrorNoTmpDir
-		return err
+		return fmt.Errorf("Unable to upload file '%s': %v", f.Name, err)
 	}
 
 	f.TempFilename = tmp.Name()
@@ -43,10 +51,11 @@ func (f *File) Upload(cfg *Config) error {
 		f.Error = UploadErrorCantWrite
 	}
 
-	return err
+	f.received = true
+	return nil
 }
 
-// NewUpload wraps net/http upload into PRS-7 compatible structure
+// NewUpload wraps net/http upload into compatible structure
 func NewUpload(f *multipart.FileHeader) *File {
 	return &File{
 		Name:   f.Filename,

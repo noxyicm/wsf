@@ -60,6 +60,8 @@ func (b *Broker) RouteStartup(ctx context.Context, rqs request.Interface, rsp re
 	for _, plugin := range b.Plugins() {
 		if ok, err = plugin.RouteStartup(ctx, rqs, rsp); !ok {
 			return false, err
+		} else if err != nil {
+			return true, err
 		}
 	}
 
@@ -71,6 +73,8 @@ func (b *Broker) RouteShutdown(ctx context.Context, rqs request.Interface, rsp r
 	for _, plugin := range b.Plugins() {
 		if ok, err = plugin.RouteShutdown(ctx, rqs, rsp); !ok {
 			return false, err
+		} else if err != nil {
+			return true, err
 		}
 	}
 
@@ -82,6 +86,8 @@ func (b *Broker) DispatchLoopStartup(ctx context.Context, rqs request.Interface,
 	for _, plugin := range b.Plugins() {
 		if ok, err = plugin.DispatchLoopStartup(ctx, rqs, rsp); !ok {
 			return false, err
+		} else if err != nil {
+			return true, err
 		}
 	}
 
@@ -93,6 +99,8 @@ func (b *Broker) PreDispatch(ctx context.Context, rqs request.Interface, rsp res
 	for _, plugin := range b.Plugins() {
 		if ok, err = plugin.PreDispatch(ctx, rqs, rsp); !ok {
 			return false, err
+		} else if err != nil {
+			return true, err
 		}
 	}
 
@@ -104,6 +112,8 @@ func (b *Broker) PostDispatch(ctx context.Context, rqs request.Interface, rsp re
 	for _, plugin := range b.Plugins() {
 		if ok, err = plugin.PostDispatch(ctx, rqs, rsp); !ok {
 			return false, err
+		} else if err != nil {
+			return true, err
 		}
 	}
 
@@ -115,6 +125,8 @@ func (b *Broker) DispatchLoopShutdown(ctx context.Context, rqs request.Interface
 	for _, plugin := range b.Plugins() {
 		if ok, err = plugin.DispatchLoopShutdown(ctx, rqs, rsp); !ok {
 			return false, err
+		} else if err != nil {
+			return true, err
 		}
 	}
 

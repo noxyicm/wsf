@@ -22,7 +22,7 @@ func (c *StorageConfig) Populate(cfg config.Config) error {
 func (c *StorageConfig) Defaults() error {
 	c.Type = "default"
 	c.Namespace = "WSFAuth"
-	c.Member = "storage"
+	c.Member = "WSFAuth"
 
 	return nil
 }

@@ -1,6 +1,7 @@
 package http
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
@@ -11,20 +12,20 @@ import (
 	"wsf/controller/response"
 	"wsf/errors"
 	"wsf/registry"
+	"wsf/service"
 	"wsf/service/http/event"
-	"wsf/session"
 )
 
 // Handler serves http connections
 type Handler struct {
 	options *Config
 	ctrl    controller.Interface
-	lsns    []func(event int, ctx interface{})
+	lsns    []func(event int, ctx service.Event)
 	mu      sync.RWMutex
 }
 
 // AddListener attaches handler event watcher
-func (h *Handler) AddListener(l func(event int, ctx interface{})) {
+func (h *Handler) AddListener(l func(event int, ctx service.Event)) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -32,7 +33,7 @@ func (h *Handler) AddListener(l func(event int, ctx interface{})) {
 }
 
 // throw invokes event handler if any
-func (h *Handler) throw(event int, ctx interface{}) {
+func (h *Handler) throw(event int, ctx service.Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -70,26 +71,28 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s, sid, err := session.Start(req, rsp)
-	if err != nil {
-		h.handleError(w, r, err, start)
-		return
-	}
+	//s, sid, err := session.Start(req, rsp)
+	//if err != nil {
+	//	h.handleError(w, r, err, start)
+	//	return
+	//}
 
-	ctx, err := context.NewContext(r.Context())
+	ctx, err := context.NewContext(context.Background())
 	if err != nil {
 		h.handleError(w, r, err, start)
 		return
 	}
-	ctx.SetValue(context.SessionIDKey, sid)
-	ctx.SetValue(context.SessionKey, s)
+	ctx.SetRequest(req)
+	ctx.SetResponse(rsp)
+	//ctx.SetValue(context.SessionIDKey, sid)
+	//ctx.SetValue(context.SessionKey, s)
 	if err := h.ctrl.Dispatch(ctx, req, rsp); err != nil {
-		session.Close(sid)
+		//session.Close(sid)
 		h.handleResponse(req, rsp, err, start)
 		return
 	}
 
-	session.Close(sid)
+	//session.Close(sid)
 	h.handleResponse(req, rsp, nil, start)
 }
 
@@ -101,13 +104,13 @@ func (h *Handler) handleError(w http.ResponseWriter, r *http.Request, err error,
 
 	w.WriteHeader(500)
 
+	fmt.Printf("%+v\n", err)
 	h.throw(EventHTTPError, event.NewError(r, err, start))
 	w.Write([]byte(err.Error()))
 }
 
 // handleResponse triggers response event
 func (h *Handler) handleResponse(req request.Interface, rsp response.Interface, err error, start time.Time) {
-	//rsp.WriteCookies()
 	for hdr, val := range h.options.Headers {
 		rsp.SetHeader(hdr, val)
 	}
@@ -121,7 +124,7 @@ func (h *Handler) handleResponse(req request.Interface, rsp response.Interface, 
 			rsp.SetResponseCode(500)
 			rsp.SetBody([]byte(err.Error()))
 		}
-	} else {
+	} else if rsp.ResponseCode() == 0 {
 		rsp.SetResponseCode(200)
 	}
 
@@ -131,7 +134,7 @@ func (h *Handler) handleResponse(req request.Interface, rsp response.Interface, 
 
 func (h *Handler) recover(w http.ResponseWriter, r *http.Request, start time.Time) {
 	if rec := recover(); rec != nil {
-		h.handleError(w, r, errors.Wrap(rec.(error), "[REST] Unxpected error equired"), start)
+		h.handleError(w, r, errors.Wrap(rec.(error), "[HTTP Server] Unxpected error equired"), start)
 	}
 }
 
@@ -139,7 +142,7 @@ func (h *Handler) recover(w http.ResponseWriter, r *http.Request, start time.Tim
 func NewHandler(cfg *Config) (h *Handler, err error) {
 	rsr := registry.GetResource("maincontroller")
 	if rsr == nil {
-		return nil, errors.New("Maincontroller resource must be registered and initialized")
+		return nil, errors.New("[HTTP Server] Maincontroller resource must be registered and initialized")
 	}
 
 	return &Handler{options: cfg, ctrl: rsr.(controller.Interface)}, nil

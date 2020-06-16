@@ -6,29 +6,41 @@ import (
 	"wsf/application/modules"
 	"wsf/context"
 	"wsf/controller/action"
+	"wsf/controller/action/helper"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
 	"wsf/log"
 	"wsf/registry"
-	"wsf/session"
 	"wsf/utils"
+)
+
+const (
+	// TYPEDefault represents default dispatcher
+	TYPEDefault = "default"
 )
 
 var (
 	buildHandlers = map[string]func(*Config) (Interface, error){}
 )
 
+func init() {
+	Register(TYPEDefault, NewDefaultDispatcher)
+}
+
 // Interface is a dispatcher interface
 type Interface interface {
+	SetOptions(options *Config) error
+	Options() *Config
+	SetLogger(l *log.Log) error
+	Logger() *log.Log
 	Dispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error)
 	IsDispatchable(rqs request.Interface) bool
 	DefaultModule() string
 	DefaultController() string
 	DefaultAction() string
 	RequestController(req request.Interface) (string, error)
-	PopulateController(ctx context.Context, ctrl interface{}, rqs request.Interface, rsp response.Interface, invokeArgs map[string]interface{}) error
-	GetActionMethod(req request.Interface) (string, error)
+	ActionMethod(req request.Interface) string
 	SetModulesHandler(mds modules.Handler) error
 	ModulesHandler() modules.Handler
 	SetParams(params map[string]interface{}) error
@@ -41,14 +53,75 @@ type Interface interface {
 	ClearParams() bool
 }
 
-type standart struct {
+// Default dispatcher
+type Default struct {
 	options      *Config
 	logger       *log.Log
 	modules      modules.Handler
 	invokeParams map[string]interface{}
 }
 
-func (d *standart) IsDispatchable(rqs request.Interface) bool {
+// SetOptions sets dispatcher configuration
+func (d *Default) SetOptions(options *Config) error {
+	d.options = options
+	return nil
+}
+
+// Options returns dispatcher configuration
+func (d *Default) Options() *Config {
+	return d.options
+}
+
+// Dispatch dispatches the request into the apropriet handler
+func (d *Default) Dispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
+	md := d.modules.Module(rqs.ModuleName())
+	if md == nil {
+		if md = d.modules.Module(d.DefaultModule()); md == nil {
+			return true, errors.Errorf("Invalid module specified '%s'", rqs.ModuleName())
+		}
+	}
+
+	ctrl, err := md.Controller(rqs.ControllerName())
+	if err != nil {
+		if ctrl, err = md.Controller(d.DefaultController()); err != nil {
+			return true, err
+		}
+	}
+
+	act := d.ActionMethod(rqs)
+	mtd, ok := reflect.TypeOf(ctrl).MethodByName(act)
+	if !ok {
+		return true, errors.Errorf("Action '%s' does not exists", act)
+	}
+
+	if !d.ParamBool("noViewRenderer") && !ctrl.HelperBroker().HasHelper("viewRenderer") {
+		vr, err := helper.NewViewRenderer()
+		if err != nil {
+			return true, err
+		}
+
+		err = ctrl.HelperBroker().SetHelper(-80, vr, nil)
+		if err != nil {
+			return true, err
+		}
+	}
+
+	// Initiate action controller
+	rqs.SetDispatched(true)
+	if err = ctrl.Init(ctx); err != nil {
+		return true, err
+	}
+
+	err = ctrl.Dispatch(ctx, ctrl, mtd)
+	if err != nil {
+		return true, err
+	}
+
+	return true, nil
+}
+
+// IsDispatchable return true if request may be dispatched
+func (d *Default) IsDispatchable(rqs request.Interface) bool {
 	ctrl, err := d.RequestController(rqs)
 	if err != nil {
 		return false
@@ -62,27 +135,27 @@ func (d *standart) IsDispatchable(rqs request.Interface) bool {
 }
 
 // DefaultModule returns default dispatcher module
-func (d *standart) DefaultModule() string {
+func (d *Default) DefaultModule() string {
 	return d.options.defaultModule
 }
 
 // DefaultController returns default dispatcher controller
-func (d *standart) DefaultController() string {
+func (d *Default) DefaultController() string {
 	return d.options.defaultController
 }
 
 // DefaultAction returns default dispatcher action
-func (d *standart) DefaultAction() string {
+func (d *Default) DefaultAction() string {
 	return d.options.defaultAction
 }
 
 // Handler returns request specific handler
-func (d *standart) Handler(rqs request.Interface, rsp response.Interface) string {
+func (d *Default) Handler(rqs request.Interface, rsp response.Interface) string {
 	return rqs.ControllerName()
 }
 
 // RequestController returns controller name based on request
-func (d *standart) RequestController(req request.Interface) (string, error) {
+func (d *Default) RequestController(req request.Interface) (string, error) {
 	controllerName := req.ControllerName()
 	if controllerName == "" {
 		if !d.options.useDefaultControllerAlways {
@@ -103,46 +176,46 @@ func (d *standart) RequestController(req request.Interface) (string, error) {
 }
 
 // IsValidModule returns true if provided module is registered
-func (d *standart) IsValidModule(md string) bool {
+func (d *Default) IsValidModule(md string) bool {
 	return true
 }
 
-// GetActionMethod returns action name from request
-func (d *standart) GetActionMethod(req request.Interface) (string, error) {
+// ActionMethod returns action name from request
+func (d *Default) ActionMethod(req request.Interface) string {
 	action := req.ActionName()
 	if action == "" {
 		action = d.DefaultAction()
 		req.SetActionName(action)
 	}
 
-	return d.formatActionName(action), nil
+	return d.formatActionName(action)
 }
 
 // SetModulesHandler sets module handler for this dispatcher
-func (d *standart) SetModulesHandler(mds modules.Handler) error {
+func (d *Default) SetModulesHandler(mds modules.Handler) error {
 	d.modules = mds
 	return nil
 }
 
 // ModulesHandler returns dispatcher modules handler
-func (d *standart) ModulesHandler() modules.Handler {
+func (d *Default) ModulesHandler() modules.Handler {
 	return d.modules
 }
 
 // SetParams sets parameters to pass to handlers
-func (d *standart) SetParams(params map[string]interface{}) error {
+func (d *Default) SetParams(params map[string]interface{}) error {
 	d.invokeParams = utils.MapSMerge(d.invokeParams, params)
 	return nil
 }
 
 // SetParam add or modify a parameter to use when instantiating a handler
-func (d *standart) SetParam(name string, value interface{}) error {
+func (d *Default) SetParam(name string, value interface{}) error {
 	d.invokeParams[name] = value
 	return nil
 }
 
 // Param retrieve a single parameter from the parameter stack
-func (d *standart) Param(name string) interface{} {
+func (d *Default) Param(name string) interface{} {
 	if v, ok := d.invokeParams[name]; ok {
 		return v
 	}
@@ -150,8 +223,8 @@ func (d *standart) Param(name string) interface{} {
 	return nil
 }
 
-// Param retrieve a single parameter from the parameter stack
-func (d *standart) ParamString(name string) string {
+// ParamString retrieve a single parameter from the parameter stack
+func (d *Default) ParamString(name string) string {
 	if v, ok := d.invokeParams[name]; ok {
 		if v, ok := v.(string); ok {
 			return v
@@ -162,7 +235,7 @@ func (d *standart) ParamString(name string) string {
 }
 
 // ParamBool retrieve a single parameter from the parameter stack
-func (d *standart) ParamBool(name string) bool {
+func (d *Default) ParamBool(name string) bool {
 	if v, ok := d.invokeParams[name]; ok {
 		if v, ok := v.(bool); ok {
 			return v
@@ -175,12 +248,12 @@ func (d *standart) ParamBool(name string) bool {
 }
 
 // Params retrieve handler parameters
-func (d *standart) Params() map[string]interface{} {
+func (d *Default) Params() map[string]interface{} {
 	return d.invokeParams
 }
 
 // ClearParam clears the specified parameter
-func (d *standart) ClearParam(name string) bool {
+func (d *Default) ClearParam(name string) bool {
 	if _, ok := d.invokeParams[name]; ok {
 		delete(d.invokeParams, name)
 		return true
@@ -190,16 +263,27 @@ func (d *standart) ClearParam(name string) bool {
 }
 
 // ClearParams clears the parameter stack
-func (d *standart) ClearParams() bool {
+func (d *Default) ClearParams() bool {
 	d.invokeParams = make(map[string]interface{})
 	return true
 }
 
-func (d *standart) formatControllerName(name string) string {
+// SetLogger attaches log writer
+func (d *Default) SetLogger(l *log.Log) error {
+	d.logger = l
+	return nil
+}
+
+// Logger returns attached log writer
+func (d *Default) Logger() *log.Log {
+	return d.logger
+}
+
+func (d *Default) formatControllerName(name string) string {
 	return name
 }
 
-func (d *standart) formatActionName(name string) string {
+func (d *Default) formatActionName(name string) string {
 	parts := strings.Split(name, "-")
 	for k, v := range parts {
 		v = strings.ToLower(v)
@@ -209,27 +293,7 @@ func (d *standart) formatActionName(name string) string {
 	return strings.Join(parts, "")
 }
 
-// PopulateController populates action controller
-func (d *standart) PopulateController(ctx context.Context, controller interface{}, rqs request.Interface, rsp response.Interface, invokeArgs map[string]interface{}) error {
-	controllerIndexes := d.findControllers(reflect.TypeOf(controller).Elem())
-	controllerValue := reflect.ValueOf(controller).Elem()
-	actionController := &action.Controller{}
-
-	actionController.SetRequest(rqs)
-	actionController.SetResponse(rsp)
-	actionController.SetContext(ctx)
-	actionController.SetSession(ctx.Value(context.SessionKey).(session.Interface))
-	actionController.SetParams(invokeArgs)
-
-	value := reflect.ValueOf(actionController)
-	for _, index := range controllerIndexes {
-		controllerValue.FieldByIndex(index).Set(value)
-	}
-
-	return nil
-}
-
-func (d *standart) findControllers(controllerType reflect.Type) (indexes [][]int) {
+func (d *Default) findControllers(controllerType reflect.Type) (indexes [][]int) {
 	controllerPtrType := reflect.TypeOf(&action.Controller{})
 
 	// It might be a multi-level embedding. To find the controllers, we follow
@@ -281,6 +345,20 @@ func (d *standart) findControllers(controllerType reflect.Type) (indexes [][]int
 	}
 
 	return
+}
+
+// NewDefaultDispatcher creates new default dispatcher
+func NewDefaultDispatcher(options *Config) (di Interface, err error) {
+	d := &Default{}
+	d.SetOptions(options)
+
+	logResource := registry.GetResource("syslog")
+	if logResource == nil {
+		return nil, errors.New("[Dispatcher] Log resource is required")
+	}
+	d.SetLogger(logResource.(*log.Log))
+
+	return d, nil
 }
 
 // NewDispatcher creates a new dispatcher specified by type

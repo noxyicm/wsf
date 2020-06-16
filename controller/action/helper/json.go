@@ -2,11 +2,8 @@ package helper
 
 import (
 	"encoding/json"
-	"wsf/controller/request"
-	"wsf/controller/response"
+	"wsf/context"
 	"wsf/errors"
-	"wsf/session"
-	"wsf/view"
 )
 
 const (
@@ -20,84 +17,35 @@ func init() {
 
 // JSON is a action helper that handles sending json response
 type JSON struct {
-	name             string
-	View             view.Interface
-	actionController ControllerInterface
-	suppressExit     bool
-}
+	Abstract
 
-// Name returns helper name
-func (h *JSON) Name() string {
-	return h.name
-}
-
-// Init the helper
-func (h *JSON) Init(options map[string]interface{}) error {
-	return nil
-}
-
-// PreDispatch do dispatch preparations
-func (h *JSON) PreDispatch() error {
-	return nil
+	suppressExit bool
 }
 
 // PostDispatch do dispatch aftermath
-func (h *JSON) PostDispatch() error {
-	return nil
-}
-
-// SetController sets action controller
-func (h *JSON) SetController(ctrl ControllerInterface) error {
-	h.actionController = ctrl
-	return nil
-}
-
-// Controller returns action controller
-func (h *JSON) Controller() ControllerInterface {
-	return h.actionController
-}
-
-// Request returns request object
-func (h *JSON) Request() request.Interface {
-	return h.Controller().Request()
-}
-
-// Response return response object
-func (h *JSON) Response() response.Interface {
-	return h.Controller().Response()
-}
-
-// Session return session object
-func (h *JSON) Session() session.Interface {
-	return h.Controller().Session()
-}
-
-// Send writes encoded data into to response
-func (h *JSON) Send(data interface{}, keepLayouts bool, encodeData bool) error {
-	encoded, err := h.Encode(data, encodeData)
-	if err != nil {
-		return err
-	}
-
-	response := h.Response()
-	if response == nil {
-		return errors.New("[JSON] Response object is undefined")
-	}
-	response.SetBody(encoded)
-	response.SetHeader("Content-Type", "application/json; charset=utf-8")
-
-	if !keepLayouts && h.Controller().HasHelper("viewRenderer") {
-		if vr := h.Controller().Helper("viewRenderer"); vr != nil {
-			vr.(*ViewRenderer).SetNoRender(true)
+func (h *JSON) PostDispatch(ctx context.Context) error {
+	if h.shouldRender(ctx) {
+		encoded, err := h.Encode(ctx.Data(), true)
+		if err != nil {
+			return err
 		}
-	}
 
-	if !h.suppressExit {
-		//response.SetResponseCode(200)
-		//response.Write()
+		rsp := ctx.Response()
+		if rsp == nil {
+			return errors.New("[JSON] Response object is undefined")
+		}
+		rsp.SetBody(encoded)
+		rsp.SetHeader("Content-Type", "application/json; charset=utf-8")
+
+		ctx.SetParam("noViewRenderer", true)
 	}
 
 	return nil
+}
+
+// Should the JSON encode data and set it as response body
+func (h *JSON) shouldRender(ctx context.Context) bool {
+	return ctx.ParamBool("isJSONResponse") && ctx.Request().IsDispatched() && !ctx.Response().IsRedirect()
 }
 
 // Encode encodes data into json
@@ -119,19 +67,20 @@ func (h *JSON) Encode(data interface{}, encodeData bool) (encoded []byte, err er
 
 // NewJSON creates new JSON action helper
 func NewJSON() (Interface, error) {
-	return &JSON{
-		name:         "json",
+	js := &JSON{
 		suppressExit: false,
-	}, nil
+	}
+
+	js.name = "json"
+	return js, nil
 }
 
 // JSONResponse represents json response
 type JSONResponse struct {
-	StatusCode int
-	Version    string
-	BasePath   string
-	Status     int
-	Message    string
-	URL        string
-	Data       interface{}
+	Version   string      `json:"version"`
+	BasePath  string      `json:"basePath"`
+	ErrorCode int         `json:"errorCode"`
+	Message   string      `json:"message"`
+	URI       string      `json:"uri"`
+	Data      interface{} `json:"data"`
 }

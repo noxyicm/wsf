@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"sync"
 	"wsf/application/resource"
 	"wsf/application/service"
 	"wsf/config"
@@ -48,7 +47,6 @@ type Bootstrap struct {
 	resourcesPool map[string]resource.Interface
 	initialized   bool
 	lsns          []func(event int, ctx interface{})
-	mu            sync.Mutex
 }
 
 // Init initializes the application
@@ -150,6 +148,15 @@ func (b *Bootstrap) AddListener(l func(event int, ctx interface{})) {
 func (b *Bootstrap) throw(event int, ctx interface{}) {
 	for _, l := range b.lsns {
 		l(event, ctx)
+	}
+}
+
+// NewInnerBootstrap returns bootstrap as reference
+func NewInnerBootstrap() *Bootstrap {
+	return &Bootstrap{
+		resourcesPool: make(map[string]resource.Interface),
+		initialized:   false,
+		lsns:          make([]func(event int, ctx interface{}), 0),
 	}
 }
 

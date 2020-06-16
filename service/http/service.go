@@ -51,13 +51,13 @@ type middleware func(f http.HandlerFunc) http.HandlerFunc
 
 // Service manages http servers
 type Service struct {
+	Name         string
 	options      *Config
 	accessLogger *log.Log
 	logger       *log.Log
 	env          environment.Interface
 	mdwr         []middleware
-	lsns         []func(event int, ctx interface{})
-	mu           sync.RWMutex
+	lsns         []func(event int, ctx service.Event)
 	serving      bool
 	handler      *Handler
 	http         *http.Server
@@ -65,6 +65,7 @@ type Service struct {
 	signalChan   chan os.Signal
 	externalChan chan interface{}
 	priority     int
+	mu           sync.RWMutex
 }
 
 // AddMiddleware adds new net/http middleware
@@ -73,7 +74,7 @@ func (s *Service) AddMiddleware(m middleware) {
 }
 
 // AddListener attaches event watcher
-func (s *Service) AddListener(l func(event int, ctx interface{})) {
+func (s *Service) AddListener(l func(event int, ctx service.Event)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -81,8 +82,12 @@ func (s *Service) AddListener(l func(event int, ctx interface{})) {
 }
 
 // throw handles service, server and pool events.
-func (s *Service) throw(event int, ctx interface{}) {
-	for _, l := range s.lsns {
+func (s *Service) throw(event int, ctx service.Event) {
+	s.mu.Lock()
+	lsns := s.lsns
+	s.mu.Unlock()
+
+	for _, l := range lsns {
 		l(event, ctx)
 	}
 }
@@ -106,7 +111,7 @@ func (s *Service) Init(options *Config, env environment.Interface) (bool, error)
 
 	logResource := registry.GetResource("syslog")
 	if logResource == nil {
-		return false, errors.New("Log resource is not configured")
+		return false, errors.Errorf("[%s] Log resource is not configured", s.Name)
 	}
 	s.logger = logResource.(*log.Log)
 
@@ -141,8 +146,8 @@ func (s *Service) Serve(ctx context.Context) (err error) {
 	s.serving = true
 	s.mu.Unlock()
 
-	errChan := make(chan error, 2)
-	s.throw(EventInfo, fmt.Sprintf("[HTTP Server] Starting: Listening on %s...", s.options.Address()))
+	errChan := make(chan error)
+	s.throw(EventInfo, service.InfoEvent(fmt.Sprintf("[%s] Starting: Listening on %s...", s.Name, s.options.Address())))
 	go func() { errChan <- s.http.ListenAndServe() }()
 	if s.https != nil {
 		go func() { errChan <- s.https.ListenAndServeTLS(s.options.SSL.Cert, s.options.SSL.Key) }()
@@ -154,7 +159,7 @@ func (s *Service) Serve(ctx context.Context) (err error) {
 	s.mu.Unlock()
 
 	if err == http.ErrServerClosed {
-		s.throw(EventInfo, "[HTTP Server] Stoped")
+		s.throw(EventInfo, service.InfoEvent(fmt.Sprintf("[%s] Stoped", s.Name)))
 		return nil
 	}
 
@@ -164,18 +169,20 @@ func (s *Service) Serve(ctx context.Context) (err error) {
 // Stop the service
 func (s *Service) Stop() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	serviceHTTP := s.http
+	serviceHTTPS := s.https
+	s.mu.Unlock()
 
-	s.throw(EventInfo, "[HTTP Server] Initiating stop...")
-	if s.http == nil {
+	s.throw(EventInfo, service.InfoEvent(fmt.Sprintf("[%s] Initiating stop...", s.Name)))
+	if serviceHTTP == nil {
 		return
 	}
 
-	if s.https != nil {
-		go s.https.Shutdown(context.Background())
+	if serviceHTTPS != nil {
+		go serviceHTTPS.Shutdown(context.Background())
 	}
 
-	go s.http.Shutdown(context.Background())
+	go serviceHTTP.Shutdown(context.Background())
 }
 
 // ServeHTTP handles connection using set of middleware and rr PSR-7 server.
@@ -205,7 +212,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Init https server.
 func (s *Service) initSSL() *http.Server {
 	server := &http.Server{Addr: s.tlsAddr(s.options.Address(), true), Handler: s}
-	s.throw(EventInitSSL, server)
+	s.throw(EventInitSSL, service.DebugEvent(fmt.Sprintf("[%s] Initiating SSL", s.Name)))
 
 	// Enable HTTP/2 support by default
 	http2.ConfigureServer(server, &http2.Server{})
@@ -213,7 +220,7 @@ func (s *Service) initSSL() *http.Server {
 	return server
 }
 
-func (s *Service) logAccess(event int, ctx interface{}) {
+func (s *Service) logAccess(event int, ctx service.Event) {
 	switch event {
 	case EventHTTPResponse:
 		s.accessLogger.Info("Logging access", map[string]string{
@@ -232,7 +239,7 @@ func (s *Service) logAccess(event int, ctx interface{}) {
 			"user":       "-",
 			"request":    ctx.(*evt.Error).Request.Method + " " + ctx.(*evt.Error).Request.URL.RequestURI() + " " + ctx.(*evt.Error).Request.Proto,
 			"statusCode": "500",
-			"bytes":      strconv.Itoa(len([]byte(ctx.(*evt.Error).Error.Error()))),
+			"bytes":      strconv.Itoa(len([]byte(ctx.Message()))),
 			"referer":    ctx.(*evt.Error).Request.Referer(),
 			"useragent":  ctx.(*evt.Error).Request.UserAgent(),
 		})
@@ -254,6 +261,7 @@ func (s *Service) tlsAddr(host string, forcePort bool) string {
 // NewService creates a new service of type HTTP
 func NewService(cfg config.Config) (service.Interface, error) {
 	return &Service{
+		Name:     "HTTP Server",
 		serving:  false,
 		priority: 0,
 	}, nil

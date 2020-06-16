@@ -13,6 +13,9 @@ import (
 )
 
 var (
+	// Verbose defines if
+	Verbose = false
+
 	// AppRootPath holds application root folder
 	AppRootPath = "/"
 
@@ -198,6 +201,16 @@ func NewBridge() *Bridge {
 	return &Bridge{cfg}
 }
 
+// NewDefaultBridge creates new bridge with defaults
+func NewDefaultBridge() (*Bridge, error) {
+	cfg := viper.New()
+	if err := cfg.MergeConfigMap(defaults); err != nil {
+		return nil, errors.Wrap(err, "Unable to create default bridge")
+	}
+
+	return &Bridge{cfg}, nil
+}
+
 // LoadConfig loads config file and merge it's values with set of flags
 func LoadConfig(file string, path []string, name string, flags []string) (*Bridge, error) {
 	cfg := viper.New()
@@ -224,6 +237,11 @@ func LoadConfig(file string, path []string, name string, flags []string) (*Bridg
 		}
 
 		cfg.SetConfigName(name)
+	}
+
+	ext := filepath.Ext(file)
+	if ext[1:] == "ini" {
+		cfg.SetConfigType("properties")
 	}
 
 	cfg.AutomaticEnv()

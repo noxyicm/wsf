@@ -1,7 +1,7 @@
 package modules
 
 import (
-	"github.com/pkg/errors"
+	"wsf/errors"
 )
 
 const (
@@ -24,30 +24,28 @@ func (h *Default) Bootstrap() error {
 }
 
 // RegisterModule registers a module in handler for initialization
-func (h *Default) RegisterModule(order int, name string, callback func(*Module)) (err error) {
+func (h *Default) RegisterModule(order int, name string, constructor func(order int, name string) (Interface, error), callback func(Interface) error) (err error) {
+	if _, ok := h.modules[name]; ok {
+		return errors.Errorf("Module with name '%s' already registered", name)
+	}
+
 	if _, ok := h.moduleOrder[order]; ok {
 		order = len(h.moduleOrder)
 	}
 
 	h.moduleOrder[order] = name
-
-	if _, ok := h.modules[name]; ok {
-		return errors.Errorf("Module with name '%s' already registered", name)
-	}
-
-	h.modules[name], err = NewModule(name, order)
+	h.modules[name], err = constructor(order, name)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "Unable to create module '%s'", name)
 	}
 
-	callback(h.modules[name])
-	return nil
+	return callback(h.modules[name])
 }
 
 // NewDefaultModuleHandler creates new default module handler
 func NewDefaultModuleHandler(options *Config) (mi Handler, err error) {
 	mh := &Default{}
 	mh.options = options
-	mh.modules = make(map[string]*Module)
+	mh.modules = make(map[string]Interface)
 	return mh, nil
 }

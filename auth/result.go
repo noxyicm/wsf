@@ -4,7 +4,7 @@ import "wsf/errors"
 
 // Public constants
 const (
-	TYPEResultDefault = "default"
+	TYPEAuthResultDefault = "default"
 
 	// General Failure
 	ResultFailure = 0
@@ -26,11 +26,11 @@ const (
 )
 
 var (
-	buildResultHandlers = map[string]func(int, Identity, []error) (Result, error){}
+	buildResultHandlers = map[string]func(int, Identity, []error) Result{}
 )
 
 func init() {
-	RegisterResult(TYPEResultDefault, NewResultDefault)
+	RegisterResult(TYPEAuthResultDefault, NewResultDefault)
 }
 
 // Result represent auth result interface
@@ -42,6 +42,7 @@ type Result interface {
 	SetIdentity(idnt Identity)
 	GetIdentity() Identity
 	GetErrors() []error
+	GetError() error
 	AddError(error)
 	SetErrors([]error)
 }
@@ -49,14 +50,14 @@ type Result interface {
 // NewResult creates a new auth result from given type and options
 func NewResult(resultType string, code int, identity Identity, messages []error) (Result, error) {
 	if f, ok := buildResultHandlers[resultType]; ok {
-		return f(code, identity, messages)
+		return f(code, identity, messages), nil
 	}
 
 	return nil, errors.Errorf("Unrecognized auth result type \"%v\"", resultType)
 }
 
 // RegisterResult registers a handler for auth result creation
-func RegisterResult(resultType string, handler func(int, Identity, []error) (Result, error)) {
+func RegisterResult(resultType string, handler func(int, Identity, []error) Result) {
 	buildResultHandlers[resultType] = handler
 }
 
@@ -101,9 +102,18 @@ func (r *DefaultResult) GetIdentity() Identity {
 	return r.Identity
 }
 
-// GetErrors returns a slice of string reasons why the authentication attempt was unsuccessful
+// GetErrors returns a slice of errors, reasons why the authentication attempt was unsuccessful
 func (r *DefaultResult) GetErrors() []error {
 	return r.Errors
+}
+
+// GetError returns first equired error
+func (r *DefaultResult) GetError() error {
+	if len(r.Errors) > 0 {
+		return r.Errors[0]
+	}
+
+	return nil
 }
 
 // AddError adds an error to the result object
@@ -117,7 +127,7 @@ func (r *DefaultResult) SetErrors(errs []error) {
 }
 
 // NewResultDefault creates a new default auth result object
-func NewResultDefault(code int, identity Identity, messages []error) (Result, error) {
+func NewResultDefault(code int, identity Identity, messages []error) Result {
 	if code < ResultFailureUncategorized {
 		code = ResultFailure
 	} else if code > ResultSuccess {
@@ -128,5 +138,5 @@ func NewResultDefault(code int, identity Identity, messages []error) (Result, er
 		Code:     code,
 		Identity: identity,
 		Errors:   messages,
-	}, nil
+	}
 }

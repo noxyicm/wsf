@@ -70,6 +70,7 @@ func (c *Config) Defaults() error {
 			"enable": true,
 			"writers": map[string]interface{}{
 				"file": map[string]interface{}{
+					"enable": true,
 					"params": map[string]interface{}{
 						"type":   "stream",
 						"stream": "/logs/access.log",

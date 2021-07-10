@@ -320,7 +320,7 @@ func (r *HTTP) Write() error {
 
 // Destroy the response
 func (r *HTTP) Destroy() {
-	r.Code = 500
+	r.Code = 0
 	r.Headers = make(map[string][]string)
 	r.Cookies = make(map[string]*http.Cookie)
 	r.Body = stack.NewReferenced(nil)
@@ -338,7 +338,7 @@ func (r *HTTP) normalizeHeader(name string) string {
 // NewHTTPResponse creates new response based on given roadrunner payload
 func NewHTTPResponse(w http.ResponseWriter) (Interface, error) {
 	return &HTTP{
-		Code:    500,
+		Code:    0,
 		Headers: make(map[string][]string),
 		Cookies: make(map[string]*http.Cookie),
 		Body:    stack.NewReferenced(nil),

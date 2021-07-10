@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"wsf/config"
 	"wsf/errors"
 	"wsf/log/event"
@@ -27,6 +28,7 @@ type Stream struct {
 
 	stream *os.File
 	mode   int
+	mur    sync.RWMutex
 }
 
 // Write writes message to log
@@ -43,9 +45,12 @@ func (w *Stream) Write(e *event.Event) error {
 
 	message, err := w.Formatter.Format(e)
 	if err == nil {
+		w.mur.Lock()
 		if _, err := w.stream.Write([]byte(message)); err != nil {
+			w.mur.Unlock()
 			return err
 		}
+		w.mur.Unlock()
 	}
 
 	return nil

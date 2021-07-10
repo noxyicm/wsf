@@ -2,7 +2,6 @@ package tasker
 
 import (
 	goctx "context"
-	"fmt"
 	"sync"
 	"time"
 	"wsf/config"
@@ -31,7 +30,7 @@ type Service struct {
 	Logger              *log.Log
 	name                string
 	ctx                 context.Context
-	cancel              goctx.CancelFunc
+	ctxCancel           goctx.CancelFunc
 	workers             map[string][]Worker
 	stopChan            chan bool
 	exitChan            chan bool
@@ -47,12 +46,14 @@ type Service struct {
 	autostartingWorkers int
 	autostartedWorkers  int
 	inExitSequence      bool
+	serving             bool
+	priority            int
 	lsns                []func(event int, ctx service.Event)
 	mu                  sync.Mutex
 	mur                 sync.RWMutex
 	mux                 sync.Mutex
-	serving             bool
-	priority            int
+	wgp                 sync.WaitGroup
+	wrkwgp              sync.WaitGroup
 }
 
 // Init Worker service
@@ -93,15 +94,20 @@ func (s *Service) throw(event int, ctx service.Event) {
 
 // Serve serves the service
 func (s *Service) Serve(ctx context.Context) (err error) {
-	s.mu.Lock()
-	s.ctx, s.cancel = context.WithCancel(ctx)
-	s.inChan = make(chan *Message)
+	s.wgp.Add(1)
+	defer s.recover()
+
+	s.mur.Lock()
 	s.serving = true
-	s.mu.Unlock()
+	s.mur.Unlock()
+
+	s.mur.Lock()
+	s.ctx, s.ctxCancel = context.WithCancel(ctx)
+	s.inChan = make(chan *Message)
+	s.mur.Unlock()
 
 	s.beginWatch()
 	if err := s.watchContext(s.ctx); err != nil {
-		s.stop()
 		return errors.Wrap(err, "["+s.name+"] Unable to serve service")
 	}
 
@@ -123,8 +129,7 @@ func (s *Service) Serve(ctx context.Context) (err error) {
 	}
 
 	if potentialWorkers == 0 {
-		s.stop()
-		return errors.New("[" + s.name + "] Stopped. No workers defined")
+		return errors.New("[" + s.name + "] Stopped. No workers define")
 	}
 
 	s.mu.Lock()
@@ -133,9 +138,7 @@ func (s *Service) Serve(ctx context.Context) (err error) {
 
 	for typ := range workers {
 		for i := range workers[typ] {
-			s.mu.Lock()
 			s.waiterChan <- workers[typ][i]
-			s.mu.Unlock()
 
 			if workers[typ][i].IsAutoStart() {
 				s.mu.Lock()
@@ -154,89 +157,34 @@ func (s *Service) Serve(ctx context.Context) (err error) {
 		}
 	}
 
-	s.Logger.Info("["+s.name+"] Started", nil)
+	s.Logger.Infof("["+s.name+"] Started, running workers %d", nil, s.runingWorkers)
 
 	if s.runingWorkers < 1 && !s.Options.Persistent {
-		s.stop()
-		s.Logger.Info("["+s.name+"] All tasks done. Stoped", nil)
+		s.Logger.Info("["+s.name+"] Stoped. No persistent works", nil)
 		return nil
 	}
 
-MainLoop:
-	for {
-		select {
-		case <-s.stopChan:
-			break MainLoop
+	go s.watchInput()
 
-		case msg, ok := <-s.inChan:
-			if !ok {
-				break MainLoop
-			}
-
-			switch msg.Type {
-			case MessageModifyTask:
-				wrk, err := s.Worker(msg.Task.Worker, 0)
-				if err != nil {
-					s.Logger.Error(errors.Wrap(err, "["+s.name+"] Unable to handle task modification"), nil)
-					continue
-				}
-
-				wrkInChan, err := wrk.InChannel()
-				if err != nil {
-					s.Logger.Error(errors.Wrap(err, "["+s.name+"] Unable to handle task modification"), nil)
-					continue
-				}
-
-				wrkInChan <- msg
-
-			case MessageAddTask:
-				fallthrough
-			case MessageStartTask:
-				wrk, err := s.lazyWorker(msg.Task.Worker)
-				if err != nil {
-					s.Logger.Error(errors.Wrap(err, "["+s.name+"] Unable to handle new task"), nil)
-					continue
-				}
-
-				wrkInChan, err := wrk.InChannel()
-				if err != nil {
-					s.Logger.Error(errors.Wrap(err, "["+s.name+"] Unable to handle new task"), nil)
-					continue
-				}
-
-				wrkInChan <- msg
-
-			case MessageStopTask:
-				s.Logger.Error(errors.New("["+s.name+"] Not implemented"), nil)
-
-			default:
-				s.Logger.Error(errors.Errorf("[%s] Unrecognized message type %d", s.name, msg.Type), nil)
-			}
-		}
+	if s.Options.Persistent {
+		<-s.exitChan
 	}
 
-	s.stop()
-
-	s.Logger.Info("["+s.name+"] Stoped", nil)
+	s.wrkwgp.Wait()
+	s.Logger.Info("["+s.name+"] Stoped. All works done", nil)
 	return nil
 }
 
 // Stop stops the service
 func (s *Service) Stop() {
 	s.mu.Lock()
-	s.inExitSequence = true
 	serving := s.serving
 	s.mu.Unlock()
 
 	if serving {
 		s.Logger.Info("["+s.name+"] Waiting for all routines to exit...", nil)
-		s.ctx.Cancel()
-		<-s.exitChan
+		s.ctxCancel()
 	}
-
-	s.mu.Lock()
-	s.serving = false
-	s.mu.Unlock()
 }
 
 // ID implements waiter interface
@@ -262,6 +210,10 @@ func (s *Service) InChannel() (chan<- *Message, error) {
 
 // SetOutChannel sets channel for sending messages
 func (s *Service) SetOutChannel(out chan *Message) error {
+	if s.outChan != nil {
+		close(s.outChan)
+	}
+
 	s.outChan = out
 	return nil
 }
@@ -276,7 +228,7 @@ func (s *Service) Wait() <-chan *Message {
 	}
 
 	if s.outChan == nil {
-		s.outChan = make(chan *Message, 2)
+		s.outChan = make(chan *Message)
 	}
 
 	c := s.outChan
@@ -298,22 +250,65 @@ func (s *Service) Worker(workerName string, indx int) (Worker, error) {
 	return nil, errors.Errorf("[%s] Worker by name '%s' is not registered", s.name, workerName)
 }
 
+func (s *Service) recover() {
+	if r := recover(); r != nil {
+		s.mur.Lock()
+		serving := s.serving
+		s.mur.Unlock()
+
+		if serving {
+			switch err := r.(type) {
+			case error:
+				s.Logger.Error(errors.Wrapf(err, "[%s] Service failed", s.name), nil)
+
+			default:
+				s.Logger.Error(errors.Errorf("[%s] Service failed: %v", s.name, err), nil)
+			}
+
+			s.mur.Lock()
+			watchingCtx := s.watchingCtx
+			s.mur.Unlock()
+
+			if watchingCtx {
+				s.ctxCancel()
+			}
+
+			s.wrkwgp.Wait()
+		}
+	}
+
+	s.wgp.Done()
+	s.stop()
+}
+
 func (s *Service) stop() {
+	s.mur.Lock()
+	serving := s.serving
+	s.mur.Unlock()
+
+	if !serving {
+		return
+	}
+
 	s.mu.Lock()
 	s.inExitSequence = true
 	s.mu.Unlock()
 
 	if s.inChan != nil {
 		close(s.inChan)
+		s.inChan = nil
 	}
 
 	s.stopWatch()
+	s.wgp.Wait()
 
-	<-s.exitChan
-
+	s.mur.Lock()
 	if s.outChan != nil {
 		close(s.outChan)
+		s.outChan = nil
 	}
+	s.serving = false
+	s.mur.Unlock()
 }
 
 func (s *Service) postStartPhase() error {
@@ -433,7 +428,6 @@ func (s *Service) beginWatch() {
 	s.mu.Lock()
 	s.stopChan = make(chan bool)
 	s.exitChan = make(chan bool)
-	s.doneChan = make(chan bool)
 	watcher := make(chan context.Context, 1)
 	s.watchChan = watcher
 	out := make(chan Waiter)
@@ -442,6 +436,9 @@ func (s *Service) beginWatch() {
 	s.mu.Unlock()
 
 	go func() {
+		s.wgp.Add(1)
+		defer s.wgp.Done()
+
 		for {
 			var ctx context.Context
 			var ok bool
@@ -456,8 +453,11 @@ func (s *Service) beginWatch() {
 
 			select {
 			case <-ctx.Done():
-				fmt.Println("Service.beginWatch() <-ctx.Done()")
-				s.stopWatch()
+				s.mur.Lock()
+				s.watchingCtx = false
+				s.mur.Unlock()
+				close(s.exitChan)
+				return
 			case <-s.stopChan:
 				return
 			}
@@ -465,8 +465,14 @@ func (s *Service) beginWatch() {
 	}()
 
 	go func() {
+		s.wgp.Add(1)
+		defer s.wgp.Done()
+
 		for wt := range out {
 			go func(wt Waiter) {
+				s.wrkwgp.Add(1)
+				defer s.wrkwgp.Done()
+
 				for msg := range wt.Wait() {
 					switch msg.Type {
 					case MessageWorkerStart:
@@ -506,13 +512,10 @@ func (s *Service) beginWatch() {
 				s.mu.Lock()
 				s.runingWorkers--
 				s.mu.Unlock()
-
-				s.done()
 				return
 			}(wt)
 		}
 
-		s.done()
 		return
 	}()
 }
@@ -535,25 +538,6 @@ func (s *Service) stopWatch() {
 	s.stopChan = nil
 	s.watching = false
 	s.mu.Unlock()
-}
-
-func (s *Service) done() {
-	s.mur.Lock()
-	runningWorkers := s.runingWorkers
-	exiting := s.inExitSequence
-	serving := s.serving
-	s.mur.Unlock()
-
-	if !serving || s.exitChan == nil {
-		return
-	}
-
-	if runningWorkers < 1 && (exiting || s.waiterChan == nil || !s.Options.Persistent) {
-		s.mur.Lock()
-		close(s.exitChan)
-		s.exitChan = nil
-		s.mur.Unlock()
-	}
 }
 
 func (s *Service) watchContext(ctx context.Context) error {
@@ -581,6 +565,67 @@ func (s *Service) watchContext(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) watchInput() {
+	s.wgp.Add(1)
+	defer s.restartWatchInput()
+
+	for msg := range s.inChan {
+		switch msg.Type {
+		case MessageModifyTask:
+			wrk, err := s.Worker(msg.Task.Worker, 0)
+			if err != nil {
+				s.Logger.Error(errors.Wrap(err, "["+s.name+"] Unable to handle task modification"), nil)
+				continue
+			}
+
+			wrkInChan, err := wrk.InChannel()
+			if err != nil {
+				s.Logger.Error(errors.Wrap(err, "["+s.name+"] Unable to handle task modification"), nil)
+				continue
+			}
+
+			wrkInChan <- msg
+
+		case MessageAddTask:
+			fallthrough
+		case MessageStartTask:
+			wrk, err := s.lazyWorker(msg.Task.Worker)
+			if err != nil {
+				s.Logger.Error(errors.Wrap(err, "["+s.name+"] Unable to handle new task"), nil)
+				continue
+			}
+
+			wrkInChan, err := wrk.InChannel()
+			if err != nil {
+				s.Logger.Error(errors.Wrap(err, "["+s.name+"] Unable to handle new task"), nil)
+				continue
+			}
+
+			wrkInChan <- msg
+
+		case MessageStopTask:
+			s.Logger.Error(errors.New("["+s.name+"] Not implemented"), nil)
+
+		default:
+			s.Logger.Error(errors.Errorf("[%s] Unrecognized message type %d", s.name, msg.Type), nil)
+		}
+	}
+}
+
+func (s *Service) restartWatchInput() {
+	defer s.wgp.Done()
+
+	if r := recover(); r != nil {
+		s.mur.Lock()
+		serving := s.serving
+		s.mur.Unlock()
+
+		if serving {
+			go s.watchInput()
+		}
+	}
+}
+
 // NewService creates a new service of type Tasker
 func NewService(cfg config.Config) (service.Interface, error) {
 	return &Service{
@@ -592,6 +637,8 @@ func NewService(cfg config.Config) (service.Interface, error) {
 		runingWorkers:  0,
 		serving:        false,
 		priority:       5,
+		wgp:            sync.WaitGroup{},
+		wrkwgp:         sync.WaitGroup{},
 	}, nil
 }
 

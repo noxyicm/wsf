@@ -17,12 +17,11 @@ import (
 	// CockroachDB uses postgres package for tcp connections
 	//_ "github.com/lib/pq"
 	//_ "github.com/jackc/pgx"
-
+	_ "github.com/jackc/pgx/v4"
 	// pgx needs a connections pool
-	_ "github.com/jackc/pgx/pgxpool"
-
+	//_ "github.com/jackc/pgx/pgxpool"
 	// CockroachDB uses pgx package for tcp connections
-	_ "github.com/jackc/pgx/stdlib"
+	//_ "github.com/jackc/pgx/stdlib"
 )
 
 const (

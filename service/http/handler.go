@@ -1,7 +1,6 @@
 package http
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
@@ -104,7 +103,6 @@ func (h *Handler) handleError(w http.ResponseWriter, r *http.Request, err error,
 
 	w.WriteHeader(500)
 
-	fmt.Printf("%+v\n", err)
 	h.throw(EventHTTPError, event.NewError(r, err, start))
 	w.Write([]byte(err.Error()))
 }

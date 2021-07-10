@@ -129,6 +129,11 @@ func (l *Log) SetTimestampFormat(format string) {
 	l.timestampFormat = format
 }
 
+// Verbal returns true if log is in verbose mode
+func (l *Log) Verbal() bool {
+	return l.options.Verbose
+}
+
 // Log a message at a priority
 func (l *Log) Log(message interface{}, priority int, extras map[string]string) error {
 	if !l.enable {

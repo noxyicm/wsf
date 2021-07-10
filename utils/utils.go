@@ -376,6 +376,21 @@ func MapSMerge(c interface{}, b interface{}) map[string]interface{} {
 	return a
 }
 
+// MapSCopy creates a copy of a map
+func MapSCopy(m map[string]interface{}) map[string]interface{} {
+	cp := make(map[string]interface{})
+	for k, v := range m {
+		vm, ok := v.(map[string]interface{})
+		if ok {
+			cp[k] = MapSCopy(vm)
+		} else {
+			cp[k] = v
+		}
+	}
+
+	return cp
+}
+
 // MapSSMerge merges two maps with string keys and string values
 func MapSSMerge(c interface{}, b interface{}) map[string]string {
 	a := make(map[string]string)

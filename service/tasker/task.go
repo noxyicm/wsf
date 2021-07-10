@@ -4,6 +4,7 @@ import (
 	"time"
 	"wsf/config"
 	"wsf/errors"
+	"wsf/utils"
 )
 
 // Task represents task
@@ -91,6 +92,32 @@ func (t *Task) ExecutionTime() time.Time {
 	}
 
 	return time.Date(year, month, day, t.Hour, t.Minute, t.Second, 0, time.Local)
+}
+
+// Clone the task
+func (t *Task) Clone() Task {
+	return Task{
+		ID:           t.ID,
+		State:        t.State,
+		Name:         t.Name,
+		Date:         t.Date,
+		Created:      time.Now(),
+		Year:         t.Year,
+		Month:        t.Month,
+		Day:          t.Day,
+		Hour:         t.Hour,
+		Minute:       t.Minute,
+		Second:       t.Second,
+		Intervaled:   t.Intervaled,
+		Uniq:         t.Uniq,
+		Data:         t.Data,
+		ParsedData:   utils.MapSCopy(t.ParsedData),
+		Extras:       t.Extras,
+		ParsedExtras: utils.MapSCopy(t.ParsedExtras),
+		Handler:      t.Handler,
+		Worker:       t.Worker,
+		LastUpdate:   time.Time{},
+	}
 }
 
 // NewTask create a new task

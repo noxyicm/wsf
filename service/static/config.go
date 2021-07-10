@@ -2,11 +2,11 @@ package static
 
 import (
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"wsf/config"
-
-	"github.com/pkg/errors"
+	"wsf/errors"
+	"wsf/utils"
 )
 
 // Config defines Static server configuration
@@ -53,29 +53,20 @@ func (c *Config) Valid() error {
 
 // AlwaysForbid must return true if file extension is not allowed for the upload
 func (c *Config) AlwaysForbid(filename string) bool {
-	ext := strings.ToLower(path.Ext(filename))
-
-	for _, v := range c.Forbid {
-		if ext == v {
-			return true
-		}
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext == "" {
+		return false
 	}
 
-	return false
+	return utils.InSSlice(ext[1:], c.Forbid)
 }
 
 // AlwaysServe must indicate that file is expected to be served by static service
 func (c *Config) AlwaysServe(filename string) bool {
-	ext := strings.ToLower(path.Ext(filename))
-	if ext != "" {
-		ext = ext[1:len(ext)]
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext == "" {
+		return false
 	}
 
-	for _, v := range c.Always {
-		if ext == v {
-			return true
-		}
-	}
-
-	return false
+	return utils.InSSlice(ext[1:], c.Always)
 }

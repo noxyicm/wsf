@@ -10,8 +10,11 @@ type WorkerConfig struct {
 	Precicion             int64
 	MaxTasks              int
 	MaxConsequetiveErrors int
+	MaxHandlerRetryes     int
+	RetryTimeout          int
 	Persistent            bool
 	AutoStart             bool
+	AutoRestart           bool
 }
 
 // Populate must populate Config values using given Config source. Must return error if Config is not valid
@@ -29,8 +32,11 @@ func (c *WorkerConfig) Defaults() error {
 	c.Precicion = 100000
 	c.MaxTasks = 0
 	c.MaxConsequetiveErrors = 1
+	c.MaxHandlerRetryes = 0
+	c.RetryTimeout = 1000000000
 	c.Persistent = false
 	c.AutoStart = true
+	c.AutoRestart = false
 
 	return nil
 }

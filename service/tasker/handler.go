@@ -15,6 +15,7 @@ type Handler interface {
 	Stop()
 	Type() string
 	Name() string
+	Task() *Task
 	TaskID() int64
 	InChannel() (chan<- *Message, error)
 }

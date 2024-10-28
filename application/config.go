@@ -3,8 +3,8 @@ package application
 import (
 	"os"
 	"path/filepath"
-	"wsf/config"
-	"wsf/log"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/log"
 )
 
 // Config defines set of environment variables

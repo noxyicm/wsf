@@ -1,7 +1,7 @@
 package token
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // Config represents token configuration

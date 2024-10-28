@@ -3,11 +3,11 @@ package view
 import (
 	"html/template"
 	"path/filepath"
-	"wsf/config"
-	"wsf/context"
-	"wsf/errors"
-	"wsf/log"
-	"wsf/view/helper"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log"
+	"github.com/noxyicm/wsf/view/helper"
 )
 
 var (

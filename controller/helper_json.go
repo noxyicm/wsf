@@ -2,8 +2,8 @@ package controller
 
 import (
 	"encoding/json"
-	"wsf/context"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
 )
 
 const (

@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"wsf/context"
-	"wsf/view"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/view"
 )
 
 const (

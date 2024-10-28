@@ -1,7 +1,7 @@
 package container
 
 import (
-	"wsf/utils/stack"
+	"github.com/noxyicm/wsf/utils/stack"
 )
 
 // Container contants

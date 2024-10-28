@@ -4,10 +4,10 @@ import (
 	"go/build"
 	"path/filepath"
 	"sort"
-	"wsf/config"
-	"wsf/errors"
-	"wsf/registry"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/utils"
 )
 
 var (

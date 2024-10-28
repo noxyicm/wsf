@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/utils"
 )
 
 // Interface represents a net/http request maped to PSR7 compatible structure

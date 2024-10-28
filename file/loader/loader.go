@@ -4,7 +4,7 @@ import (
 	"errors"
 	"os"
 	"time"
-	"wsf/file"
+	"github.com/noxyicm/wsf/file"
 )
 
 // FileLoader interface

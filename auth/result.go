@@ -1,6 +1,6 @@
 package auth
 
-import "wsf/errors"
+import "github.com/noxyicm/wsf/errors"
 
 // Public constants
 const (

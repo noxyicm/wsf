@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"strconv"
 	"time"
-	"wsf/errors"
-	"wsf/registry"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/registry"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/mitchellh/mapstructure"

@@ -2,8 +2,8 @@ package resource
 
 import (
 	"sync"
-	"wsf/config"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
 )
 
 const (

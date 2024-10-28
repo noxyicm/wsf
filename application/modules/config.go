@@ -1,6 +1,6 @@
 package modules
 
-import "wsf/config"
+import "github.com/noxyicm/wsf/config"
 
 // Config represents module configuration
 type Config struct {

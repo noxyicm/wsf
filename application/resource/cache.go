@@ -1,8 +1,8 @@
 package resource
 
 import (
-	"wsf/cache"
-	"wsf/config"
+	"github.com/noxyicm/wsf/cache"
+	"github.com/noxyicm/wsf/config"
 )
 
 // TYPECache id of resource

@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"reflect"
 	"strings"
-	"wsf/cache"
-	"wsf/config"
-	"wsf/context"
-	"wsf/errors"
-	"wsf/registry"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/cache"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/utils"
 )
 
 // Public constants

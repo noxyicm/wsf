@@ -7,12 +7,12 @@ import (
 	"net/url"
 	"sync"
 	"time"
-	"wsf/cache"
-	"wsf/config"
-	"wsf/controller/request"
-	"wsf/controller/response"
-	"wsf/errors"
-	"wsf/session/validator"
+	"github.com/noxyicm/wsf/cache"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/controller/request"
+	"github.com/noxyicm/wsf/controller/response"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/session/validator"
 )
 
 // Public contants

@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"wsf/cache"
-	"wsf/config"
-	"wsf/controller/response"
-	"wsf/crypt"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/cache"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/controller/response"
+	"github.com/noxyicm/wsf/crypt"
+	"github.com/noxyicm/wsf/errors"
 )
 
 // Public constants

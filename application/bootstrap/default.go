@@ -2,8 +2,8 @@ package bootstrap
 
 import (
 	"sync"
-	"wsf/application/resource"
-	"wsf/application/service"
+	"github.com/noxyicm/wsf/application/resource"
+	"github.com/noxyicm/wsf/application/service"
 )
 
 const (

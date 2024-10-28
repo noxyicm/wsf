@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"time"
-	"wsf/file"
+	"github.com/noxyicm/wsf/file"
 
 	"github.com/pkg/errors"
 )

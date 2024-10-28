@@ -1,6 +1,6 @@
 package validator
 
-import "wsf/config"
+import "github.com/noxyicm/wsf/config"
 
 // Config defines set of session validator
 type Config struct {

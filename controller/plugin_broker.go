@@ -1,11 +1,11 @@
 package controller
 
 import (
-	"wsf/context"
-	"wsf/controller/request"
-	"wsf/controller/response"
-	"wsf/errors"
-	"wsf/utils/stack"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/controller/request"
+	"github.com/noxyicm/wsf/controller/response"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/utils/stack"
 )
 
 // PluginBroker handles dispatching of events to plugins

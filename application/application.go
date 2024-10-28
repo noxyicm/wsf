@@ -4,12 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"wsf/application/bootstrap"
-	"wsf/config"
-	"wsf/context"
-	"wsf/errors"
-	"wsf/log"
-	"wsf/registry"
+	"github.com/noxyicm/wsf/application/bootstrap"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log"
+	"github.com/noxyicm/wsf/registry"
 )
 
 const (

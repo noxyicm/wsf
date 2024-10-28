@@ -1,6 +1,6 @@
 package auth
 
-import "wsf/config"
+import "github.com/noxyicm/wsf/config"
 
 // AdapterConfig defines set of adapter variables
 type AdapterConfig struct {

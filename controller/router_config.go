@@ -1,6 +1,6 @@
 package controller
 
-import "wsf/config"
+import "github.com/noxyicm/wsf/config"
 
 // RouterConfig represents router configuration
 type RouterConfig struct {

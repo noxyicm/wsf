@@ -2,7 +2,7 @@ package reader
 
 import (
 	"fmt"
-	"wsf/file"
+	"github.com/noxyicm/wsf/file"
 )
 
 // Reader Reads files

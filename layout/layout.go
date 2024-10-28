@@ -2,15 +2,15 @@ package layout
 
 import (
 	"html/template"
-	"wsf/config"
-	"wsf/context"
-	"wsf/controller"
-	"wsf/errors"
-	"wsf/filter"
-	"wsf/registry"
-	"wsf/view"
-	"wsf/view/helper/placeholder"
-	"wsf/view/helper/placeholder/container"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/controller"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/filter"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/view"
+	"github.com/noxyicm/wsf/view/helper/placeholder"
+	"github.com/noxyicm/wsf/view/helper/placeholder/container"
 )
 
 // Public constants
@@ -87,7 +87,7 @@ func Instance() Interface {
 	return mvc
 }
 
-// DefaultLayout is a default wsf layout
+// DefaultLayout is a default github.com/noxyicm/wsf layout
 type DefaultLayout struct {
 	Options         *Config
 	Enabled         bool

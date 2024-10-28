@@ -2,7 +2,7 @@ package validator
 
 import (
 	"time"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/errors"
 )
 
 // Public constants

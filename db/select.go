@@ -5,10 +5,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"wsf/config"
-	"wsf/errors"
-	"wsf/log"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log"
+	"github.com/noxyicm/wsf/utils"
 )
 
 // General select constants

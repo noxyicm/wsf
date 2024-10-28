@@ -1,8 +1,8 @@
 package layout
 
 import (
-	"wsf/controller"
-	"wsf/view"
+	"github.com/noxyicm/wsf/controller"
+	"github.com/noxyicm/wsf/view"
 )
 
 // TYPEHelperLayout is a helper id

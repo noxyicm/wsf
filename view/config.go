@@ -1,7 +1,7 @@
 package view
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // Config represents view configuration

@@ -1,8 +1,8 @@
 package tasker
 
 import (
-	"wsf/context"
-	"wsf/log"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/log"
 )
 
 const (

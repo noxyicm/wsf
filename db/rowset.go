@@ -3,7 +3,7 @@ package db
 import (
 	"database/sql"
 	"sync"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/errors"
 )
 
 const (

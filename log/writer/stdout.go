@@ -2,9 +2,9 @@ package writer
 
 import (
 	"fmt"
-	"wsf/log/event"
-	"wsf/log/filter"
-	"wsf/log/formatter"
+	"github.com/noxyicm/wsf/log/event"
+	"github.com/noxyicm/wsf/log/filter"
+	"github.com/noxyicm/wsf/log/formatter"
 )
 
 const (

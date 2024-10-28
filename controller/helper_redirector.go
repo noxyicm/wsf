@@ -4,11 +4,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"wsf/context"
-	"wsf/controller/request"
-	"wsf/errors"
-	"wsf/utils"
-	"wsf/view"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/controller/request"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/utils"
+	"github.com/noxyicm/wsf/view"
 )
 
 const (

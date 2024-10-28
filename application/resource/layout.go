@@ -1,8 +1,8 @@
 package resource
 
 import (
-	"wsf/config"
-	"wsf/layout"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/layout"
 )
 
 // TYPELayout id of resource

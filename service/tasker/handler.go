@@ -1,9 +1,9 @@
 package tasker
 
 import (
-	"wsf/context"
-	"wsf/errors"
-	"wsf/log"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log"
 )
 
 // Handler represents a worker handler interface

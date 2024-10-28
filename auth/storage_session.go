@@ -2,9 +2,9 @@ package auth
 
 import (
 	"sync"
-	"wsf/context"
-	"wsf/errors"
-	"wsf/session"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/session"
 )
 
 // Public constants

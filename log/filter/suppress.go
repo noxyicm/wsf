@@ -1,6 +1,6 @@
 package filter
 
-import "wsf/log/event"
+import "github.com/noxyicm/wsf/log/event"
 
 const (
 	// TYPESuppress represents suppress filter

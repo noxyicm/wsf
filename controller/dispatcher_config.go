@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // DispatcherConfig represents dispatcher configuration

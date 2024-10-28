@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-	"wsf/config"
-	"wsf/context"
-	"wsf/errors"
-	"wsf/registry"
-	"wsf/service"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/service"
 )
 
 // InitMethod Worker initialization function

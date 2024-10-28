@@ -3,7 +3,7 @@ package word
 import (
 	"reflect"
 	"regexp"
-	"wsf/filter"
+	"github.com/noxyicm/wsf/filter"
 )
 
 func init() {

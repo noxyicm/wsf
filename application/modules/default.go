@@ -1,7 +1,7 @@
 package modules
 
 import (
-	"wsf/errors"
+	"github.com/noxyicm/wsf/errors"
 )
 
 const (

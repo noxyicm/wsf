@@ -1,7 +1,7 @@
 package db
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // RowsetConfig defines set of rowset variables

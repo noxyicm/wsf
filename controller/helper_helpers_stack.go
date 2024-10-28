@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"wsf/errors"
+	"github.com/noxyicm/wsf/errors"
 )
 
 // HelpersStack holds helpers stack sorted by priority

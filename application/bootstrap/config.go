@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // Config defines set of bootstrap variables

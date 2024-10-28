@@ -1,9 +1,9 @@
 package session
 
 import (
-	"wsf/config"
-	"wsf/errors"
-	"wsf/session/validator"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/session/validator"
 )
 
 // ManagerConfig defines set of session manager variables

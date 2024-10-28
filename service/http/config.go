@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"wsf/application/file"
-	"wsf/config"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/application/file"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
 )
 
 // Config defines HTTP server configuration

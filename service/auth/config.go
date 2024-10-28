@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // Config defines Static server configuration

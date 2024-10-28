@@ -2,7 +2,7 @@ package db
 
 import (
 	"database/sql"
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // TransactionConfig represents transaction configuration

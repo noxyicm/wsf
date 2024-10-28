@@ -1,11 +1,11 @@
 package layout
 
 import (
-	"wsf/context"
-	"wsf/controller"
-	"wsf/controller/request"
-	"wsf/controller/response"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/controller"
+	"github.com/noxyicm/wsf/controller/request"
+	"github.com/noxyicm/wsf/controller/response"
+	"github.com/noxyicm/wsf/errors"
 )
 
 // TYPEPluginLayout is a plugin id

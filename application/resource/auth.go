@@ -1,8 +1,8 @@
 package resource
 
 import (
-	"wsf/auth"
-	"wsf/config"
+	"github.com/noxyicm/wsf/auth"
+	"github.com/noxyicm/wsf/config"
 )
 
 // TYPEAuth id of resource

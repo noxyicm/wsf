@@ -1,6 +1,6 @@
 package service
 
-import "wsf/context"
+import "github.com/noxyicm/wsf/context"
 
 // Interface is a service interface
 type Interface interface {

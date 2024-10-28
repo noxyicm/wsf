@@ -1,8 +1,8 @@
 package resource
 
 import (
-	"wsf/config"
-	"wsf/view"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/view"
 )
 
 // TYPEView id of resource

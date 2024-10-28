@@ -1,9 +1,9 @@
 package service
 
 import (
-	"wsf/config"
-	"wsf/service"
-	"wsf/service/auth"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/service"
+	"github.com/noxyicm/wsf/service/auth"
 )
 
 // TYPEAuth id of resource

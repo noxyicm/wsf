@@ -1,7 +1,7 @@
 package acl
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // Config defines set of acl variables

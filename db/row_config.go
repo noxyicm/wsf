@@ -1,6 +1,6 @@
 package db
 
-import "wsf/config"
+import "github.com/noxyicm/wsf/config"
 
 // RowConfig defines set of row variables
 type RowConfig struct {

@@ -1,6 +1,6 @@
 package environment
 
-import "wsf/config"
+import "github.com/noxyicm/wsf/config"
 
 // Config defines set of environment variables
 type Config struct {

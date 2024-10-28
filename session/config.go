@@ -1,7 +1,7 @@
 package session
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // Config defines set of session variables

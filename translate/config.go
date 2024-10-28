@@ -1,8 +1,8 @@
 package translate
 
 import (
-	"wsf/config"
-	"wsf/log"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/log"
 )
 
 // Config defines translate configuration

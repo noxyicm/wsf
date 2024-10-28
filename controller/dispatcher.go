@@ -3,13 +3,13 @@ package controller
 import (
 	"reflect"
 	"strings"
-	"wsf/context"
-	"wsf/controller/request"
-	"wsf/controller/response"
-	"wsf/errors"
-	"wsf/log"
-	"wsf/registry"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/controller/request"
+	"github.com/noxyicm/wsf/controller/response"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/utils"
 )
 
 const (

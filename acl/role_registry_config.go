@@ -1,7 +1,7 @@
 package acl
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // RoleRegistryConfig defines set of acl role registry variables

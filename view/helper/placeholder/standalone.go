@@ -2,7 +2,7 @@ package placeholder
 
 import (
 	"html"
-	"wsf/view/helper/placeholder/container"
+	"github.com/noxyicm/wsf/view/helper/placeholder/container"
 )
 
 // Standalone is a base struct for targetted placeholder helpers

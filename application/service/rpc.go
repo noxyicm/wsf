@@ -1,9 +1,9 @@
 package service
 
 import (
-	"wsf/config"
-	"wsf/service"
-	"wsf/service/rpc"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/service"
+	"github.com/noxyicm/wsf/service/rpc"
 )
 
 // TYPERpc id of resource

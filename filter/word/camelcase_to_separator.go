@@ -2,7 +2,7 @@ package word
 
 import (
 	"reflect"
-	"wsf/filter"
+	"github.com/noxyicm/wsf/filter"
 )
 
 func init() {

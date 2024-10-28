@@ -2,11 +2,11 @@ package translate
 
 import (
 	"strings"
-	"wsf/cache"
-	"wsf/config"
-	"wsf/errors"
-	"wsf/locale"
-	"wsf/log"
+	"github.com/noxyicm/wsf/cache"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/locale"
+	"github.com/noxyicm/wsf/log"
 )
 
 const (

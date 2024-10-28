@@ -1,7 +1,7 @@
 package tasker
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // Config defines RPC service config

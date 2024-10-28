@@ -3,8 +3,8 @@ package event
 import (
 	"strconv"
 	"time"
-	"wsf/controller/request"
-	"wsf/controller/response"
+	"github.com/noxyicm/wsf/controller/request"
+	"github.com/noxyicm/wsf/controller/response"
 )
 
 // Response represents singular http response event

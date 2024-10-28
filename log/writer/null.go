@@ -1,6 +1,6 @@
 package writer
 
-import "wsf/log/event"
+import "github.com/noxyicm/wsf/log/event"
 
 const (
 	// TYPENull represents null writer

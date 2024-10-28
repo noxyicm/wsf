@@ -1,10 +1,10 @@
 package writer
 
 import (
-	"wsf/errors"
-	"wsf/log/event"
-	"wsf/log/filter"
-	"wsf/log/formatter"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log/event"
+	"github.com/noxyicm/wsf/log/filter"
+	"github.com/noxyicm/wsf/log/formatter"
 )
 
 var (

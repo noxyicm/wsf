@@ -3,7 +3,7 @@ package utils
 import (
 	"reflect"
 	"strconv"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/errors"
 )
 
 // InterfaceToString tryes to convert interface to string

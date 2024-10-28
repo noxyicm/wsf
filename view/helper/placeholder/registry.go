@@ -1,8 +1,8 @@
 package placeholder
 
 import (
-	"wsf/registry"
-	"wsf/view/helper/placeholder/container"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/view/helper/placeholder/container"
 )
 
 // RegistryKey is a key by wich it will be stored in global registry

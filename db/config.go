@@ -1,7 +1,7 @@
 package db
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // Config defines set of adapter variables

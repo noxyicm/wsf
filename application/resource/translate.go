@@ -1,8 +1,8 @@
 package resource
 
 import (
-	"wsf/config"
-	"wsf/translate"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/translate"
 )
 
 // TYPETranslate id of resource

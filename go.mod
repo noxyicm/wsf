@@ -1,4 +1,4 @@
-module wsf
+module github.com/noxyicm/wsf
 
 go 1.16
 

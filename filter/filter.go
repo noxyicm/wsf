@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"wsf/registry"
+	"github.com/noxyicm/wsf/registry"
 
 	"github.com/pkg/errors"
 )

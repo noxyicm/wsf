@@ -2,8 +2,8 @@ package formatter
 
 import (
 	"regexp"
-	"wsf/errors"
-	"wsf/log/event"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log/event"
 )
 
 var (

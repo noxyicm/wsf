@@ -1,11 +1,11 @@
 package controller
 
 import (
-	"wsf/config"
-	"wsf/context"
-	"wsf/controller/request"
-	"wsf/controller/response"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/controller/request"
+	"github.com/noxyicm/wsf/controller/response"
+	"github.com/noxyicm/wsf/errors"
 )
 
 var (

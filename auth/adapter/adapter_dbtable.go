@@ -1,10 +1,10 @@
 package adapter
 
 import (
-	"wsf/auth"
-	"wsf/context"
-	"wsf/db"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/auth"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/db"
+	"github.com/noxyicm/wsf/errors"
 
 	"github.com/jamesruan/sodium"
 )
@@ -55,25 +55,25 @@ func (a *DbTableAdapter) Authenticate(ctx context.Context) auth.Result {
 	}
 
 	if a.TableName == "" {
-		res.AddError(errors.New("A table must be supplied for the wsf.auth.DbTable authentication adapter"))
+		res.AddError(errors.New("A table must be supplied for the github.com/noxyicm/wsf.auth.DbTable authentication adapter"))
 	} else if a.IdentityColumn == "" {
-		res.AddError(errors.New("An identity column must be supplied for the wsf.auth.DbTable authentication adapter"))
+		res.AddError(errors.New("An identity column must be supplied for the github.com/noxyicm/wsf.auth.DbTable authentication adapter"))
 	} else if a.CredentialColumn == "" {
-		res.AddError(errors.New("A credential column must be supplied for the wsf.auth.DbTable authentication adapter"))
+		res.AddError(errors.New("A credential column must be supplied for the github.com/noxyicm/wsf.auth.DbTable authentication adapter"))
 	}
 
 	idnt := ctx.Param("auth.identity")
 	if v, ok := idnt.(string); ok {
 		identity = v
 	} else {
-		res.AddError(errors.New("A value for the identity was not provided prior to authentication with wsf.auth.DbTable"))
+		res.AddError(errors.New("A value for the identity was not provided prior to authentication with github.com/noxyicm/wsf.auth.DbTable"))
 	}
 
 	crdntl := ctx.Param("auth.credential")
 	if v, ok := crdntl.(string); ok {
 		credential = v
 	} else {
-		res.AddError(errors.New("A credential value was not provided prior to authentication with wsf.auth.DbTable"))
+		res.AddError(errors.New("A credential value was not provided prior to authentication with github.com/noxyicm/wsf.auth.DbTable"))
 	}
 
 	if len(res.GetErrors()) > 0 {
@@ -85,7 +85,7 @@ func (a *DbTableAdapter) Authenticate(ctx context.Context) auth.Result {
 	//	credentialTreatment = "?"
 	//}
 
-	//credentialExpression := db.NewExpr("(CASE WHEN " + a.Db.QuoteInto(a.Db.QuoteIdentifier(a.CredentialColumn, true)+" = "+credentialTreatment, credential, 1) + " THEN 1 ELSE 0 END) AS " + a.Db.QuoteIdentifier(a.Db.FoldCase("wsf_auth_credential_match"), true))
+	//credentialExpression := db.NewExpr("(CASE WHEN " + a.Db.QuoteInto(a.Db.QuoteIdentifier(a.CredentialColumn, true)+" = "+credentialTreatment, credential, 1) + " THEN 1 ELSE 0 END) AS " + a.Db.QuoteIdentifier(a.Db.FoldCase("github.com/noxyicm/wsf_auth_credential_match"), true))
 	dbSelect := a.Db.Select()
 	dbSelect.From(a.TableName, []interface{}{db.SQLWildcard})
 	dbSelect.JoinLeft("roles", "roles.id = users.roleId", map[string]string{
@@ -95,7 +95,7 @@ func (a *DbTableAdapter) Authenticate(ctx context.Context) auth.Result {
 
 	resultIdentities, err := a.Db.Query(ctx, dbSelect)
 	if err != nil {
-		res.AddError(errors.Wrap(err, "The supplied parameters to wsf.auth.DbTable failed to produce a valid sql statement, please check table and column names for validity"))
+		res.AddError(errors.Wrap(err, "The supplied parameters to github.com/noxyicm/wsf.auth.DbTable failed to produce a valid sql statement, please check table and column names for validity"))
 		return res
 	}
 

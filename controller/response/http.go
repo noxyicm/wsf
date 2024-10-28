@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"wsf/errors"
-	"wsf/utils/stack"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/utils/stack"
 )
 
 // HTTP response struct

@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // Config represents dispatcher configuration

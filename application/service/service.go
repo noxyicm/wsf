@@ -2,9 +2,9 @@ package service
 
 import (
 	"sync"
-	"wsf/config"
-	"wsf/errors"
-	"wsf/service"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/service"
 )
 
 const (

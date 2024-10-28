@@ -1,11 +1,11 @@
 package log
 
 import (
-	"wsf/auth"
-	"wsf/config"
-	"wsf/context"
-	"wsf/db"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/auth"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/db"
+	"github.com/noxyicm/wsf/utils"
 )
 
 // Log is a db log table object

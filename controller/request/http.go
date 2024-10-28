@@ -9,10 +9,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"wsf/application/file"
-	"wsf/controller/request/attributes"
-	"wsf/errors"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/application/file"
+	"github.com/noxyicm/wsf/controller/request/attributes"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/utils"
 )
 
 const (

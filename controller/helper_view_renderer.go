@@ -2,13 +2,13 @@ package controller
 
 import (
 	"regexp"
-	"wsf/context"
-	"wsf/errors"
-	"wsf/filter"
-	"wsf/filter/word"
-	"wsf/registry"
-	"wsf/utils"
-	"wsf/view"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/filter"
+	"github.com/noxyicm/wsf/filter/word"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/utils"
+	"github.com/noxyicm/wsf/view"
 )
 
 const (

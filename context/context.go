@@ -5,8 +5,8 @@ import (
 	"errors"
 	"sync"
 	"time"
-	"wsf/controller/request"
-	"wsf/controller/response"
+	"github.com/noxyicm/wsf/controller/request"
+	"github.com/noxyicm/wsf/controller/response"
 )
 
 // Key is a key

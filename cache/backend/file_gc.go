@@ -8,11 +8,11 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"wsf/config"
-	"wsf/errors"
-	"wsf/log"
-	"wsf/registry"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/utils"
 )
 
 // FileGC is a ttl watcher

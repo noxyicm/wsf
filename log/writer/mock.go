@@ -1,7 +1,7 @@
 package writer
 
 import (
-	"wsf/log/event"
+	"github.com/noxyicm/wsf/log/event"
 )
 
 const (

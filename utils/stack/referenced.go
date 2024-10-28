@@ -1,7 +1,7 @@
 package stack
 
 import (
-	"wsf/errors"
+	"github.com/noxyicm/wsf/errors"
 )
 
 // Referenced stack

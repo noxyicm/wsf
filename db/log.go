@@ -1,9 +1,9 @@
 package db
 
 import (
-	"wsf/config"
-	"wsf/context"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
 )
 
 // Public constants

@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"wsf/context"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
 
 	// CockroachDB uses postgres package for tcp connections
 	//_ "github.com/lib/pq"

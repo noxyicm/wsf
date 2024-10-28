@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // FileConfig represents file backend cache configuration

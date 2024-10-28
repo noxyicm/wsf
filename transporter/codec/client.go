@@ -5,8 +5,8 @@ import (
 	"io"
 	"net/rpc"
 	"reflect"
-	"wsf/errors"
-	"wsf/transporter"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/transporter"
 )
 
 // Client is a response handler for socket transporter

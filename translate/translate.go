@@ -1,10 +1,10 @@
 package translate
 
 import (
-	"wsf/config"
-	"wsf/errors"
-	"wsf/locale"
-	"wsf/log"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/locale"
+	"github.com/noxyicm/wsf/log"
 )
 
 const (

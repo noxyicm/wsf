@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"wsf/config"
-	"wsf/errors"
-	"wsf/log"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log"
 )
 
 // Config represents controller configuration

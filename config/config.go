@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"wsf/errors"
+	"github.com/noxyicm/wsf/errors"
 
 	"github.com/spf13/viper"
 )

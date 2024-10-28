@@ -2,8 +2,8 @@ package formatter
 
 import (
 	"strings"
-	"wsf/errors"
-	"wsf/log/event"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log/event"
 )
 
 const (

@@ -1,8 +1,8 @@
 package resource
 
 import (
-	"wsf/config"
-	"wsf/log"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/log"
 )
 
 // TYPELogger id of resource

@@ -1,8 +1,8 @@
 package resource
 
 import (
-	"wsf/config"
-	"wsf/db"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/db"
 )
 
 // TYPEDb id of resource

@@ -1,6 +1,6 @@
 package locale
 
-import "wsf/errors"
+import "github.com/noxyicm/wsf/errors"
 
 // Encoding specifies encoding of the input data.
 type Encoding uint

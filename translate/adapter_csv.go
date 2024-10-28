@@ -11,11 +11,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"wsf/config"
-	"wsf/errors"
-	"wsf/file/reader"
-	"wsf/locale"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/file/reader"
+	"github.com/noxyicm/wsf/locale"
+	"github.com/noxyicm/wsf/utils"
 )
 
 const (

@@ -1,9 +1,9 @@
 package service
 
 import (
-	"wsf/config"
-	"wsf/service"
-	"wsf/service/http"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/service"
+	"github.com/noxyicm/wsf/service/http"
 )
 
 // TYPEHttp id of resource

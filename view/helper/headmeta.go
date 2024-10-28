@@ -3,10 +3,10 @@ package helper
 import (
 	"fmt"
 	"strings"
-	"wsf/errors"
-	"wsf/log"
-	"wsf/utils"
-	"wsf/view/helper/placeholder"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log"
+	"github.com/noxyicm/wsf/utils"
+	"github.com/noxyicm/wsf/view/helper/placeholder"
 )
 
 // HeadMeta view helper

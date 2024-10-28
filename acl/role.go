@@ -1,6 +1,6 @@
 package acl
 
-import "wsf/errors"
+import "github.com/noxyicm/wsf/errors"
 
 const (
 	// TYPERoleDefault resource name

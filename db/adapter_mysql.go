@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"wsf/context"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
 
 	"github.com/go-sql-driver/mysql"
 )

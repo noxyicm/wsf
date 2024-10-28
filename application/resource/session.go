@@ -1,8 +1,8 @@
 package resource
 
 import (
-	"wsf/config"
-	"wsf/session"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/session"
 )
 
 // TYPESession id of resource

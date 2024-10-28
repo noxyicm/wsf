@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"wsf/context"
-	"wsf/controller/request"
-	"wsf/controller/response"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/controller/request"
+	"github.com/noxyicm/wsf/controller/response"
 )
 
 // PluginInterface represents controller plugin

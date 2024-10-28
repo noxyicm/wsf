@@ -6,13 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"wsf/config"
-	"wsf/context"
-	"wsf/errors"
-	"wsf/log"
-	"wsf/registry"
-	"wsf/utils"
-	"wsf/view/helper"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/utils"
+	"github.com/noxyicm/wsf/view/helper"
 )
 
 const (

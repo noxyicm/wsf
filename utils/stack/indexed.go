@@ -1,6 +1,6 @@
 package stack
 
-import "wsf/errors"
+import "github.com/noxyicm/wsf/errors"
 
 // Indexed stack
 type Indexed struct {

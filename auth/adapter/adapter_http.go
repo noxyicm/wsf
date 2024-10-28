@@ -4,9 +4,9 @@ import (
 	"bufio"
 	"os"
 	"strconv"
-	"wsf/auth"
-	"wsf/context"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/auth"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
 )
 
 // Public constants

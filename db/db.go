@@ -2,10 +2,10 @@ package db
 
 import (
 	"database/sql"
-	"wsf/config"
-	"wsf/context"
-	"wsf/errors"
-	"wsf/registry"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/registry"
 )
 
 type contextKey int

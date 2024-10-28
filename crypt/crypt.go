@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
-	"wsf/config"
+	"github.com/noxyicm/wsf/config"
 )
 
 // Cipher handles encryption

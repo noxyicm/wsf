@@ -1,6 +1,6 @@
 package db
 
-import "wsf/config"
+import "github.com/noxyicm/wsf/config"
 
 // SelectConfig defines set of select variables
 type SelectConfig struct {

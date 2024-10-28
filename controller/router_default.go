@@ -2,12 +2,12 @@ package controller
 
 import (
 	"strings"
-	"wsf/config"
-	"wsf/context"
-	"wsf/controller/request"
-	"wsf/errors"
-	"wsf/locale"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/controller/request"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/locale"
+	"github.com/noxyicm/wsf/utils"
 )
 
 const (

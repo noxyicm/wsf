@@ -2,12 +2,12 @@ package modules
 
 import (
 	"path/filepath"
-	"wsf/controller"
-	"wsf/errors"
-	"wsf/filter"
-	"wsf/filter/word"
-	"wsf/registry"
-	"wsf/view"
+	"github.com/noxyicm/wsf/controller"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/filter"
+	"github.com/noxyicm/wsf/filter/word"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/view"
 )
 
 // Interface defines a module
@@ -68,7 +68,7 @@ func (m *Module) RegisterScriptPath(controllerName string) error {
 
 	v, ok := viewResource.(view.Interface)
 	if !ok {
-		return errors.New("View resource does not implements \"wsf/view\".Interface")
+		return errors.New("View resource does not implements \"github.com/noxyicm/wsf/view\".Interface")
 	}
 
 	inflector, err := filter.NewInflector()

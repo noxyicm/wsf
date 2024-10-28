@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-	"wsf/config"
-	"wsf/errors"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/utils"
 )
 
 const (

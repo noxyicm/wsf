@@ -1,8 +1,8 @@
 package resource
 
 import (
-	"wsf/application/modules"
-	"wsf/config"
+	"github.com/noxyicm/wsf/application/modules"
+	"github.com/noxyicm/wsf/config"
 )
 
 // TYPEModules id of resource

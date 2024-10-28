@@ -3,7 +3,7 @@ package helper
 import (
 	"strings"
 
-	"wsf/errors"
+	"github.com/noxyicm/wsf/errors"
 )
 
 // DocType constants

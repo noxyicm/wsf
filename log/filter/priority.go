@@ -2,7 +2,7 @@ package filter
 
 import (
 	"strconv"
-	"wsf/log/event"
+	"github.com/noxyicm/wsf/log/event"
 )
 
 const (

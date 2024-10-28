@@ -6,12 +6,12 @@ import (
 	"regexp"
 	"sync"
 	"time"
-	"wsf/cache/backend"
-	"wsf/config"
-	"wsf/errors"
-	"wsf/log"
-	"wsf/registry"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/cache/backend"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/utils"
 )
 
 // Public constants

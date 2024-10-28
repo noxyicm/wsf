@@ -1,7 +1,7 @@
 package file
 
 import (
-	"wsf/utils"
+	"github.com/noxyicm/wsf/utils"
 )
 
 // Tree represents a file tree

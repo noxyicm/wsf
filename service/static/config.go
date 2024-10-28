@@ -4,9 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"wsf/config"
-	"wsf/errors"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/utils"
 )
 
 // Config defines Static server configuration

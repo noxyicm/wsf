@@ -3,8 +3,8 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"wsf/config"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
 )
 
 // Public constants

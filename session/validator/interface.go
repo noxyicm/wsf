@@ -1,8 +1,8 @@
 package validator
 
 import (
-	"wsf/config"
-	"wsf/errors"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/errors"
 )
 
 var (

@@ -7,11 +7,11 @@ import (
 	"net/rpc"
 	"sync"
 	"syscall"
-	"wsf/config"
-	"wsf/context"
-	"wsf/errors"
-	"wsf/service"
-	"wsf/transporter/codec"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/service"
+	"github.com/noxyicm/wsf/transporter/codec"
 )
 
 const (

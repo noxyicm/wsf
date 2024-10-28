@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"wsf/config"
-	"wsf/context"
-	"wsf/errors"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/context"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/utils"
 )
 
 // Public constants

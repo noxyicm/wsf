@@ -2,8 +2,8 @@ package log
 
 import (
 	"time"
-	"wsf/config"
-	"wsf/log/writer"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/log/writer"
 )
 
 // Config represents logger configuration

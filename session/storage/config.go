@@ -1,6 +1,6 @@
 package storage
 
-import "wsf/config"
+import "github.com/noxyicm/wsf/config"
 
 // Config defines set of session variables
 type Config struct {

@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"wsf/errors"
-	"wsf/log/event"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log/event"
 
 	"github.com/mgutz/ansi"
 )

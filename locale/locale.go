@@ -2,9 +2,9 @@ package locale
 
 import (
 	"strings"
-	"wsf/errors"
-	"wsf/registry"
-	"wsf/utils"
+	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/utils"
 )
 
 var (

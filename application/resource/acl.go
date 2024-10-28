@@ -1,8 +1,8 @@
 package resource
 
 import (
-	"wsf/acl"
-	"wsf/config"
+	"github.com/noxyicm/wsf/acl"
+	"github.com/noxyicm/wsf/config"
 )
 
 // TYPEAcl id of resource

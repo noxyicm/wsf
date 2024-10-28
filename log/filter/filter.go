@@ -1,7 +1,7 @@
 package filter
 
 import (
-	"wsf/log/event"
+	"github.com/noxyicm/wsf/log/event"
 
 	"github.com/pkg/errors"
 )

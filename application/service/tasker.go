@@ -1,9 +1,9 @@
 package service
 
 import (
-	"wsf/config"
-	"wsf/service"
-	"wsf/service/tasker"
+	"github.com/noxyicm/wsf/config"
+	"github.com/noxyicm/wsf/service"
+	"github.com/noxyicm/wsf/service/tasker"
 )
 
 // TYPETasker id of service

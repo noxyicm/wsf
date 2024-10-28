@@ -5,10 +5,11 @@ import (
 	"encoding/base64"
 	"net/http"
 	"strings"
+
 	"github.com/noxyicm/wsf/config"
-	github.com/noxyicm/wsfctx "github.com/noxyicm/wsf/context"
+	wsfctx "github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/service"
-	github.com/noxyicm/wsfhttp "github.com/noxyicm/wsf/service/http"
+	wsfhttp "github.com/noxyicm/wsf/service/http"
 	"github.com/noxyicm/wsf/session"
 )
 
@@ -36,7 +37,7 @@ type Auth struct {
 }
 
 // Init Auth service
-func (s *Auth) Init(options *Config, h *github.com/noxyicm/wsfhttp.Service) (bool, error) {
+func (s *Auth) Init(options *Config, h *wsfhttp.Service) (bool, error) {
 	if !options.Enable {
 		return false, nil
 	}
@@ -61,7 +62,7 @@ func (s *Auth) Priority() int {
 }
 
 // Serve the service
-func (s *Auth) Serve(ctx github.com/noxyicm/wsfctx.Context) (err error) {
+func (s *Auth) Serve(ctx wsfctx.Context) (err error) {
 	return nil
 }
 

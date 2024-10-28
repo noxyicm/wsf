@@ -113,8 +113,8 @@ func (a *DbTableAdapter) Authenticate(ctx context.Context) auth.Result {
 	invalid := false
 	if p, ok := resultIdentityRow[a.CredentialColumn]; ok {
 		if pw, ok := p.(string); ok {
-			pwb := make([]byte, 128, 128)
-			copy(pwb, []byte(a.prefix+pw))
+			pwb := make(sodium.Bytes, 128, 128)
+			copy(pwb, sodium.Bytes(a.prefix+pw))
 			pwd := sodium.LoadPWHashStr(pwb)
 			if err = pwd.PWHashVerify(credential); err != nil {
 				res.SetCode(auth.ResultFailureCredentialInvalid)

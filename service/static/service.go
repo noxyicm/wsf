@@ -4,10 +4,11 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+
 	"github.com/noxyicm/wsf/config"
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/service"
-	github.com/noxyicm/wsfhttp "github.com/noxyicm/wsf/service/http"
+	wsfhttp "github.com/noxyicm/wsf/service/http"
 )
 
 // ID of service
@@ -21,7 +22,7 @@ type Service struct {
 }
 
 // Init Static service
-func (s *Service) Init(options *Config, h *github.com/noxyicm/wsfhttp.Service) (bool, error) {
+func (s *Service) Init(options *Config, h *wsfhttp.Service) (bool, error) {
 	if h == nil {
 		return false, nil
 	}

@@ -2,7 +2,7 @@ package modules
 
 import (
 	"path/filepath"
-	"wsf/controller/action"
+	"wsf/controller"
 	"wsf/errors"
 	"wsf/filter"
 	"wsf/filter/word"
@@ -14,14 +14,16 @@ import (
 type Interface interface {
 	Name() string
 	Order() int
-	RegisterController(controllerName string, controller action.Interface) error
-	Controller(name string) (action.Interface, error)
+	RegisterController(controllerName string, cnstr func() (controller.ActionControllerInterface, error)) error
+	Controller(name string) (func() (controller.ActionControllerInterface, error), error)
 	RegisterScriptPath(controllerName string) error
 	Resource(name string) interface{}
 	InitControllers() error
+	InitAccess() error
 	InitPlugins() error
+	InitHelpers() error
 	InitRoutes() error
-	InitActionHelpers() error
+	InitView() error
 }
 
 // Module represents a module
@@ -29,7 +31,7 @@ type Module struct {
 	name         string
 	order        int
 	ViewPathSpec string
-	controllers  map[string]action.Interface
+	controllers  map[string]func() (controller.ActionControllerInterface, error)
 }
 
 // Name returns module name
@@ -43,27 +45,25 @@ func (m *Module) Order() int {
 }
 
 // RegisterController registers action controller
-func (m *Module) RegisterController(controllerName string, controller action.Interface) error {
-	m.controllers[controllerName] = controller
-
-	m.RegisterScriptPath(controllerName)
-	return nil
+func (m *Module) RegisterController(controllerName string, cnstr func() (controller.ActionControllerInterface, error)) error {
+	m.controllers[controllerName] = cnstr
+	return controller.Dispatcher().AddActionController(m.name, controllerName, cnstr)
 }
 
 // Controller returns controller type by its name
-func (m *Module) Controller(name string) (action.Interface, error) {
+func (m *Module) Controller(name string) (func() (controller.ActionControllerInterface, error), error) {
 	if v, ok := m.controllers[name]; ok {
 		return v, nil
 	}
 
-	return nil, errors.Errorf("Invalid controller specified (%s)", name)
+	return nil, errors.Errorf("Invalid controller specified (%s) for module '%s'", name, m.Name())
 }
 
 // RegisterScriptPath registers a paths assosiated with controller
 func (m *Module) RegisterScriptPath(controllerName string) error {
 	viewResource := registry.GetResource("view")
 	if viewResource == nil {
-		return errors.New("View resource has not been initialized")
+		return errors.New("'view' resource has not been initialized")
 	}
 
 	v, ok := viewResource.(view.Interface)
@@ -115,8 +115,18 @@ func (m *Module) InitControllers() error {
 	return nil
 }
 
-// InitPlugins runs the controller initialization
+// InitAccess runs the access initialization
+func (m *Module) InitAccess() error {
+	return nil
+}
+
+// InitPlugins runs the controller plugins initialization
 func (m *Module) InitPlugins() error {
+	return nil
+}
+
+// InitHelpers runs the controller helpers initialization
+func (m *Module) InitHelpers() error {
 	return nil
 }
 
@@ -125,8 +135,8 @@ func (m *Module) InitRoutes() error {
 	return nil
 }
 
-// InitActionHelpers runs the controller initialization
-func (m *Module) InitActionHelpers() error {
+// InitView runs the controller initialization
+func (m *Module) InitView() error {
 	return nil
 }
 
@@ -135,6 +145,6 @@ func NewModule(order int, name string) *Module {
 	return &Module{
 		name:        name,
 		order:       order,
-		controllers: make(map[string]action.Interface),
+		controllers: make(map[string]func() (controller.ActionControllerInterface, error)),
 	}
 }

@@ -30,6 +30,7 @@ type Default struct {
 
 	doctype  *helper.Doctype
 	headMeta *helper.HeadMeta
+	funcMap  map[string]interface{}
 }
 
 // Init a view resource
@@ -178,7 +179,7 @@ func (v *Default) ReadTemplates(path string, info os.FileInfo, err error) error 
 		return err
 	}
 
-	v.templates[relPath], err = template.New(v.Options.LayoutContentKey).Parse(string(tplRaw))
+	v.templates[relPath], err = template.New(v.Options.LayoutContentKey).Funcs(template.FuncMap(v.funcMap)).Parse(string(tplRaw))
 	if err != nil {
 		return err
 	}
@@ -227,6 +228,32 @@ func (v *Default) Render(ctx context.Context, script string, tpl string) ([]byte
 	return nil, errors.Errorf("[View] Template by name '%s' not found", script)
 }
 
+// AddTemplateFunc add a function to template
+func (v *Default) AddTemplateFunc(name string, fn interface{}) error {
+	if _, ok := v.funcMap[name]; ok {
+		return errors.Errorf("Template function by name '%s' is already registered", name)
+	}
+
+	v.funcMap[name] = fn
+	return nil
+}
+
+// SetTemplateFunc adds or replaces existsing function in template
+func (v *Default) SetTemplateFunc(name string, fn interface{}) error {
+	v.funcMap[name] = fn
+	return nil
+}
+
+// RemoveTemplateFunc removes function from template
+func (v *Default) RemoveTemplateFunc(name string) error {
+	if _, ok := v.funcMap[name]; !ok {
+		return errors.Errorf("Template function by name '%s' is not registered", name)
+	}
+
+	delete(v.funcMap, name)
+	return nil
+}
+
 // GetTemplate sa
 func (v *Default) GetTemplate(path string) *template.Template {
 	//return v.template.Lookup(name)
@@ -239,7 +266,9 @@ func (v *Default) GetTemplate(path string) *template.Template {
 
 // NewDefaultView creates new default view
 func NewDefaultView(options *Config) (Interface, error) {
-	v := &Default{}
+	v := &Default{
+		funcMap: make(map[string]interface{}),
+	}
 	v.Options = options
 	v.paths = make(map[string]map[string]string)
 	v.params = make(map[string]interface{})

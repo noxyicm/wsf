@@ -28,8 +28,10 @@ const (
 
 // Transfer manages files transfers
 type Transfer struct {
-	cfg  *Config
-	tree Tree
+	cfg      *Config
+	tree     Tree
+	uploaded []string
+	wg       sync.WaitGroup
 }
 
 // MarshalJSON marshal tree into JSON
@@ -40,24 +42,40 @@ func (t *Transfer) MarshalJSON() ([]byte, error) {
 // Upload moves all uploaded files to temp directory
 func (t *Transfer) Upload() error {
 	var err error
-	var wg sync.WaitGroup
-	for _, v := range t.tree {
+	for k, v := range t.tree {
 		if v, ok := v.(Tree); ok {
-			for _, f := range v {
-				if f, ok := f.(*File); ok {
-					wg.Add(1)
-					go func(f *File) {
-						defer wg.Done()
-						if er := f.Upload(t.cfg); er != nil {
-							err = er
-						}
-					}(f)
+			err = t.tryUploadFile(v, k)
+		}
+	}
+
+	t.wg.Wait()
+	return err
+}
+
+func (t *Transfer) tryUploadFile(in Tree, parentKey string) error {
+	var err error
+	for k, f := range in {
+		key := parentKey + "[" + k + "]"
+		switch u := f.(type) {
+		case *File:
+			t.wg.Add(1)
+			go func(f *File) {
+				defer t.wg.Done()
+
+				if er := f.Upload(t.cfg); er != nil {
+					err = er
+				} else {
+					t.uploaded = append(t.uploaded, key)
 				}
+			}(u)
+
+		case Tree:
+			if er := t.tryUploadFile(u, key); er != nil {
+				return er
 			}
 		}
 	}
 
-	wg.Wait()
 	return err
 }
 
@@ -78,6 +96,20 @@ func (t *Transfer) Clear() error {
 	return nil
 }
 
+// Uploaded returns keys of uploaded files
+func (t *Transfer) Uploaded() []string {
+	return t.uploaded
+}
+
+// Has returns true if transfer contains a key
+func (t *Transfer) Has(key string) bool {
+	if _, ok := t.tree[key]; ok {
+		return true
+	}
+
+	return false
+}
+
 // Push pushes provided slice of files into tree recursively
 func (t *Transfer) Push(key string, files *File) {
 	t.tree.Push(key, files)
@@ -91,8 +123,9 @@ func (t *Transfer) Get(key string) *File {
 // NewTransfer creates new file transfer
 func NewTransfer(cfg *Config) (*Transfer, error) {
 	t := &Transfer{
-		cfg:  cfg,
-		tree: make(Tree),
+		cfg:      cfg,
+		tree:     make(Tree),
+		uploaded: make([]string, 0),
 	}
 
 	return t, nil

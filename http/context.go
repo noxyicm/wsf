@@ -1,6 +1,9 @@
 package http
 
 const (
+	// ApplicationHTML states for "text/html" context
+	ApplicationHTML = "text/html"
+
 	// ApplicationJSON states for "application/json" context
 	ApplicationJSON = "application/json"
 

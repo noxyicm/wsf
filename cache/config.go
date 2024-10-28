@@ -25,6 +25,8 @@ func (c *Config) Populate(cfg config.Config) error {
 
 	if lcfg := cfg.Get("log"); lcfg != nil {
 		c.Logger = lcfg
+	} else {
+		c.Logger = nil
 	}
 
 	if err := cfg.Unmarshal(c); err != nil {
@@ -38,6 +40,8 @@ func (c *Config) Populate(cfg config.Config) error {
 func (c *Config) Defaults() error {
 	c.Priority = 20
 	c.Enable = true
+	c.AutomaticCleaningFactor = 900
+	c.CacheIDPrefix = ""
 
 	if c.Backend == nil {
 		c.Backend = config.NewBridge()

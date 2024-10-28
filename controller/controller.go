@@ -3,11 +3,8 @@ package controller
 import (
 	"wsf/config"
 	"wsf/context"
-	"wsf/controller/dispatcher"
-	"wsf/controller/plugin"
 	"wsf/controller/request"
 	"wsf/controller/response"
-	"wsf/controller/router"
 	"wsf/errors"
 )
 
@@ -19,28 +16,34 @@ var (
 
 // Interface is an interface for controllers
 type Interface interface {
-	SetRouter(router.Interface) error
-	Router() router.Interface
-	SetDispatcher(dispatcher.Interface) error
-	Dispatcher() dispatcher.Interface
+	SetRouter(RouterInterface) error
+	Router() RouterInterface
+	SetDispatcher(DispatcherInterface) error
+	Dispatcher() DispatcherInterface
 	Dispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) error
+	AddActionController(moduleName string, controllerName string, cnstr func() (ActionControllerInterface, error)) error
 	Priority() int
 	SetThrowExceptions(bool)
 	ThrowExceptions() bool
 	SetErrorHandling(bool)
 	ErrorHandling() bool
-	RegisterPlugin(plugin plugin.Interface, priority int) error
+	RegisterPlugin(plugin PluginInterface, priority int) error
 	HasPlugin(name string) bool
-	GetPlugin(name string) plugin.Interface
+	Plugin(name string) PluginInterface
+	SetHelperBroker(broker *HelperBroker) error
+	HelperBroker() *HelperBroker
+	HasHelper(name string) bool
+	Helper(name string) HelperInterface
 }
 
 // Controller base struct
 type Controller struct {
 	Options         *Config
-	router          router.Interface
-	dispatcher      dispatcher.Interface
+	router          RouterInterface
+	dispatcher      DispatcherInterface
 	handlers        map[string]func() error
-	plugins         *plugin.Broker
+	plugins         *PluginBroker
+	helpers         *HelperBroker
 	throwExceptions bool
 	errorHandling   bool
 }
@@ -48,12 +51,12 @@ type Controller struct {
 // Init controller resource
 func (c *Controller) Init(options *Config) (b bool, err error) {
 	c.Options = options
-	c.dispatcher, err = dispatcher.NewDispatcher(options.Dispatcher.Type, options.Dispatcher)
+	c.dispatcher, err = NewDispatcher(options.Dispatcher.Type, options.Dispatcher)
 	if err != nil {
 		return false, err
 	}
 
-	c.router, err = router.NewRouter(options.Router.GetString("type"), options.Router)
+	c.router, err = NewRouter(options.Router.GetString("type"), options.Router)
 	if err != nil {
 		return false, err
 	}
@@ -87,7 +90,7 @@ func (c *Controller) ErrorHandling() bool {
 }
 
 // RegisterPlugin registers a plugin to controller
-func (c *Controller) RegisterPlugin(p plugin.Interface, priority int) error {
+func (c *Controller) RegisterPlugin(p PluginInterface, priority int) error {
 	return c.plugins.Register(p, priority)
 }
 
@@ -96,9 +99,39 @@ func (c *Controller) HasPlugin(name string) bool {
 	return c.plugins.Has(name)
 }
 
-// GetPlugin returns a plugin by its name
-func (c *Controller) GetPlugin(name string) plugin.Interface {
+// Plugin returns a plugin by its name
+func (c *Controller) Plugin(name string) PluginInterface {
 	return c.plugins.Get(name)
+}
+
+// SetHelperBroker sets helper broker
+func (c *Controller) SetHelperBroker(broker *HelperBroker) (err error) {
+	if broker != nil {
+		c.helpers = broker
+	} else {
+		c.helpers, err = NewHelperBroker()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// HelperBroker returns action controller helper broker
+func (c *Controller) HelperBroker() *HelperBroker {
+	return c.helpers
+}
+
+// HasHelper returns true if action Halper is registered
+func (c *Controller) HasHelper(name string) bool {
+	return c.helpers.HasHelper(name)
+}
+
+// Helper returns action Halper
+func (c *Controller) Helper(name string) HelperInterface {
+	h, _ := c.helpers.GetHelper(name)
+	return h
 }
 
 // NewController creates a new controller specified by type
@@ -130,22 +163,22 @@ func Instance() Interface {
 }
 
 // SetRouter sets controller router
-func SetRouter(rtr router.Interface) error {
+func SetRouter(rtr RouterInterface) error {
 	return main.SetRouter(rtr)
 }
 
 // Router returns controller router
-func Router() router.Interface {
+func Router() RouterInterface {
 	return main.Router()
 }
 
 // SetDispatcher sets controller dispatcher
-func SetDispatcher(dsp dispatcher.Interface) error {
+func SetDispatcher(dsp DispatcherInterface) error {
 	return main.SetDispatcher(dsp)
 }
 
 // Dispatcher returns controller dispatcher
-func Dispatcher() dispatcher.Interface {
+func Dispatcher() DispatcherInterface {
 	return main.Dispatcher()
 }
 
@@ -170,7 +203,7 @@ func ErrorHandling() bool {
 }
 
 // RegisterPlugin registers a plugin to controller
-func RegisterPlugin(plugin plugin.Interface, priority int) error {
+func RegisterPlugin(plugin PluginInterface, priority int) error {
 	return main.RegisterPlugin(plugin, priority)
 }
 
@@ -179,7 +212,22 @@ func HasPlugin(name string) bool {
 	return main.HasPlugin(name)
 }
 
-// GetPlugin returns a plugin by its name
-func GetPlugin(name string) plugin.Interface {
-	return main.GetPlugin(name)
+// Plugin returns a plugin by its name
+func Plugin(name string) PluginInterface {
+	return main.Plugin(name)
+}
+
+// GetHelperBroker returns controller helper broker
+func GetHelperBroker() *HelperBroker {
+	return main.HelperBroker()
+}
+
+// HasHelper returns true if controller has a helper
+func HasHelper(name string) bool {
+	return main.HasHelper(name)
+}
+
+// Helper returns a helper by its name
+func Helper(name string) HelperInterface {
+	return main.Helper(name)
 }

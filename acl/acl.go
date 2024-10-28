@@ -290,14 +290,14 @@ func (a *Default) RemoveDeny(roleID string, resourceID string, privileges []stri
 //
 // OPAdd specifics:
 //
-//     A rule is added that would allow one or more Roles access to [certain $privileges
-//     upon] the specified Resource(s).
+//	A rule is added that would allow one or more Roles access to [certain $privileges
+//	upon] the specified Resource(s).
 //
 // OPRemove specifics:
 //
-//     The rule is removed only in the context of the given Roles, Resources, and privileges.
-//     Existing rules to which the remove operation does not apply would remain in the
-//     ACL.
+//	The rule is removed only in the context of the given Roles, Resources, and privileges.
+//	Existing rules to which the remove operation does not apply would remain in the
+//	ACL.
 //
 // The typ parameter may be either TYPEAllow or TYPEDeny, depending on whether the
 // rule is intended to allow or deny permission, respectively.
@@ -315,9 +315,9 @@ func (a *Default) RemoveDeny(roleID string, resourceID string, privileges []stri
 // the rule to apply. If assert is provided with roleID, resourceID, and privileges all
 // empty, then a rule having a type of:
 //
-//     TYPEAllow will imply a type of TYPEDeny, and
+//	TYPEAllow will imply a type of TYPEDeny, and
 //
-//     TYPEDeny will imply a type of TYPEAllow
+//	TYPEDeny will imply a type of TYPEAllow
 //
 // when the rule's assertion fails. This is because the ACL needs to provide expected
 // behavior when an assertion upon the default ACL rule fails.
@@ -346,6 +346,9 @@ func (a *Default) SetRule(operation string, typ string, roleID string, resourceI
 	case OPAdd:
 		rules := a.getRules(res, role, true)
 		if len(privileges) == 0 {
+			if rules.Global() == nil {
+				rules.ClearGlobal()
+			}
 			rules.Global().SetType(typ)
 			rules.Global().SetAssert(assert)
 		} else {
@@ -548,7 +551,7 @@ func (a *Default) roleDFSAllPrivileges(role Role, res Resource, privilege string
 			break
 		}
 
-		if !dfs.IsVisited(role.ID()) {
+		if !dfs.IsVisited(role.Alias()) {
 			if allowed, err := a.roleDFSVisitAllPrivileges(role, res, dfs); err == nil {
 				return allowed, nil
 			}
@@ -582,8 +585,8 @@ func (a *Default) roleDFSVisitAllPrivileges(role Role, res Resource, dfs *DFS) (
 		}
 	}
 
-	dfs.Visit(role.ID())
-	for _, roleParent := range a.RoleReg.Parents(role.ID()) {
+	dfs.Visit(role.Alias())
+	for _, roleParent := range a.RoleReg.Parents(role.Alias()) {
 		dfs.Push(roleParent)
 	}
 
@@ -611,7 +614,7 @@ func (a *Default) roleDFSOnePrivilege(role Role, res Resource, privilege string)
 			break
 		}
 
-		if !dfs.IsVisited(role.ID()) {
+		if !dfs.IsVisited(role.Alias()) {
 			if allowed, err := a.roleDFSVisitOnePrivilege(role, res, privilege, dfs); err == nil {
 				return allowed, nil
 			}
@@ -644,8 +647,8 @@ func (a *Default) roleDFSVisitOnePrivilege(role Role, res Resource, privilege st
 		return ruleTypeAllPrivileges == TYPEAllow, nil
 	}
 
-	dfs.Visit(role.ID())
-	for _, roleParent := range a.RoleReg.Parents(role.ID()) {
+	dfs.Visit(role.Alias())
+	for _, roleParent := range a.RoleReg.Parents(role.Alias()) {
 		dfs.Push(roleParent)
 	}
 
@@ -674,11 +677,11 @@ func (a *Default) getRuleType(res Resource, role Role, privilege string) (string
 
 	var rule Rule
 	if privilege == "" {
-		if rules.Global() != nil {
-			rule = rules.Global()
-		} else {
+		if rules.Global() == nil {
 			return "", errors.New("Not applicable")
 		}
+
+		rule = rules.Global()
 	} else if rules.Get(privilege) == nil {
 		return "", errors.New("Not applicable")
 	} else {
@@ -712,14 +715,6 @@ func (a *Default) getRules(res Resource, role Role, create bool) Rule {
 
 	if res == nil {
 		visitor = a.Rules.Global()
-		if visitor == nil {
-			if !create {
-				return nil
-			}
-
-			a.Rules.ClearGlobal()
-			visitor = a.Rules.Global()
-		}
 	} else {
 		resourceID := res.ID()
 		if !a.Rules.Has(resourceID) {
@@ -745,7 +740,7 @@ func (a *Default) getRules(res Resource, role Role, create bool) Rule {
 		return visitor.Global()
 	}
 
-	roleID := role.ID()
+	roleID := role.Alias()
 	if !visitor.Has(roleID) {
 		if !create {
 			return nil
@@ -765,7 +760,7 @@ func (a *Default) Roles() []string {
 	s := make([]string, a.RoleReg.Count())
 	i := 0
 	for _, role := range a.RoleReg.All() {
-		s[i] = role.ID()
+		s[i] = role.Alias()
 		i++
 	}
 

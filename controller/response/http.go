@@ -259,7 +259,6 @@ func (r *HTTP) Write() error {
 		i++
 	}
 	cookiestr := strings.Join(cookies, "&")
-
 	if _, ok := r.Headers["Set-Cookie"]; ok {
 		if r.Headers["Set-Cookie"][0] == "" {
 			r.Headers["Set-Cookie"][0] = cookiestr

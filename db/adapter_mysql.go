@@ -25,6 +25,7 @@ func init() {
 // MySQL adapter for MySQL databeses
 type MySQL struct {
 	DefaultAdapter
+
 	driverConfig *mysql.Config
 }
 
@@ -209,7 +210,11 @@ func (a *MySQL) PrepareRowset(rows *sql.Rows) ([]map[string]interface{}, error) 
 
 	scanArgs := make([]interface{}, len(columns))
 	for i := range columns {
-		scanArgs[i] = a.reference(columns[i].ScanType())
+		if _, ok := columns[i].Nullable(); !ok {
+			scanArgs[i] = a.ReferenceNulls(columns[i].ScanType())
+		} else {
+			scanArgs[i] = a.Reference(columns[i].ScanType())
+		}
 	}
 
 	data := make([]map[string]interface{}, 0)
@@ -220,7 +225,7 @@ func (a *MySQL) PrepareRowset(rows *sql.Rows) ([]map[string]interface{}, error) 
 
 		rowdata := make(map[string]interface{})
 		for i := range columns {
-			rowdata[columns[i].Name()] = a.dereference(scanArgs[i])
+			rowdata[columns[i].Name()] = a.Dereference(scanArgs[i])
 		}
 		data = append(data, rowdata)
 	}
@@ -253,7 +258,7 @@ func (a *MySQL) PrepareRow(rows *sql.Rows) (map[string]interface{}, error) {
 
 	scanArgs := make([]interface{}, len(columns))
 	for i := range columns {
-		scanArgs[i] = a.reference(columns[i].ScanType())
+		scanArgs[i] = a.Reference(columns[i].ScanType())
 	}
 
 	data := make(map[string]interface{})
@@ -262,7 +267,7 @@ func (a *MySQL) PrepareRow(rows *sql.Rows) (map[string]interface{}, error) {
 	}
 
 	for i := range columns {
-		data[columns[i].Name()] = a.dereference(scanArgs[i])
+		data[columns[i].Name()] = a.Dereference(scanArgs[i])
 	}
 
 	return data, nil
@@ -302,7 +307,7 @@ func (a *MySQL) DescribeTable(table string, schema string) (map[string]*TableCol
 
 	scanArgs := make([]interface{}, len(columns))
 	for i := range columns {
-		scanArgs[i] = a.reference(columns[i].ScanType())
+		scanArgs[i] = a.Reference(columns[i].ScanType())
 	}
 
 	desc := make(map[string]*TableColumn)
@@ -314,7 +319,7 @@ func (a *MySQL) DescribeTable(table string, schema string) (map[string]*TableCol
 
 		d := make(map[string]interface{})
 		for i := range columns {
-			d[columns[i].Name()] = a.dereference(scanArgs[i])
+			d[columns[i].Name()] = a.Dereference(scanArgs[i])
 		}
 
 		row := &TableColumn{
@@ -375,13 +380,34 @@ func (a *MySQL) NextSequenceID(sequence string) int {
 	return 0
 }
 
+// BeginTransaction creates a new database transaction
+func (a *MySQL) BeginTransaction(ctx context.Context) (Transaction, error) {
+	if a.Db == nil {
+		return nil, errors.New("Database is not initialized")
+	}
+
+	tx, err := a.Db.BeginTx(ctx, &sql.TxOptions{Isolation: a.Options.Transaction.IsolationLevel, ReadOnly: a.Options.Transaction.ReadOnly})
+	if err != nil {
+		return nil, err
+	}
+
+	trns, err := NewTransaction(a.Options.Transaction.Type, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	trns.SetAdapter(a)
+	trns.SetContext(ctx)
+	return trns, err
+}
+
 // FormatDSN returns a formated dsn string
 func (a *MySQL) FormatDSN() string {
 	return a.driverConfig.FormatDSN()
 }
 
-// returns a value from pointer
-func (a *MySQL) dereference(v interface{}) interface{} {
+// Dereference returns a value from pointer
+func (a *MySQL) Dereference(v interface{}) interface{} {
 	switch t := v.(type) {
 	case *bool:
 		return *t
@@ -420,8 +446,8 @@ func (a *MySQL) dereference(v interface{}) interface{} {
 	}
 }
 
-// creates a pointer to value
-func (a *MySQL) reference(tp reflect.Type) interface{} {
+// Reference creates a pointer to value
+func (a *MySQL) Reference(tp reflect.Type) interface{} {
 	if tp == reflect.TypeOf(sql.NullBool{}) {
 		var v sql.NullBool
 		return &v
@@ -431,11 +457,11 @@ func (a *MySQL) reference(tp reflect.Type) interface{} {
 	} else if tp == reflect.TypeOf(sql.NullFloat64{}) {
 		var v sql.NullFloat64
 		return &v
+	} else if tp == reflect.TypeOf(sql.NullTime{}) {
+		var v mysql.NullTime
+		return &v
 	} else if tp == reflect.TypeOf(sql.NullString{}) {
 		var v sql.NullString
-		return &v
-	} else if tp == reflect.TypeOf(mysql.NullTime{}) {
-		var v mysql.NullTime
 		return &v
 	} else if tp == reflect.TypeOf(sql.RawBytes{}) {
 		var v []byte
@@ -444,16 +470,16 @@ func (a *MySQL) reference(tp reflect.Type) interface{} {
 		var v int
 		return &v
 	} else if tp == reflect.TypeOf((int8)(0)) {
-		var v int8
+		var v int
 		return &v
 	} else if tp == reflect.TypeOf((int16)(0)) {
-		var v int16
+		var v int
 		return &v
 	} else if tp == reflect.TypeOf((int32)(0)) {
-		var v int32
+		var v int
 		return &v
 	} else if tp == reflect.TypeOf((int64)(0)) {
-		var v int64
+		var v int
 		return &v
 	} else if tp == reflect.TypeOf((float32)(0)) {
 		var v float32

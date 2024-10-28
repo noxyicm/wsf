@@ -21,6 +21,12 @@ const (
 	// Failure due to uncategorized reasons
 	ResultFailureUncategorized = -4
 
+	// Failure due to identity being blocked
+	ResultFailureIdentityBlocked = -5
+
+	// Failure due to identity not being activated
+	ResultFailureIdentityInactive = -6
+
 	// Authentication success
 	ResultSuccess = 1
 )

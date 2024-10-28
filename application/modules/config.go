@@ -20,7 +20,7 @@ func (c *Config) Populate(cfg config.Config) error {
 // Defaults sets configuration default values
 func (c *Config) Defaults() error {
 	c.Type = "default"
-	c.Priority = 5
+	c.Priority = 4
 	return nil
 }
 

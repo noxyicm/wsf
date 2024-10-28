@@ -40,6 +40,9 @@ type Interface interface {
 	ParamBool(key string, def bool) bool
 	ParamString(key string, def string) string
 	ParamInt(key string, def int) int
+	AddTemplateFunc(string, interface{}) error
+	SetTemplateFunc(string, interface{}) error
+	RemoveTemplateFunc(string) error
 	PrepareLayouts() error
 	PrepareTemplates() error
 	GetTemplate(path string) *template.Template
@@ -66,7 +69,7 @@ func (v *view) GetPaths() map[string]map[string]string {
 	return v.paths
 }
 
-//setBasePath
+// setBasePath
 // AddBasePath registers a new base script path
 func (v *view) AddBasePath(path string, prefix string) error {
 	v.AddTemplatePath(filepath.FromSlash(path))

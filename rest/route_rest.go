@@ -4,31 +4,32 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"wsf/context"
+	"wsf/controller"
 	"wsf/controller/request"
-	"wsf/controller/router"
 	"wsf/errors"
 	"wsf/utils"
 )
 
 const (
-	// TYPERestRoute represents rest route
-	TYPERestRoute = "rest"
+	// TYPERouteRest represents rest route
+	TYPERouteRest = "rest"
 )
 
 func init() {
-	router.RegisterRoute(TYPERestRoute, NewRestRoute)
+	controller.RegisterRoute(TYPERouteRest, NewRestRoute)
 }
 
 // Route is a restfull route
 type Route struct {
-	router.Route
+	controller.Route
 
 	Prefix string
 	Path   string
 }
 
 // Match matches provided path against this route
-func (r *Route) Match(req request.Interface, partial bool) (bool, *router.RouteMatch) {
+func (r *Route) Match(req request.Interface, partial bool) (bool, *context.RouteMatch) {
 	var rqs *request.HTTP
 	var ok bool
 	if rqs, ok = req.(*request.HTTP); !ok {
@@ -37,19 +38,22 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *router.RouteM
 	}
 
 	path := rqs.PathInfo()
-	path = strings.Replace(path, r.Options.ModulePrefix, "", 1)
+	if strings.Index(path, r.Options.ModulePrefix) >= 0 {
+		path = strings.Replace(path, r.Options.ModulePrefix, "", 1)
+	} else {
+		return false, nil
+	}
 	path = strings.Trim(path, r.Options.URIDelimiter)
-	path = r.Options.ModulePrefix + path
 	params := rqs.Params()
 	values := make(map[string]string)
+	values[rqs.ModuleKey()] = strings.Replace(r.Options.ModulePrefix, r.Options.URIDelimiter, "", -1)
 
 	if path != "" {
 		parts := strings.Split(path, r.Options.URIDelimiter)
-		if len(parts) < 2 {
+		if len(parts) < 1 {
 			return false, nil
 		}
 
-		values[rqs.ModuleKey()], _ = utils.ShiftSSlice(&parts)
 		values[rqs.ControllerKey()], _ = utils.ShiftSSlice(&parts)
 		values[rqs.ActionKey()] = "get"
 
@@ -115,24 +119,13 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *router.RouteM
 	r.Values = utils.MapSSMerge(values, params)
 	result := utils.MapSSMerge(r.Defs, r.Values)
 
-	return true, &router.RouteMatch{Values: result, Match: true}
+	return true, &context.RouteMatch{Values: result, Name: r.Name(), Match: true}
 }
 
 // Assemble assembles user submitted parameters forming a URL path defined by this route
-func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
+func (r *Route) Assemble(data map[string]interface{}, reset bool, encode bool) (string, error) {
 	return "", errors.New("Not implemented")
-	reset := true
-	encode := true
 	partial := false
-	for k, v := range args {
-		if k == 0 {
-			reset = v
-		} else if k == 1 {
-			encode = v
-		} else if k == 2 {
-			partial = v
-		}
-	}
 	//var locale string
 	/*if r.isTranslated {
 		if v, ok := data["@locale"]; ok {
@@ -143,25 +136,31 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 		}
 	}*/
 
+	var err error
 	value := ""
 	urlParts := make(map[int]string)
+	wildcardData := make(map[string]string)
 	flag := false
 
 	for key, part := range r.Parts {
 		name := r.Vars[key]
 		useDefault := false
-		if name != "" && utils.MapSSKeyExists(name, data) && data[name] == "" {
+		if name != "" && utils.MapSKeyExists(name, data) && data[name] == "" {
 			useDefault = true
 		}
 
 		if name != "" {
-			if utils.MapSSKeyExists(name, data) && data[name] != "" && !useDefault {
-				value = data[name]
+			if utils.MapSKeyExists(name, data) && data[name] != "" && !useDefault {
+				value, err = utils.InterfaceToString(data[name])
+				if err != nil {
+					return "", errors.Wrapf(err, "Unable to assemble route '%s': Value '%s' can not be converted to string", r.RouteName, name)
+				}
+
 				delete(data, name)
 			} else if !reset && !useDefault && utils.MapSSKeyExists(name, r.Values) && r.Values[name] != "" {
 				value = r.Values[name]
-			} else if !reset && !useDefault && utils.MapSSKeyExists(name, r.WildcardData) && r.WildcardData[name] != "" {
-				value = r.WildcardData[name]
+			} else if !reset && !useDefault && utils.MapSSKeyExists(name, wildcardData) && wildcardData[name] != "" {
+				value = wildcardData[name]
 			} else if utils.MapSSKeyExists(name, r.Defs) {
 				value = r.Defs[name]
 			} else {
@@ -189,7 +188,7 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 			}
 		} else {
 			if !reset {
-				data = utils.MapSSMerge(data, r.WildcardData)
+				data = utils.MapSMerge(data, wildcardData)
 			}
 
 			for variable, val := range data {
@@ -197,7 +196,12 @@ func (r *Route) Assemble(data map[string]string, args ...bool) (string, error) {
 					key++
 					urlParts[key] = variable
 					key++
-					urlParts[key] = val
+
+					v, err := utils.InterfaceToString(val)
+					if err != nil {
+						return "", errors.Wrapf(err, "Value '%s' can not be converted to string", name)
+					}
+					urlParts[key] = v
 					flag = true
 				}
 			}
@@ -238,9 +242,9 @@ func (r *Route) Default(key string) string {
 }
 
 // NewRestRoute creates a new route structure
-func NewRestRoute(options *router.RouteConfig, route string, defaults map[string]string, reqs map[string]string) router.RouteInterface {
+func NewRestRoute(options *controller.RouteConfig, name string, route string, defaults map[string]string, reqs map[string]string) controller.RouteInterface {
 	r := &Route{
-		Route: *router.NewRouteRoute(options, route, defaults, reqs).(*router.Route),
+		Route: *controller.NewRouteRoute(options, name, route, defaults, reqs).(*controller.Route),
 	}
 
 	r.Options.ModulePrefix = route

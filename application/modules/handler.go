@@ -3,9 +3,11 @@ package modules
 import (
 	"go/build"
 	"path/filepath"
+	"sort"
 	"wsf/config"
 	"wsf/errors"
 	"wsf/registry"
+	"wsf/utils"
 )
 
 var (
@@ -34,7 +36,10 @@ type handler struct {
 // Init initializes handler and its modules
 func (h *handler) Init(options config.Config) (bool, error) {
 	h.moduleOrder = buildModulesOrder
-	for mo, mn := range h.moduleOrder {
+	ordered := utils.MapISKeys(h.moduleOrder)
+	sort.Ints(ordered)
+	for _, mo := range ordered {
+		mn := h.moduleOrder[mo]
 		if constr, ok := buildModules[mn]; ok {
 			m, err := constr(mo, mn)
 			if err != nil {
@@ -47,26 +52,43 @@ func (h *handler) Init(options config.Config) (bool, error) {
 		}
 	}
 
-	for mn, md := range h.modules {
+	return true, nil
+}
+
+// Setup setups handler and its modules
+func (h *handler) Setup() (bool, error) {
+	ordered := utils.MapISKeys(h.moduleOrder)
+	sort.Ints(ordered)
+	for _, mo := range ordered {
+		mn := h.moduleOrder[mo]
+		md := h.modules[mn]
 		if err := md.InitControllers(); err != nil {
-			return false, errors.Wrapf(err, "Unabele to initialize module '%s'", mn)
+			return false, errors.Wrapf(err, "Unabele to setup module '%s'", mn)
 		}
 
 		if err := md.InitPlugins(); err != nil {
-			return false, errors.Wrapf(err, "Unabele to initialize module '%s'", mn)
+			return false, errors.Wrapf(err, "Unabele to setup module '%s'", mn)
+		}
+
+		if err := md.InitHelpers(); err != nil {
+			return false, errors.Wrapf(err, "Unabele to setup module '%s'", mn)
+		}
+
+		if err := md.InitAccess(); err != nil {
+			return false, errors.Wrapf(err, "Unabele to setup module '%s'", mn)
 		}
 
 		if err := md.InitRoutes(); err != nil {
-			return false, errors.Wrapf(err, "Unabele to initialize module '%s'", mn)
+			return false, errors.Wrapf(err, "Unabele to setup module '%s'", mn)
 		}
 
-		if err := md.InitActionHelpers(); err != nil {
-			return false, errors.Wrapf(err, "Unabele to initialize module '%s'", mn)
+		if err := md.InitView(); err != nil {
+			return false, errors.Wrapf(err, "Unabele to setup module '%s'", mn)
 		}
 
 		if v, ok := buildModulesCallbacks[mn]; ok && v != nil {
 			if err := v(md); err != nil {
-				return false, errors.Wrapf(err, "Unabele to initialize module '%s'", mn)
+				return false, errors.Wrapf(err, "Unabele to setup module '%s'", mn)
 			}
 		}
 	}

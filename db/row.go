@@ -37,7 +37,7 @@ type Row interface {
 	GetTime(key string) time.Time
 	Unmarshal(output interface{}) error
 	Populate(data map[string]interface{})
-	Prepare(row *RowData) error
+	Prepare(rows *sql.Rows) error
 	SetTable(table Table) error
 	Table() Table
 	IsEmpty() bool
@@ -85,22 +85,22 @@ func (r *DefaultRow) GetString(key string) string {
 
 // GetInt returns a value by its key as int
 func (r *DefaultRow) GetInt(key string) int {
-	if v, ok := r.Data[key]; ok {
-		switch v.(type) {
+	if val, ok := r.Data[key]; ok {
+		switch v := val.(type) {
 		case int:
-			return v.(int)
+			return v
 
 		case int8:
-			return int(v.(int8))
+			return int(v)
 
 		case int16:
-			return int(v.(int16))
+			return int(v)
 
 		case int32:
-			return int(v.(int32))
+			return int(v)
 
 		case int64:
-			return int(v.(int64))
+			return int(v)
 		}
 	}
 
@@ -109,13 +109,13 @@ func (r *DefaultRow) GetInt(key string) int {
 
 // GetFloat returns a value by its key as float64
 func (r *DefaultRow) GetFloat(key string) float64 {
-	if v, ok := r.Data[key]; ok {
-		switch v.(type) {
+	if val, ok := r.Data[key]; ok {
+		switch v := val.(type) {
 		case float64:
-			return v.(float64)
+			return v
 
 		case float32:
-			return float64(v.(float32))
+			return float64(v)
 		}
 	}
 
@@ -166,15 +166,41 @@ func (r *DefaultRow) Populate(data map[string]interface{}) {
 }
 
 // Prepare initializes row
-func (r *DefaultRow) Prepare(row *RowData) (err error) {
+func (r *DefaultRow) Prepare(rows *sql.Rows) (err error) {
 	if r.Tbl == nil {
 		return errors.New("DB.Row table reference must be set before prepare")
 	}
 
-	//if r.Data, err = PrepareRow(row, columns); err != nil {
-	//if r.Data, err = r.Tbl.GetAdapter().PrepareRow(row.Columns()); err != nil {
-	//	return err
-	//}
+	columns, err := rows.ColumnTypes()
+	if err != nil {
+		return errors.Wrap(err, "Database prepare result error")
+	}
+
+	scanArgs := make([]interface{}, len(columns))
+	for i := range columns {
+		if _, ok := columns[i].Nullable(); !ok {
+			scanArgs[i] = r.Tbl.GetAdapter().ReferenceNulls(columns[i].ScanType())
+		} else {
+			scanArgs[i] = r.Tbl.GetAdapter().Reference(columns[i].ScanType())
+		}
+	}
+
+	r.Data = make(map[string]interface{})
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return errors.Wrap(err, "Database prepare result error")
+		}
+
+		return nil
+	}
+
+	if err = rows.Scan(scanArgs...); err != nil {
+		return errors.Wrap(err, "Database prepare result error")
+	}
+
+	for i := range columns {
+		r.Data[columns[i].Name()] = r.Tbl.GetAdapter().Dereference(scanArgs[i])
+	}
 
 	return nil
 }
@@ -216,6 +242,15 @@ func NewDefaultRow(options *RowConfig) (Row, error) {
 
 	r.Setup()
 	return r, nil
+}
+
+// EmptyDefaultRow creates empty, not settuped default row
+func EmptyDefaultRow(options *RowConfig) *DefaultRow {
+	return &DefaultRow{
+		Options:   options,
+		Data:      make(map[string]interface{}),
+		Connected: false,
+	}
 }
 
 // NewRow creates a new row

@@ -1,32 +1,32 @@
 package layout
 
 import (
-	"wsf/controller/action/helper"
+	"wsf/controller"
 	"wsf/view"
 )
 
-// TYPELayoutActionHelper is a helper id
-const TYPELayoutActionHelper = "layout"
+// TYPEHelperLayout is a helper id
+const TYPEHelperLayout = "layout"
 
 func init() {
-	helper.Register(TYPELayoutActionHelper, NewLayoutHelper)
+	controller.RegisterHelper(TYPEHelperLayout, NewLayoutHelper)
 }
 
 // Helper is a layout action controller helper
 type Helper struct {
-	helper.Abstract
+	controller.AbstractHelper
 
 	View view.Interface
 }
 
 // Name returns helper name
 func (h *Helper) Name() string {
-	return h.Abstract.Name()
+	return h.AbstractHelper.Name()
 }
 
 // NewLayoutHelper creates a new layout action helper
-func NewLayoutHelper() (helper.Interface, error) {
+func NewLayoutHelper() (controller.HelperInterface, error) {
 	return &Helper{
-		Abstract: *helper.NewHelperAbstract(TYPELayoutActionHelper),
+		AbstractHelper: *controller.NewHelperAbstract(TYPEHelperLayout),
 	}, nil
 }

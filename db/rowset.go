@@ -240,6 +240,18 @@ func NewDefaultRowset(options *RowsetConfig) (Rowset, error) {
 	}, nil
 }
 
+// EmptyDefaultRowset creates default rowset
+func EmptyDefaultRowset(options *RowsetConfig) *DefaultRowset {
+	return &DefaultRowset{
+		Options:   options,
+		Data:      make([]Row, 0),
+		Connected: false,
+		Pointer:   0,
+		Cnt:       0,
+		Pointing:  false,
+	}
+}
+
 // NewRowset creates a new rowset
 func NewRowset(rowsetType string, options *RowsetConfig) (Rowset, error) {
 	if f, ok := buildRowsetHandlers[rowsetType]; ok {

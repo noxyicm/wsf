@@ -1,8 +1,10 @@
 package http
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"wsf/context"
@@ -13,6 +15,8 @@ import (
 	"wsf/registry"
 	"wsf/service"
 	"wsf/service/http/event"
+	"wsf/session"
+	"wsf/utils"
 )
 
 // Handler serves http connections
@@ -43,6 +47,7 @@ func (h *Handler) throw(event int, ctx service.Event) {
 
 // ServeHTTP Serves a HTTP request
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.throw(EventDebug, service.InfoEvent(fmt.Sprintf("Serving HTTP request: %s", r.RequestURI)))
 	start := time.Now()
 	defer h.recover(w, r, start)
 
@@ -70,28 +75,43 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//s, sid, err := session.Start(req, rsp)
-	//if err != nil {
-	//	h.handleError(w, r, err, start)
-	//	return
-	//}
-
-	ctx, err := context.NewContext(context.Background())
+	s, sid, err := session.Start(req, rsp)
 	if err != nil {
 		h.handleError(w, r, err, start)
 		return
+	} else if sid == "" {
+		if strings.Contains(req.Header("Accept"), "application/json") {
+			rsp.SetResponseCode(401)
+			rsp.AddHeader("Content-Type", "application-json")
+			rsp.AppendBody([]byte("{\"error\":\"invalid_token\",\"error_description\":\"Invalid token\"}"), "")
+		} else {
+			rsp.SetResponseCode(401)
+			rsp.AppendBody([]byte("Invalid token"), "")
+		}
+
+		h.handleResponse(req, rsp, nil, start)
+		return
 	}
+
+	//ctx, err := context.NewContext(context.Background())
+	ctx, err := context.NewContext(r.Context())
+	if err != nil {
+		session.Close(sid)
+		h.handleError(w, r, err, start)
+		return
+	}
+
 	ctx.SetRequest(req)
 	ctx.SetResponse(rsp)
-	//ctx.SetValue(context.SessionIDKey, sid)
-	//ctx.SetValue(context.SessionKey, s)
+	ctx.SetValue(context.SessionIDKey, sid)
+	ctx.SetValue(context.SessionKey, s)
 	if err := h.ctrl.Dispatch(ctx, req, rsp); err != nil {
-		//session.Close(sid)
+		session.Close(sid)
 		h.handleResponse(req, rsp, err, start)
 		return
 	}
 
-	//session.Close(sid)
+	session.Close(sid)
 	h.handleResponse(req, rsp, nil, start)
 }
 
@@ -132,7 +152,16 @@ func (h *Handler) handleResponse(req request.Interface, rsp response.Interface, 
 
 func (h *Handler) recover(w http.ResponseWriter, r *http.Request, start time.Time) {
 	if rec := recover(); rec != nil {
-		h.handleError(w, r, errors.Wrap(rec.(error), "[HTTP Server] Unxpected error equired"), start)
+		switch err := rec.(type) {
+		case error:
+			utils.DebugBacktrace()
+			h.handleError(w, r, errors.Wrap(err, "[HTTP Server] Unxpected error equired"), start)
+			break
+
+		default:
+			utils.DebugBacktrace()
+			h.handleError(w, r, errors.Errorf("[HTTP Server] Unxpected error equired: %v", err), start)
+		}
 	}
 }
 

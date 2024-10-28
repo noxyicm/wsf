@@ -29,6 +29,7 @@ type Interface interface {
 	SetOptions(*Config) error
 	GetOptions() *Config
 	Init() error
+	Setup() error
 	Run(ctx context.Context) error
 	Stop()
 	RegisterResource(resourceType string, resourceName string, options config.Config) error
@@ -72,6 +73,15 @@ func (b *Bootstrap) Init() error {
 	b.Services.Listen(b.throw)
 
 	b.initialized = true
+	return nil
+}
+
+// Setup setups the application
+func (b *Bootstrap) Setup() error {
+	if err := b.Resources.Setup(); err != nil {
+		return err
+	}
+
 	return nil
 }
 

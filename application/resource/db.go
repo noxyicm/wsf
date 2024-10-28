@@ -20,5 +20,6 @@ func NewDbResource(options config.Config) (Interface, error) {
 	}
 
 	db.SetInstance(dbb)
+	db.SetDefaultAdapter(dbb.Adapter())
 	return dbb, nil
 }

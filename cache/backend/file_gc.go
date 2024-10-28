@@ -115,7 +115,7 @@ Mainloop:
 		select {
 		case <-g.StopChan:
 			break Mainloop
-		default:
+		case <-time.After(time.Duration(g.Options.GC) * time.Second):
 			g.mu.Lock()
 			g.Removed = []string{}
 
@@ -131,7 +131,6 @@ Mainloop:
 			}
 
 			g.mu.Unlock()
-			time.Sleep(time.Duration(g.Options.GC) * time.Second)
 		}
 	}
 

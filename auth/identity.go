@@ -30,10 +30,12 @@ type Identity interface {
 	Role() string
 	RoleID() int
 	Set(map[string]interface{})
+	SetParam(key string, value interface{})
 	Get(key string) interface{}
 	GetInt(key string) int
 	GetString(key string) string
 	GetBool(key string) bool
+	GetMap(key string) map[string]interface{}
 	Map() map[string]interface{}
 	Marshal() ([]byte, error)
 	Unmarshal(data []byte) error
@@ -90,12 +92,17 @@ func (i *DefaultIdentity) Role() string {
 
 // RoleID returns identity role identifier
 func (i *DefaultIdentity) RoleID() int {
-	return i.GetInt("roleID")
+	return i.GetInt("roleId")
 }
 
 // Set identity data
 func (i *DefaultIdentity) Set(m map[string]interface{}) {
 	i.Data = m
+}
+
+// SetParam sets identity data value
+func (i *DefaultIdentity) SetParam(key string, value interface{}) {
+	i.Data[key] = value
 }
 
 // Get returns an identity value by its key
@@ -105,8 +112,19 @@ func (i *DefaultIdentity) Get(key string) interface{} {
 
 // GetInt returns an identity value by its key as int
 func (i *DefaultIdentity) GetInt(key string) int {
-	if v, ok := i.Data[key].(int); ok {
-		return v
+	if v, ok := i.Data[key]; ok {
+		switch ret := v.(type) {
+		case int:
+			return ret
+
+		case int8:
+		case int16:
+		case int32:
+		case int64:
+		case float32:
+		case float64:
+			return int(ret)
+		}
 	}
 
 	return 0
@@ -128,6 +146,15 @@ func (i *DefaultIdentity) GetBool(key string) bool {
 	}
 
 	return false
+}
+
+// GetMap returns an identity value by its key as map[string]interface{}
+func (i *DefaultIdentity) GetMap(key string) map[string]interface{} {
+	if v, ok := i.Data[key].(map[string]interface{}); ok {
+		return v
+	}
+
+	return nil
 }
 
 // Map maps identity data to mapstructure

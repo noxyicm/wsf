@@ -25,6 +25,7 @@ func (c *FileConfig) Populate(cfg config.Config) error {
 // Defaults sets configuration default values
 func (c *FileConfig) Defaults() error {
 	c.Type = "file"
+	c.Dir = config.CachePath
 	c.GC = 3600
 	return nil
 }

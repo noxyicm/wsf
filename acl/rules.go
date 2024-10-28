@@ -25,17 +25,17 @@ type ruleset struct {
 
 // Global returns global instructions
 func (rs *ruleset) Global() Rule {
-	return rs.resources
+	return rs.resource["allResources"]
 }
 
 // ClearGlobal clears global instructions
 func (rs *ruleset) ClearGlobal() {
-	rs.resources = newResourceRule()
+	rs.resource["allResources"] = newResourceRule()
 }
 
 // UnsetGlobal removes global instructions
 func (rs *ruleset) UnsetGlobal() {
-	rs.resources = nil
+	rs.resource["allResources"] = nil
 }
 
 // All returns all specified instructions
@@ -111,17 +111,17 @@ type resourcerule struct {
 
 // Global returns global instructions
 func (rr *resourcerule) Global() Rule {
-	return rr.roles
+	return rr.role["allRoles"]
 }
 
 // ClearGlobal clears global instructions
 func (rr *resourcerule) ClearGlobal() {
-	rr.roles = newRoleRule()
+	rr.role["allRoles"] = newRoleRule()
 }
 
 // UnsetGlobal removes global instructions
 func (rr *resourcerule) UnsetGlobal() {
-	rr.roles = nil
+	rr.role["allRoles"] = nil
 }
 
 // All returns all specified instructions
@@ -197,17 +197,17 @@ type rolerule struct {
 
 // Global returns global instructions
 func (rlr *rolerule) Global() Rule {
-	return rlr.privileges
+	return rlr.privilege["allPrivileges"]
 }
 
 // ClearGlobal clears global instructions
 func (rlr *rolerule) ClearGlobal() {
-	rlr.privileges = newPrivilegeRule()
+	rlr.privilege["allPrivileges"] = newPrivilegeRule()
 }
 
 // UnsetGlobal removes global instructions
 func (rlr *rolerule) UnsetGlobal() {
-	rlr.privileges = nil
+	rlr.privilege["allPrivileges"] = nil
 }
 
 // All returns all specified instructions
@@ -354,23 +354,26 @@ func (pr *privilegerule) Assert() Assert {
 
 // NewRule creates a new RuleSet
 func NewRule() Rule {
-	return &ruleset{
+	r := &ruleset{
 		resources: newResourceRule(),
 		resource:  make(map[string]Rule),
 	}
+
+	r.Create("allResources").Create("allRoles").Create("allPrivileges")
+	return r
 }
 
 func newResourceRule() Rule {
 	return &resourcerule{
-		roles: newRoleRule(),
-		role:  make(map[string]Rule),
+		//roles: newRoleRule(),
+		role: make(map[string]Rule),
 	}
 }
 
 func newRoleRule() Rule {
 	return &rolerule{
-		privileges: newPrivilegeRule(),
-		privilege:  make(map[string]Rule),
+		//privileges: newPrivilegeRule(),
+		privilege: make(map[string]Rule),
 	}
 }
 

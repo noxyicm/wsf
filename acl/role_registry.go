@@ -55,7 +55,7 @@ func (rr *DefaultRoleRegistry) Count() int {
 
 // Add adds a role to the registry inheriting from parent
 func (rr *DefaultRoleRegistry) Add(role Role, parents []string) error {
-	roleID := role.ID()
+	roleID := role.Alias()
 	if rr.Has(roleID) {
 		return errors.Errorf("Role id '%s' already exists in the registry", roleID)
 	}
@@ -75,7 +75,7 @@ func (rr *DefaultRoleRegistry) Add(role Role, parents []string) error {
 	rr.Roles[roleID] = NewRolePack(role, roleParents)
 
 	for _, parent := range roleParents {
-		rr.Roles[parent.ID()].AddChild(rr.Roles[roleID])
+		rr.Roles[parent.Alias()].AddChild(rr.Roles[roleID])
 	}
 	return nil
 }

@@ -986,6 +986,16 @@ func NewDefaultTable(options *TableConfig) (Table, error) {
 	return t, nil
 }
 
+// NewEmptyDefaultTable creates a non setuped default table object
+func NewEmptyDefaultTable(options *TableConfig) *DefaultTable {
+	t := &DefaultTable{}
+	if options != nil {
+		t.SetOptions(options)
+	}
+
+	return t
+}
+
 // TableReference holds table references
 type TableReference struct {
 	Columns    []string

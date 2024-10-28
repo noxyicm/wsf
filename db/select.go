@@ -1,6 +1,7 @@
 package db
 
 import (
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ const (
 	Dinstinct   = "distinct"
 	Columns     = "columns"
 	From        = "from"
+	Join        = "join"
 	Union       = "union"
 	Where       = "where"
 	Group       = "group"
@@ -27,7 +29,7 @@ const (
 	ForUpdate   = "forupdate"
 
 	InnerJoin   = "inner join"
-	LeftJoin    = "inleftner join"
+	LeftJoin    = "left join"
 	RightJoin   = "right join"
 	FullJoin    = "full join"
 	CrossJoin   = "cross join"
@@ -109,12 +111,15 @@ type Select interface {
 	JoinAs(name string, alias string, cond string, cols interface{}) Select
 	JoinInner(name string, cond string, cols interface{}) Select
 	JoinInnerAs(name string, alias string, cond string, cols interface{}) Select
+	JoinLeft(name string, cond string, cols interface{}) Select
+	JoinLeftAs(name string, alias string, cond string, cols interface{}) Select
 	Where(cond string, value interface{}) Select
 	OrWhere(cond string, value interface{}) Select
 	Limit(count int, offset int) Select
 	Order(order interface{}) Select
 	Binds() []interface{}
 	Err() error
+	Reset(string) Select
 	Clear() Select
 	Assemble() string
 	ToString() string
@@ -316,6 +321,16 @@ func (s *DefaultSelect) JoinInnerAs(name string, alias string, cond string, cols
 	return s.prepareJoin(InnerJoin, name, alias, cond, cols, "")
 }
 
+// JoinLeft add an LEFT JOIN table and colums to the query
+func (s *DefaultSelect) JoinLeft(name string, cond string, cols interface{}) Select {
+	return s.prepareJoin(LeftJoin, name, "", cond, cols, "")
+}
+
+// JoinLeftAs add an LEFT JOIN table and colums to the query
+func (s *DefaultSelect) JoinLeftAs(name string, alias string, cond string, cols interface{}) Select {
+	return s.prepareJoin(LeftJoin, name, alias, cond, cols, "")
+}
+
 // Where adds a WHERE condition to the query by AND
 func (s *DefaultSelect) Where(cond string, value interface{}) Select {
 	s.Parts.Where = append(s.Parts.Where, s.where(cond, value, "", true))
@@ -363,7 +378,7 @@ func (s *DefaultSelect) Order(order interface{}) Select {
 			if len(parts) == 1 {
 				s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0], true))
 			} else if len(parts) > 1 {
-				s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0]+" "+strings.ToUpper(parts[1]), true))
+				s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0], true)+" "+strings.ToUpper(parts[1]))
 			}
 		} else if len(parts) > 1 {
 			for _, cond := range parts {
@@ -371,7 +386,7 @@ func (s *DefaultSelect) Order(order interface{}) Select {
 				if len(parts) == 1 {
 					s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0], true))
 				} else if len(parts) > 1 {
-					s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0]+" "+strings.ToUpper(parts[1]), true))
+					s.Parts.Order = append(s.Parts.Order, s.Adapter.QuoteIdentifier(parts[0], true)+" "+strings.ToUpper(parts[1]))
 				}
 			}
 		}
@@ -424,6 +439,49 @@ func (s *DefaultSelect) Clear() Select {
 	s.Parts.LimitOffset = 0
 	s.Parts.ForUpdate = false
 	s.Errors = make([]error, 0)
+	return s
+}
+
+// Reset the specific part of select
+func (s *DefaultSelect) Reset(part string) Select {
+	switch part {
+	case Dinstinct:
+		s.Parts.Dinstinct = false
+
+	case Columns:
+		s.Parts.Columns = []*selectColumn{}
+
+	case Union:
+		s.Parts.Union = []*selectUnion{}
+
+	case From:
+		s.Parts.From = []*selectFrom{}
+
+	case Join:
+		s.Parts.Join = []*selectFrom{}
+
+	case Where:
+		s.Parts.Where = []string{}
+
+	case Group:
+		s.Parts.Group = []interface{}{}
+
+	case Having:
+		s.Parts.Having = []interface{}{}
+
+	case Order:
+		s.Parts.Order = []string{}
+
+	case LimitCount:
+		s.Parts.LimitCount = 0
+
+	case LimitOffset:
+		s.Parts.LimitOffset = 0
+
+	case ForUpdate:
+		s.Parts.ForUpdate = false
+	}
+
 	return s
 }
 
@@ -574,6 +632,9 @@ func (s *DefaultSelect) where(condition string, value interface{}, typ string, b
 func (s *DefaultSelect) tableCols(correlationName string, cols interface{}, afterCorrelationName string) Select {
 	columnValues := []*selectColumn{}
 	switch tcol := cols.(type) {
+	case nil:
+		return s
+
 	case string:
 		colname, alias, corname := s.extractColumnParts(tcol)
 		if corname != "" {
@@ -627,12 +688,28 @@ func (s *DefaultSelect) tableCols(correlationName string, cols interface{}, afte
 				}
 
 			case *SQLExpr:
+				columnValues = append(columnValues, &selectColumn{Table: correlationName, Column: ticol, Alias: alias})
+			}
+		}
+
+	case []interface{}:
+		for _, icol := range tcol {
+			switch ticol := icol.(type) {
+			case string:
+				colname, alias, corname := s.extractColumnParts(ticol)
+				if corname != "" {
+					columnValues = append(columnValues, &selectColumn{Table: corname, Column: colname, Alias: alias})
+				} else {
+					columnValues = append(columnValues, &selectColumn{Table: correlationName, Column: colname, Alias: alias})
+				}
+
+			case *SQLExpr:
 				columnValues = append(columnValues, &selectColumn{Table: correlationName, Column: ticol, Alias: ""})
 			}
 		}
 
 	default:
-		s.Errors = append(s.Errors, errors.New("Invalid column type"))
+		s.Errors = append(s.Errors, errors.Errorf("Invalid columns type '%v' in FROM statement", reflect.TypeOf(cols)))
 		return s
 	}
 
@@ -684,7 +761,7 @@ func (s *DefaultSelect) uniqueCorrelation(name string) string {
 	dot := strings.LastIndex(name, ".")
 	c := name
 	if dot > -1 {
-		c = name[dot+1 : len(name)]
+		c = name[dot+1:]
 	}
 
 	hit := false

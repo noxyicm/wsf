@@ -314,6 +314,13 @@ func NewLog(options config.Config) (*Log, error) {
 	cfg.Defaults()
 	cfg.Populate(options)
 
+	return NewLogFromConfig(cfg)
+}
+
+// NewLogFromConfig creates new logger
+func NewLogFromConfig(cfg *Config) (*Log, error) {
+	defer recover()
+
 	l := &Log{
 		options:         cfg,
 		enable:          cfg.Enable,

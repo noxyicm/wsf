@@ -24,7 +24,7 @@ func (c *Config) Defaults() error {
 // TmpDir returns temporary directory
 func (c *Config) TmpDir() string {
 	if c.Dir != "" {
-		return filepath.Join(config.AppRootPath, c.Dir)
+		return filepath.Join(config.StaticPath, c.Dir)
 	}
 
 	return os.TempDir()

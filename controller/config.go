@@ -2,7 +2,6 @@ package controller
 
 import (
 	"wsf/config"
-	"wsf/controller/dispatcher"
 	"wsf/errors"
 	"wsf/log"
 )
@@ -13,15 +12,16 @@ type Config struct {
 	Priority        int
 	ThrowExceptions bool
 	ErrorHandling   bool
+	VerboseErrors   bool
 	Logger          *log.Log
-	Dispatcher      *dispatcher.Config
+	Dispatcher      *DispatcherConfig
 	Router          config.Config
 }
 
 // Populate populates Config values using given Config source
 func (c *Config) Populate(cfg config.Config) error {
 	if c.Dispatcher == nil {
-		c.Dispatcher = &dispatcher.Config{}
+		c.Dispatcher = &DispatcherConfig{}
 	}
 
 	c.Dispatcher.Defaults()
@@ -44,10 +44,11 @@ func (c *Config) Populate(cfg config.Config) error {
 func (c *Config) Defaults() error {
 	c.Type = "default"
 	c.Priority = 2
-	c.ThrowExceptions = true
-	c.ErrorHandling = true
+	c.ThrowExceptions = false
+	c.ErrorHandling = false
+	c.VerboseErrors = false
 
-	c.Dispatcher = &dispatcher.Config{}
+	c.Dispatcher = &DispatcherConfig{}
 	c.Dispatcher.Defaults()
 
 	c.Router = config.NewBridge()

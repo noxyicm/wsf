@@ -21,7 +21,7 @@ import (
 	// pgx needs a connections pool
 	//_ "github.com/jackc/pgx/pgxpool"
 	// CockroachDB uses pgx package for tcp connections
-	//_ "github.com/jackc/pgx/stdlib"
+	_ "github.com/jackc/pgx/stdlib"
 )
 
 const (
@@ -195,9 +195,9 @@ func (a *Cockroach) Insert(ctx context.Context, table string, data map[string]in
 	for col, val := range data {
 		cols = append(cols, a.QuoteIdentifier(col, true))
 
-		switch val.(type) {
+		switch v := val.(type) {
 		case *SQLExpr:
-			vals = append(vals, val.(*SQLExpr).ToString())
+			vals = append(vals, v.ToString())
 
 		default:
 			if a.SupportsParameters("positional") {
@@ -244,9 +244,9 @@ func (a *Cockroach) Update(ctx context.Context, table string, data map[string]in
 	for col, val := range data {
 		var value string
 
-		switch val.(type) {
+		switch v := val.(type) {
 		case *SQLExpr:
-			value = val.(*SQLExpr).ToString()
+			value = v.ToString()
 
 		default:
 			if a.SupportsParameters("positional") {
@@ -262,12 +262,12 @@ func (a *Cockroach) Update(ctx context.Context, table string, data map[string]in
 			}
 		}
 
-		set = append(set, a.QuoteIdentifier(col, true)+" = "+value)
+		set = append(set, a.QuoteIdentifier(col, true)+"="+value)
 	}
 
 	where := a.whereExpr(cond)
 
-	sql := "UPDATE " + a.QuoteIdentifier(table, true) + " SET (" + strings.Join(set, ", ") + ")"
+	sql := "UPDATE " + a.QuoteIdentifier(table, true) + " SET " + strings.Join(set, ", ") + ""
 	if where != "" {
 		sql = sql + " WHERE " + where
 	}
@@ -350,9 +350,9 @@ func (a *Cockroach) Delete(ctx context.Context, table string, cond map[string]in
 func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*TableColumn, error) {
 	var sqlstr string
 	if schema != "" {
-		sqlstr = "SELECT * FROM information_schema.columns WHERE " + a.QuoteInto("table_name = ?", table, -1) + " AND " + a.QuoteInto("table_schema = ?", schema, -1)
+		sqlstr = "SHOW COLUMNS FROM " + a.QuoteIdentifier(schema, true) + "." + a.QuoteIdentifier(table, true)
 	} else {
-		sqlstr = "SELECT * FROM information_schema.columns WHERE " + a.QuoteInto("table_name = ?", table, -1)
+		sqlstr = "SHOW COLUMNS FROM " + a.QuoteIdentifier(table, true)
 	}
 
 	ctx, cancel := goctx.WithTimeout(a.Ctx, time.Duration(a.PingTimeout)*time.Second)
@@ -380,7 +380,11 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 
 	scanArgs := make([]interface{}, len(columns))
 	for i := range columns {
-		scanArgs[i] = a.reference(columns[i].ScanType())
+		if _, ok := columns[i].Nullable(); !ok {
+			scanArgs[i] = a.ReferenceNulls(columns[i].ScanType())
+		} else {
+			scanArgs[i] = a.Reference(columns[i].ScanType())
+		}
 	}
 
 	desc := make(map[string]*TableColumn)
@@ -391,27 +395,27 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 
 		d := make(map[string]interface{})
 		for i := range columns {
-			d[columns[i].Name()] = a.dereference(scanArgs[i])
+			d[columns[i].Name()] = a.Dereference(scanArgs[i])
 		}
 
 		row := &TableColumn{
-			TableSchema:  d["table_schema"].(string),
-			TableName:    d["table_name"].(string),
+			TableSchema:  schema,
+			TableName:    table,
 			Name:         d["column_name"].(string),
 			Default:      d["column_default"],
-			Position:     d["ordinal_position"].(int64),
+			Position:     0,
 			DataType:     d["data_type"].(string),
-			Length:       d["character_maximum_length"].(int64),
-			Precision:    d["numeric_precision"].(int64),
-			Scale:        d["numeric_scale"].(int64),
-			CharacterSet: d["character_set_name"].(string),
-			Collation:    d["collation_name"].(string),
+			Length:       0,
+			Precision:    0,
+			Scale:        0,
+			CharacterSet: "",
+			Collation:    "",
 			//ColumnType:   values["COLUMN_TYPE"].(string),
 			//ColumnKey:    values["COLUMN_KEY"].(string),
 			//Extra:        values["EXTRA"].(string),
 		}
 
-		if d["is_nullable"] == "YES" {
+		if d["is_nullable"].(bool) {
 			row.IsNullable = true
 		}
 
@@ -453,7 +457,11 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 
 	scanArgs = make([]interface{}, len(columns))
 	for i := range columns {
-		scanArgs[i] = a.reference(columns[i].ScanType())
+		if _, ok := columns[i].Nullable(); !ok {
+			scanArgs[i] = a.ReferenceNulls(columns[i].ScanType())
+		} else {
+			scanArgs[i] = a.Reference(columns[i].ScanType())
+		}
 	}
 
 	var i int64
@@ -464,7 +472,7 @@ func (a *Cockroach) DescribeTable(table string, schema string) (map[string]*Tabl
 
 		d := make(map[string]interface{})
 		for i := range columns {
-			d[columns[i].Name()] = a.dereference(scanArgs[i])
+			d[columns[i].Name()] = a.Dereference(scanArgs[i])
 		}
 
 		if d["constraint_name"].(string) == "primary" {
@@ -497,6 +505,27 @@ func (a *Cockroach) Limit(sql string, count int, offset int) string {
 // NextSequenceID returns nex value from sequence
 func (a *Cockroach) NextSequenceID(sequence string) int {
 	return 0
+}
+
+// BeginTransaction creates a new database transaction
+func (a *Cockroach) BeginTransaction(ctx context.Context) (Transaction, error) {
+	if a.Db == nil {
+		return nil, errors.New("Database is not initialized")
+	}
+
+	tx, err := a.Db.BeginTx(ctx, &sql.TxOptions{Isolation: a.Options.Transaction.IsolationLevel, ReadOnly: a.Options.Transaction.ReadOnly})
+	if err != nil {
+		return nil, err
+	}
+
+	trns, err := NewTransaction(a.Options.Transaction.Type, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	trns.SetAdapter(a)
+	trns.SetContext(ctx)
+	return trns, err
 }
 
 // FormatDSN returns a formated dsn string

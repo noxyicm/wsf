@@ -2,20 +2,19 @@ package layout
 
 import (
 	"wsf/context"
-	"wsf/controller/action/helper"
-	"wsf/controller/plugin"
+	"wsf/controller"
 	"wsf/controller/request"
 	"wsf/controller/response"
 	"wsf/errors"
 )
 
-// TYPELayoutPlugin is a plugin id
-const TYPELayoutPlugin = "layout"
+// TYPEPluginLayout is a plugin id
+const TYPEPluginLayout = "layout"
 
 // NewLayoutPlugin  creates a new controller plugin layout
-func NewLayoutPlugin() (plugin.Interface, error) {
+func NewLayoutPlugin() (controller.PluginInterface, error) {
 	return &Plugin{
-		name: TYPELayoutPlugin,
+		name: "Layout",
 	}, nil
 }
 
@@ -23,7 +22,7 @@ func NewLayoutPlugin() (plugin.Interface, error) {
 type Plugin struct {
 	name         string
 	layout       Interface
-	actionHelper helper.Interface
+	actionHelper controller.HelperInterface
 }
 
 // Name returns plugin name
@@ -42,14 +41,14 @@ func (p *Plugin) GetLayout() Interface {
 	return p.layout
 }
 
-// SetLayoutActionHelper sets a reference for layout action helper instance
-func (p *Plugin) SetLayoutActionHelper(h helper.Interface) error {
+// SetLayoutHelper sets a reference for layout action helper instance
+func (p *Plugin) SetLayoutHelper(h controller.HelperInterface) error {
 	p.actionHelper = h
 	return nil
 }
 
-// GetLayoutActionHelper returns a reference for layout action helper instance
-func (p *Plugin) GetLayoutActionHelper() helper.Interface {
+// GetLayoutHelper returns a reference for layout action helper instance
+func (p *Plugin) GetLayoutHelper() controller.HelperInterface {
 	return p.actionHelper
 }
 
@@ -70,7 +69,7 @@ func (p *Plugin) DispatchLoopStartup(ctx context.Context, rqs request.Interface,
 
 // PreDispatch routine
 func (p *Plugin) PreDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
-	ctx.SetValue(context.LayoutEnabledKey, true)
+	ctx.SetParam(context.LayoutEnabledKey, true)
 	return true, nil
 }
 
@@ -78,7 +77,7 @@ func (p *Plugin) PreDispatch(ctx context.Context, rqs request.Interface, rsp res
 func (p *Plugin) PostDispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) (bool, error) {
 	l := p.GetLayout()
 	if l == nil {
-		return false, errors.New("[Layout] Layout object for plugin is not set")
+		return true, errors.New("[Layout] Layout object for plugin is not set")
 	}
 
 	// Return early if forward detected
@@ -87,7 +86,7 @@ func (p *Plugin) PostDispatch(ctx context.Context, rqs request.Interface, rsp re
 	}
 
 	// Return early if layout has been disabled
-	if enabled, _ := ctx.Value(context.LayoutEnabledKey).(bool); enabled && l.IsEnabled() {
+	if !ctx.ParamBool(context.LayoutEnabledKey) || !l.IsEnabled() {
 		return true, nil
 	}
 
@@ -108,16 +107,17 @@ func (p *Plugin) PostDispatch(ctx context.Context, rqs request.Interface, rsp re
 
 	fullContent := make([]byte, 0)
 	var err error
-	if name, ok := ctx.Value(context.LayoutKey).(string); ok {
+	name := ctx.ParamString(context.LayoutKey)
+	if name != "" {
 		fullContent, err = l.Render(ctx, name)
 	} else {
-		err = errors.New("[Layout] Bad layout name")
+		err = errors.Errorf("[Layout] Bad layout name '%s'", name)
 	}
 
 	if err != nil {
 		rsp.SetData("layoutFullContent", fullContent)
 		rsp.SetData("layoutContent", l.Get(contentKey))
-		return false, err
+		return true, err
 	}
 
 	rsp.SetBody(fullContent)

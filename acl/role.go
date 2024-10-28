@@ -8,7 +8,7 @@ const (
 )
 
 var (
-	buildRoleHandlers = map[string]func(string) (Role, error){}
+	buildRoleHandlers = map[string]func(int, string) (Role, error){}
 )
 
 func init() {
@@ -17,32 +17,66 @@ func init() {
 
 // Role defines an acl role
 type Role interface {
-	ID() string
+	ID() int
+	Alias() string
+	Name() string
+	SetName(name string)
+	Description() string
+	SetDescription(desc string)
 }
 
 // DefaultRole is a default acl role
 type DefaultRole struct {
-	id string
+	id          int
+	alias       string
+	name        string
+	description string
 }
 
 // ID returns role identifier
-func (r *DefaultRole) ID() string {
+func (r *DefaultRole) ID() int {
 	return r.id
 }
 
+// Alias returns role string identifier
+func (r *DefaultRole) Alias() string {
+	return r.alias
+}
+
+// Name returns role name
+func (r *DefaultRole) Name() string {
+	return r.name
+}
+
+// SetName sets role name
+func (r *DefaultRole) SetName(name string) {
+	r.name = name
+}
+
+// Description returns role description
+func (r *DefaultRole) Description() string {
+	return r.description
+}
+
+// SetDescription sets role description
+func (r *DefaultRole) SetDescription(desc string) {
+	r.description = desc
+}
+
 // NewRole creates a new role of type typ
-func NewRole(typ string, name string) (Role, error) {
+func NewRole(typ string, id int, alias string) (Role, error) {
 	if f, ok := buildRoleHandlers[typ]; ok {
-		return f(name)
+		return f(id, alias)
 	}
 
 	return nil, errors.Errorf("Unrecognized acl role type '%s'", typ)
 }
 
 // NewRoleDefault creates a new role of type default
-func NewRoleDefault(rolename string) (Role, error) {
+func NewRoleDefault(id int, rolename string) (Role, error) {
 	return &DefaultRole{
-		id: rolename,
+		id:    id,
+		alias: rolename,
 	}, nil
 }
 
@@ -55,7 +89,7 @@ type RolePack struct {
 
 // AddChild adds a new child to role
 func (rp *RolePack) AddChild(role *RolePack) {
-	rp.Children[role.Instance.ID()] = role
+	rp.Children[role.Instance.Alias()] = role
 }
 
 // UnsetChild removes a role from children list
@@ -81,13 +115,13 @@ func NewRolePack(inst Role, parents []Role) *RolePack {
 	}
 
 	for _, parent := range parents {
-		rp.Parents[parent.ID()] = parent
+		rp.Parents[parent.Alias()] = parent
 	}
 
 	return rp
 }
 
 // RegisterRole registers a handler for acl role creation
-func RegisterRole(typ string, handler func(string) (Role, error)) {
+func RegisterRole(typ string, handler func(int, string) (Role, error)) {
 	buildRoleHandlers[typ] = handler
 }

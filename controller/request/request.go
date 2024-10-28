@@ -109,10 +109,16 @@ func (r *Request) ParamStringDefault(name string, d string) string {
 			return v
 		}
 	} else if b, ok := r.Body.(utils.DataTree); ok {
-		if v, ok := b.Get(name).([]string); ok {
+		vi := b.Get(name)
+		switch v := vi.(type) {
+		case []string:
 			if len(v) > 0 {
 				return v[0]
 			}
+			break
+
+		case string:
+			return v
 		}
 	}
 
@@ -122,16 +128,36 @@ func (r *Request) ParamStringDefault(name string, d string) string {
 // ParamIntDefault returns request parameter as int or d
 func (r *Request) ParamIntDefault(name string, d int) int {
 	if v, ok := r.Prms[name]; ok {
-		if v, ok := v.(int); ok {
-			return v
+		if i, ok := v.(int); ok {
+			return i
+		} else if s, err := strconv.Atoi(v.(string)); err == nil {
+			return s
 		}
 	} else if b, ok := r.Body.(utils.DataTree); ok {
-		if v, ok := b.Get(name).([]string); ok {
+		vi := b.Get(name)
+		switch v := vi.(type) {
+		case []string:
 			if len(v) > 0 {
-				if v, err := strconv.Atoi(v[0]); err == nil {
-					return v
+				if ret, err := strconv.Atoi(v[0]); err == nil {
+					return ret
 				}
 			}
+			break
+
+		case string:
+			if ret, err := strconv.Atoi(v); err == nil {
+				return ret
+			}
+			break
+
+		case []float64:
+			if len(v) > 0 {
+				return int(v[0])
+			}
+			break
+
+		case float64:
+			return int(v)
 		}
 	}
 
@@ -141,16 +167,81 @@ func (r *Request) ParamIntDefault(name string, d int) int {
 // ParamBoolDefault returns request parameter as bool or d
 func (r *Request) ParamBoolDefault(name string, d bool) bool {
 	if v, ok := r.Prms[name]; ok {
-		if v, ok := v.(bool); ok {
+		if b, ok := v.(bool); ok {
+			return b
+		} else if s, err := strconv.ParseBool(v.(string)); err == nil {
+			return s
+		}
+	} else if b, ok := r.Body.(utils.DataTree); ok {
+		vi := b.Get(name)
+		switch v := vi.(type) {
+		case []string:
+			if len(v) > 0 {
+				if ret, err := strconv.ParseBool(v[0]); err == nil {
+					return ret
+				}
+			}
+			break
+
+		case string:
+			if ret, err := strconv.ParseBool(v); err == nil {
+				return ret
+			}
+			break
+		}
+	}
+
+	return d
+}
+
+// ParamFloatDefault returns request parameter as int or d
+func (r *Request) ParamFloatDefault(name string, d float64) float64 {
+	if v, ok := r.Prms[name]; ok {
+		if f, ok := v.(float64); ok {
+			return f
+		} else if s, err := strconv.ParseFloat(v.(string), 64); err == nil {
+			return s
+		}
+	} else if b, ok := r.Body.(utils.DataTree); ok {
+		vi := b.Get(name)
+		switch v := vi.(type) {
+		case []string:
+			if len(v) > 0 {
+				if ret, err := strconv.ParseFloat(v[0], 64); err == nil {
+					return ret
+				}
+			}
+			break
+
+		case string:
+			if ret, err := strconv.ParseFloat(v, 64); err == nil {
+				return ret
+			}
+			break
+		}
+	}
+
+	return d
+}
+
+// ParamMapDefault returns request parameter as int or d
+func (r *Request) ParamMapDefault(name string, d map[string]interface{}) map[string]interface{} {
+	if v, ok := r.Prms[name]; ok {
+		if v, ok := v.(map[string]interface{}); ok {
 			return v
 		}
 	} else if b, ok := r.Body.(utils.DataTree); ok {
-		if v, ok := b.Get(name).([]string); ok {
+		switch v := b.Get(name).(type) {
+		case []map[string]interface{}:
 			if len(v) > 0 {
-				if v, err := strconv.ParseBool(v[0]); err == nil {
-					return v
-				}
+				return v[0]
 			}
+
+		case map[string]interface{}:
+			return v
+
+		case utils.DataTree:
+			return utils.MapFromDataTree(v)
 		}
 	}
 

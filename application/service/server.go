@@ -183,7 +183,6 @@ func (s *server) Serve(ctx context.Context) error {
 
 	for i := 0; i < numServing; i++ {
 		result := <-done
-
 		if result == nil {
 			continue
 		}
@@ -209,6 +208,8 @@ func (s *server) Stop() {
 			s.throw(EventDebug, service.DebugEvent(fmt.Sprintf("Service '%s' stopped", b.name)))
 		}
 	}
+
+	s.throw(EventDebug, service.DebugEvent("All services stopped"))
 }
 
 // Listen attaches handler event watcher

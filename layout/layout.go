@@ -1,7 +1,6 @@
 package layout
 
 import (
-	"fmt"
 	"html/template"
 	"wsf/config"
 	"wsf/context"
@@ -166,9 +165,9 @@ func (l *DefaultLayout) InitMvc() error {
 		}
 	}
 
-	if err := l.InitPlugin(); err != nil {
-		return err
-	}
+	// if err := l.InitPlugin(); err != nil {
+	// 	return err
+	// }
 
 	if err := l.InitHelper(); err != nil {
 		return err
@@ -335,7 +334,6 @@ func (l *DefaultLayout) Populate(data map[string]interface{}) {
 
 // Render layout
 func (l *DefaultLayout) Render(ctx context.Context, name string) ([]byte, error) {
-	fmt.Println("layout.Render")
 	if name == "" {
 		name = l.Options.Layout
 	}
@@ -345,7 +343,11 @@ func (l *DefaultLayout) Render(ctx context.Context, name string) ([]byte, error)
 			name = str.(string)
 		}
 	}
+
 	view := l.GetView()
+	if view == nil {
+		return nil, errors.New("[Layout] view is not set")
+	}
 
 	return view.Render(ctx, l.GetViewScriptPath()+name, name)
 }

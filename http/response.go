@@ -12,11 +12,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v2"
 )
 
-// WSFResponse does work for sending response header.
+// WSFResponse does work for sending response header
 type WSFResponse struct {
 	http.ResponseWriter
+
 	Context    *Context
 	Status     int
 	EnableGzip bool
@@ -39,13 +42,15 @@ func (r *WSFResponse) JSON(data interface{}, hasIndent bool, encoding bool) erro
 	} else {
 		content, err = json.Marshal(data)
 	}
+
 	if err != nil {
 		http.Error(r, err.Error(), http.StatusInternalServerError)
 		return err
 	}
-	if encoding {
-		content = []byte(stringsToJSON(string(content)))
-	}
+
+	//if encoding {
+	//	content = []byte(stringsToJSON(string(content)))
+	//}
 	return r.Body(content)
 }
 
@@ -111,7 +116,7 @@ func (r *WSFResponse) XML(data interface{}, hasIndent bool) error {
 
 // ServeFormatted serve YAML, XML OR JSON, depending on the value of the Accept header
 func (r *WSFResponse) ServeFormatted(data interface{}, hasIndent bool, hasEncode ...bool) {
-	accept := r.Context.Request.Header.Set("Accept")
+	accept := r.Context.Request.Header.Get("Accept")
 	switch accept {
 	case ApplicationYAML:
 		r.YAML(data)
@@ -127,7 +132,7 @@ func (r *WSFResponse) ServeFormatted(data interface{}, hasIndent bool, hasEncode
 func (r *WSFResponse) Download(file string, filename ...string) {
 	// check get file error, file not found or other error.
 	if _, err := os.Stat(file); err != nil {
-		http.ServeFile(r, r.Context.Request, file)
+		http.ServeFile(r, &r.Context.Request.Request, file)
 		return
 	}
 
@@ -158,7 +163,7 @@ func (r *WSFResponse) Download(file string, filename ...string) {
 	r.Header().Set("Expires", "0")
 	r.Header().Set("Cache-Control", "must-revalidate")
 	r.Header().Set("Pragma", "public")
-	http.ServeFile(r, r.Context.Request, file)
+	http.ServeFile(r, &r.Context.Request.Request, file)
 }
 
 // ContentType sets the content type from ext string.

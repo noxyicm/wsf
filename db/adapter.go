@@ -45,6 +45,7 @@ type Adapter interface {
 	QueryInto(ctx context.Context, dbs Select, o interface{}) ([]interface{}, error)
 	//QueryRow(ctx context.Context, sql Select) (Row, error)
 	QueryRow(ctx context.Context, sql Select) (map[string]interface{}, error)
+	Fetch(ctx context.Context, sql Select) (*sql.Rows, error)
 	//PrepareRowset(rows *sql.Rows) ([]map[string]interface{}, error)
 	PrepareRowset(rows *sql.Rows) ([]map[string]interface{}, error)
 	//PrepareRow(row []sql.RawBytes, columns []*sql.ColumnType) (data map[string]interface{}, err error)
@@ -77,6 +78,10 @@ type Adapter interface {
 	FormatDSN() string
 	Limit(sql string, count int, offset int) string
 	FoldCase(s string) string
+	WhereExpresion(cond interface{}) string
+	Reference(tp reflect.Type) interface{}
+	ReferenceNulls(tp reflect.Type) interface{}
+	Dereference(v interface{}) interface{}
 }
 
 // NewAdapter creates a new adapter from given type and options
@@ -102,6 +107,7 @@ type DefaultAdapter struct {
 	Options                    *AdapterConfig
 	Db                         *sql.DB
 	Ctx                        context.Context
+	Tx                         *sql.Tx
 	Params                     map[string]interface{}
 	DefaultStatementType       string
 	PingTimeout                time.Duration
@@ -131,6 +137,17 @@ func (a *DefaultAdapter) Context() context.Context {
 func (a *DefaultAdapter) SetContext(ctx context.Context) error {
 	a.Ctx = ctx
 	return nil
+}
+
+// SetOptions sets new options for MySQL adapter
+func (a *DefaultAdapter) SetOptions(options *AdapterConfig) error {
+	a.Options = options
+	return nil
+}
+
+// GetOptions returns MySQL adapter options
+func (a *DefaultAdapter) GetOptions() *AdapterConfig {
+	return a.Options
 }
 
 // Connection returns a connection to database
@@ -263,6 +280,28 @@ func (a *DefaultAdapter) QueryRow(ctx context.Context, dbs Select) (map[string]i
 	return a.PrepareRow(rows)
 }
 
+// Fetch rows from database
+func (a *DefaultAdapter) Fetch(ctx context.Context, dbs Select) (*sql.Rows, error) {
+	if a.Db == nil {
+		return nil, errors.New("Database is not initialized")
+	}
+
+	if err := dbs.Err(); err != nil {
+		return nil, errors.Wrap(err, "Database query Error")
+	}
+
+	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
+	defer cancel()
+
+	rows, err := a.Db.QueryContext(qctx, dbs.Assemble(), dbs.Binds()...)
+	if err != nil {
+		return nil, errors.Wrap(err, "Database query Error")
+	}
+	defer rows.Close()
+
+	return rows, nil
+}
+
 // Insert inserts new row into table
 func (a *DefaultAdapter) Insert(ctx context.Context, table string, data map[string]interface{}) (int, error) {
 	cols := []string{}
@@ -272,9 +311,9 @@ func (a *DefaultAdapter) Insert(ctx context.Context, table string, data map[stri
 	for col, val := range data {
 		cols = append(cols, a.QuoteIdentifier(col, true))
 
-		switch val.(type) {
+		switch v := val.(type) {
 		case *SQLExpr:
-			vals = append(vals, val.(*SQLExpr).ToString())
+			vals = append(vals, v.ToString())
 
 		default:
 			if a.SupportsParameters("positional") {
@@ -290,12 +329,12 @@ func (a *DefaultAdapter) Insert(ctx context.Context, table string, data map[stri
 		}
 	}
 
-	sql := "INSERT INTO " + a.QuoteIdentifier(table, true) + " (" + strings.Join(cols, ", ") + ") VALUES (" + strings.Join(vals, ", ") + ")"
+	query := "INSERT INTO " + a.QuoteIdentifier(table, true) + " (" + strings.Join(cols, ", ") + ") VALUES (" + strings.Join(vals, ", ") + ")"
 
 	pctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
-	stmt, err := a.Db.PrepareContext(pctx, sql)
+	stmt, err := a.Db.PrepareContext(pctx, query)
 	if err != nil {
 		return 0, errors.Wrap(err, "Database insert Error")
 	}
@@ -305,8 +344,10 @@ func (a *DefaultAdapter) Insert(ctx context.Context, table string, data map[stri
 
 	result, err := stmt.ExecContext(qctx, binds...)
 	if err != nil {
+		stmt.Close()
 		return 0, errors.Wrap(err, "Database insert Error")
 	}
+	stmt.Close()
 
 	lastInsertID, err := result.LastInsertId()
 	if err == nil {
@@ -324,9 +365,9 @@ func (a *DefaultAdapter) Update(ctx context.Context, table string, data map[stri
 	for col, val := range data {
 		var value string
 
-		switch val.(type) {
+		switch v := val.(type) {
 		case *SQLExpr:
-			value = val.(*SQLExpr).ToString()
+			value = v.ToString()
 
 		default:
 			if a.SupportsParameters("positional") {
@@ -347,27 +388,28 @@ func (a *DefaultAdapter) Update(ctx context.Context, table string, data map[stri
 
 	where := a.whereExpr(cond)
 
-	sql := "UPDATE " + a.QuoteIdentifier(table, true) + " SET " + strings.Join(set, ", ") + ""
+	query := "UPDATE " + a.QuoteIdentifier(table, true) + " SET " + strings.Join(set, ", ") + ""
 	if where != "" {
-		sql = sql + " WHERE " + where
+		query = query + " WHERE " + where
 	}
 
 	pctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.PingTimeout)*time.Second)
 	defer cancel()
 
-	stmt, err := a.Db.PrepareContext(pctx, sql)
+	stmt, err := a.Db.PrepareContext(pctx, query)
 	if err != nil {
-		return false, err
+		return false, errors.Wrap(err, "Database update Error")
 	}
-	defer stmt.Close()
 
 	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	rows, err := stmt.QueryContext(qctx, binds...)
 	if err != nil {
+		stmt.Close()
 		return false, err
 	}
+	stmt.Close()
 	defer rows.Close()
 
 	for rows.Next() {
@@ -396,52 +438,33 @@ func (a *DefaultAdapter) Delete(ctx context.Context, table string, cond map[stri
 	if err != nil {
 		return false, err
 	}
-	defer stmt.Close()
 
 	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
 	rows, err := stmt.QueryContext(qctx)
 	if err != nil {
+		stmt.Close()
 		return false, err
 	}
-	defer rows.Close()
+	stmt.Close()
+	rows.Close()
 
 	return true, nil
 }
 
-// BeginTransaction creates a new database transaction
-func (a *DefaultAdapter) BeginTransaction(ctx context.Context) (Transaction, error) {
-	if a.Db == nil {
-		return nil, errors.New("Database is not initialized")
-	}
-
-	tx, err := a.Db.BeginTx(ctx, &sql.TxOptions{Isolation: a.Options.Transaction.IsolationLevel, ReadOnly: a.Options.Transaction.ReadOnly})
-	if err != nil {
-		return nil, err
-	}
-
-	trns, err := NewTransaction(a.Options.Transaction.Type, tx)
-	if err != nil {
-		return nil, err
-	}
-
-	trns.SetContext(a.Ctx)
-	return trns, err
-}
-
 // Quote a string
 func (a *DefaultAdapter) Quote(value interface{}) string {
-	switch value.(type) {
+	switch v := value.(type) {
 	case Select:
-		return "(" + value.(Select).Assemble() + ")"
+		return "(" + v.Assemble() + ")"
 
 	case *SQLExpr:
-		return value.(*SQLExpr).ToString()
+		return v.ToString()
 
 	case map[string]interface{}:
 		sl := make([]string, 0)
-		for _, val := range value.(map[string]interface{}) {
+		for _, val := range v {
 			sl = append(sl, a.Quote(val))
 		}
 
@@ -456,7 +479,6 @@ func (a *DefaultAdapter) Quote(value interface{}) string {
 		return strings.Join(sl, ", ")
 
 	case []int:
-		v := value.([]int)
 		sl := make([]string, len(v))
 		i := 0
 		for _, val := range v {
@@ -467,7 +489,6 @@ func (a *DefaultAdapter) Quote(value interface{}) string {
 		return strings.Join(sl, ", ")
 
 	case []int64:
-		v := value.([]int64)
 		sl := make([]string, len(v))
 		i := 0
 		for _, val := range v {
@@ -478,7 +499,6 @@ func (a *DefaultAdapter) Quote(value interface{}) string {
 		return strings.Join(sl, ", ")
 
 	case []int32:
-		v := value.([]int32)
 		sl := make([]string, len(v))
 		i := 0
 		for _, val := range v {
@@ -489,7 +509,6 @@ func (a *DefaultAdapter) Quote(value interface{}) string {
 		return strings.Join(sl, ", ")
 
 	case []float32:
-		v := value.([]float32)
 		sl := make([]string, len(v))
 		i := 0
 		for _, val := range v {
@@ -500,7 +519,6 @@ func (a *DefaultAdapter) Quote(value interface{}) string {
 		return strings.Join(sl, ", ")
 
 	case []float64:
-		v := value.([]float64)
 		sl := make([]string, len(v))
 		i := 0
 		for _, val := range v {
@@ -511,34 +529,34 @@ func (a *DefaultAdapter) Quote(value interface{}) string {
 		return strings.Join(sl, ", ")
 
 	case int:
-		return strconv.Itoa(value.(int))
+		return strconv.Itoa(v)
 	case int8:
-		return strconv.Itoa(int(value.(int8)))
+		return strconv.Itoa(int(v))
 	case int16:
-		return strconv.Itoa(int(value.(int16)))
+		return strconv.Itoa(int(v))
 	case int32:
-		return strconv.Itoa(int(value.(int32)))
+		return strconv.Itoa(int(v))
 	case int64:
-		return strconv.Itoa(int(value.(int64)))
+		return strconv.Itoa(int(v))
 	case uint:
-		return strconv.Itoa(int(value.(uint)))
+		return strconv.Itoa(int(v))
 	case uint8:
-		return strconv.Itoa(int(value.(uint8)))
+		return strconv.Itoa(int(v))
 	case uint16:
-		return strconv.Itoa(int(value.(uint16)))
+		return strconv.Itoa(int(v))
 	case uint32:
-		return strconv.Itoa(int(value.(uint32)))
+		return strconv.Itoa(int(v))
 	case uint64:
-		return strconv.Itoa(int(value.(uint64)))
+		return strconv.Itoa(int(v))
 
 	case float32:
-		return fmt.Sprintf("%f", value.(float32))
+		return fmt.Sprintf("%f", v)
 
 	case float64:
-		return fmt.Sprintf("%f", value.(float64))
+		return fmt.Sprintf("%f", v)
 
 	case string:
-		return a.quoteString(value.(string))
+		return a.quoteString(v)
 	}
 
 	return ""
@@ -561,19 +579,18 @@ func (a *DefaultAdapter) QuoteIdentifierAs(ident interface{}, alias string, auto
 	literals := make([]string, 0)
 	idents := make([]interface{}, 0)
 
-	switch ident.(type) {
+	switch v := ident.(type) {
 	case Select:
 		quoted = "(" + ident.(Select).Assemble() + ")"
 
 	case *SQLExpr:
-		quoted = ident.(*SQLExpr).ToString()
+		quoted = v.ToString()
 
 	case string:
 		functions := make([]string, 0)
 		declarations := make([]string, 0)
 		initialIdent := ident.(string)
 
-		v := ident.(string)
 		if find := RegexpSingleQuote.FindString(v); find != "" {
 			literals = append(literals, find)
 			reg, err := regexp.Compile(find)
@@ -599,24 +616,23 @@ func (a *DefaultAdapter) QuoteIdentifierAs(ident interface{}, alias string, auto
 		if len(idents) > 0 {
 			segments := make([]string, 0)
 			for _, segment := range idents {
-				switch segment.(type) {
+				switch v := segment.(type) {
 				case Select:
-					segments = append(segments, "("+segment.(Select).Assemble()+")")
+					segments = append(segments, "("+v.Assemble()+")")
 
 				case *SQLExpr:
-					segments = append(segments, segment.(*SQLExpr).ToString())
+					segments = append(segments, v.ToString())
 
 				case string:
 					split := []string{}
 					spliters := []string{}
-					subsplit := [][]string{}
 					for _, spliter := range a.Spliters {
 						spliters = append(spliters, regexp.QuoteMeta(spliter))
 					}
 
 					reg, err := regexp.Compile(`(?i)([^` + strings.Join(spliters, "") + `]*)([` + strings.Join(spliters, "]|[") + `]+)([^` + strings.Join(spliters, "") + `]*)`)
 					if err == nil {
-						subsplit = reg.FindAllStringSubmatch(segment.(string), -1)
+						subsplit := reg.FindAllStringSubmatch(v, -1)
 						for _, subsplitmatch := range subsplit {
 							for subkey, match := range subsplitmatch {
 								if subkey == 0 {
@@ -632,7 +648,7 @@ func (a *DefaultAdapter) QuoteIdentifierAs(ident interface{}, alias string, auto
 					if len(split) > 0 {
 						segments = append(segments, a.quoteIdentifierSpec(split, auto))
 					} else {
-						cleanSegment := strings.ReplaceAll(segment.(string), a.QuoteIdentifierSymbol(), "")
+						cleanSegment := strings.ReplaceAll(v, a.QuoteIdentifierSymbol(), "")
 						segments = append(segments, a.quoteIdentifier(cleanSegment, auto))
 					}
 				}
@@ -708,8 +724,13 @@ func (a *DefaultAdapter) FoldCase(s string) string {
 	return s
 }
 
+// WhereExpresion converts cond into sql where string
+func (a *DefaultAdapter) WhereExpresion(cond interface{}) string {
+	return a.whereExpr(cond)
+}
+
 // PrepareRowset parses sql.Rows into mapstructure slice
-func (a *DefaultAdapter) PrepareRowset(rows *sql.Rows) ([]map[string]interface{}, error) {
+func (a DefaultAdapter) PrepareRowset(rows *sql.Rows) ([]map[string]interface{}, error) {
 	columns, err := rows.ColumnTypes()
 	if err != nil {
 		return nil, errors.Wrap(err, "Database prepare result Error")
@@ -717,7 +738,11 @@ func (a *DefaultAdapter) PrepareRowset(rows *sql.Rows) ([]map[string]interface{}
 
 	scanArgs := make([]interface{}, len(columns))
 	for i := range columns {
-		scanArgs[i] = a.reference(columns[i].ScanType())
+		if _, ok := columns[i].Nullable(); !ok {
+			scanArgs[i] = a.ReferenceNulls(columns[i].ScanType())
+		} else {
+			scanArgs[i] = a.Reference(columns[i].ScanType())
+		}
 	}
 
 	data := make([]map[string]interface{}, 0)
@@ -728,7 +753,7 @@ func (a *DefaultAdapter) PrepareRowset(rows *sql.Rows) ([]map[string]interface{}
 
 		rowdata := make(map[string]interface{})
 		for i := range columns {
-			rowdata[columns[i].Name()] = a.dereference(scanArgs[i])
+			rowdata[columns[i].Name()] = a.Dereference(scanArgs[i])
 		}
 		data = append(data, rowdata)
 	}
@@ -753,7 +778,11 @@ func (a *DefaultAdapter) PrepareRow(rows *sql.Rows) (map[string]interface{}, err
 
 	scanArgs := make([]interface{}, len(columns))
 	for i := range columns {
-		scanArgs[i] = a.reference(columns[i].ScanType())
+		if _, ok := columns[i].Nullable(); !ok {
+			scanArgs[i] = a.ReferenceNulls(columns[i].ScanType())
+		} else {
+			scanArgs[i] = a.Reference(columns[i].ScanType())
+		}
 	}
 
 	data := make(map[string]interface{})
@@ -770,210 +799,14 @@ func (a *DefaultAdapter) PrepareRow(rows *sql.Rows) (map[string]interface{}, err
 	}
 
 	for i := range columns {
-		data[columns[i].Name()] = a.dereference(scanArgs[i])
+		data[columns[i].Name()] = a.Dereference(scanArgs[i])
 	}
 
 	return data, nil
 }
 
-// PrepareRow parses a RawBytes into map structure
-/*func (a *DefaultAdapter) PrepareRow(row []sql.RawBytes, columns []*sql.ColumnType) (data map[string]interface{}, err error) {
-	err = nil
-	data = make(map[string]interface{})
-	for i, col := range row {
-		if columns[i].ScanType() == reflect.TypeOf(sql.NullBool{}) {
-			v := sql.NullBool{}
-			v.Scan(string(col))
-			if v.Valid {
-				if v.Valid {
-					data[columns[i].Name()] = v.Bool
-				} else {
-					data[columns[i].Name()] = false
-				}
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf(sql.NullInt64{}) {
-			v := sql.NullInt64{}
-			v.Scan(string(col))
-			if v.Valid {
-				if v.Valid {
-					data[columns[i].Name()] = v.Int64
-				} else {
-					data[columns[i].Name()] = 0
-				}
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf(sql.NullFloat64{}) {
-			v := sql.NullFloat64{}
-			v.Scan(string(col))
-			if v.Valid {
-				if v.Valid {
-					data[columns[i].Name()] = v.Float64
-				} else {
-					data[columns[i].Name()] = 0.0
-				}
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf(sql.NullString{}) {
-			v := sql.NullString{}
-			v.Scan(string(col))
-			if v.Valid {
-				if v.Valid {
-					data[columns[i].Name()] = v.String
-				} else {
-					data[columns[i].Name()] = ""
-				}
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf(sql.NullTime{}) {
-			v := sql.NullTime{}
-			v.Scan(string(col))
-			if v.Valid {
-				if v.Valid {
-					t := v.Time
-					data[columns[i].Name()] = t.Local()
-				} else {
-					data[columns[i].Name()] = time.Time{}
-				}
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf(sql.RawBytes{}) {
-			data[columns[i].Name()] = string(col)
-		} else if columns[i].ScanType() == reflect.TypeOf((int)(0)) {
-			if len(col) == 0 {
-				data[columns[i].Name()] = 0
-			} else {
-				data[columns[i].Name()], err = strconv.ParseInt(string(col), 10, 0)
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf((int8)(0)) {
-			if len(col) == 0 {
-				data[columns[i].Name()] = int8(0)
-			} else {
-				data[columns[i].Name()], err = strconv.ParseInt(string(col), 10, 8)
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf((int16)(0)) {
-			if len(col) == 0 {
-				data[columns[i].Name()] = int16(0)
-			} else {
-				data[columns[i].Name()], err = strconv.ParseInt(string(col), 10, 16)
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf((int32)(0)) {
-			if len(col) == 0 {
-				data[columns[i].Name()] = int32(0)
-			} else {
-				data[columns[i].Name()], err = strconv.ParseInt(string(col), 10, 32)
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf((int64)(0)) {
-			if len(col) == 0 {
-				data[columns[i].Name()] = int64(0)
-			} else {
-				data[columns[i].Name()], err = strconv.ParseInt(string(col), 10, 64)
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf((float32)(0)) {
-			if len(col) == 0 {
-				data[columns[i].Name()] = float32(0)
-			} else {
-				data[columns[i].Name()], err = strconv.ParseFloat(string(col), 32)
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf((float64)(0)) {
-			if len(col) == 0 {
-				data[columns[i].Name()] = float64(0)
-			} else {
-				data[columns[i].Name()], err = strconv.ParseFloat(string(col), 64)
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf(time.Time{}) {
-			if string(col) == "" {
-				data[columns[i].Name()] = time.Time{}
-			} else {
-				var t time.Time
-				t, err = time.Parse("2006-01-02T15:04:05Z", string(col))
-				data[columns[i].Name()] = t.Local()
-			}
-		} else if columns[i].ScanType() == reflect.TypeOf(true) {
-			data[columns[i].Name()], err = strconv.ParseBool(string(col))
-		} else {
-			data[columns[i].Name()] = string(col)
-		}
-
-		if err != nil {
-			return data, err
-		}
-	}
-
-	return data, err
-}*/
-
-// quotes identifier
-func (a *DefaultAdapter) quoteIdentifier(ident string, auto bool) string {
-	if !auto || a.AutoQuoteIdentifiers {
-		q := a.QuoteIdentifierSymbol()
-		return q + strings.ReplaceAll(ident, q, q+q) + q
-	}
-
-	return ident
-}
-
-// quotes specifics
-func (a *DefaultAdapter) quoteIdentifierSpec(idents []string, auto bool) string {
-	if !auto || a.AutoQuoteIdentifiers {
-		for key, segment := range idents {
-			if !utils.InSSlice(strings.TrimSpace(segment), a.Unquoteable) && segment != "" && segment != " " {
-				segment = strings.ReplaceAll(segment, a.QuoteIdentifierSymbol(), "")
-				if segment[0:1] == `:` || segment[0:1] == `'` || segment[0:1] == `\\` || segment[0:1] == `{` || utils.InSSlice(segment[0:1], []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}) {
-					idents[key] = segment
-				} else {
-					idents[key] = a.quoteIdentifier(segment, auto)
-				}
-			} else {
-				idents[key] = segment
-			}
-		}
-	}
-
-	return strings.Join(idents, "")
-}
-
-// quoteString qoutes string value
-func (a *DefaultAdapter) quoteString(value string) string {
-	return `'` + utils.Addslashes(value) + `'`
-}
-
-// Convert an array, string, or Expr object into a string to put in a WHERE clause
-func (a *DefaultAdapter) whereExpr(cond interface{}) string {
-	if cond == nil {
-		return ""
-	}
-
-	where := make([]string, 0)
-	switch cond.(type) {
-	case string:
-		where = append(where, "( "+cond.(string)+" )")
-
-	case []string:
-		for _, term := range cond.([]string) {
-			where = append(where, "( "+term+" )")
-		}
-
-	case map[string]interface{}:
-		for cnd, term := range cond.(map[string]interface{}) {
-			where = append(where, "( "+a.QuoteInto(cnd, term, -1)+" )")
-		}
-
-	case []interface{}:
-		for _, term := range cond.([]interface{}) {
-			switch term.(type) {
-			case *SQLExpr:
-				where = append(where, "( "+term.(*SQLExpr).ToString()+" )")
-
-			case Select:
-				where = append(where, "( "+term.(Select).Assemble()+" )")
-
-			case string:
-				where = append(where, "( "+term.(string)+" )")
-			}
-		}
-	}
-
-	return strings.Join(where, " AND ")
-}
-
-// returns a value from pointer
-func (a *DefaultAdapter) dereference(v interface{}) interface{} {
+// Dereference returns a value from pointer
+func (a *DefaultAdapter) Dereference(v interface{}) interface{} {
 	switch t := v.(type) {
 	case *bool:
 		return *t
@@ -1005,13 +838,19 @@ func (a *DefaultAdapter) dereference(v interface{}) interface{} {
 		return t.Float64
 	case *time.Time:
 		return *t
+	case *sql.NullTime:
+		if t.Valid {
+			return t.Time
+		}
+
+		return nil
 	default:
 		return nil
 	}
 }
 
-// creates a pointer to value
-func (a *DefaultAdapter) reference(tp reflect.Type) interface{} {
+// Reference creates a pointer to value
+func (a *DefaultAdapter) Reference(tp reflect.Type) interface{} {
 	if tp == reflect.TypeOf(sql.NullBool{}) {
 		var v sql.NullBool
 		return &v
@@ -1061,4 +900,135 @@ func (a *DefaultAdapter) reference(tp reflect.Type) interface{} {
 		var v string
 		return &v
 	}
+}
+
+// ReferenceNulls creates a pointer to nullable value
+func (a *DefaultAdapter) ReferenceNulls(tp reflect.Type) interface{} {
+	if tp == reflect.TypeOf(sql.NullBool{}) {
+		var v sql.NullBool
+		return &v
+	} else if tp == reflect.TypeOf(sql.NullInt64{}) {
+		var v sql.NullInt64
+		return &v
+	} else if tp == reflect.TypeOf(sql.NullFloat64{}) {
+		var v sql.NullFloat64
+		return &v
+	} else if tp == reflect.TypeOf(sql.NullString{}) {
+		var v sql.NullString
+		return &v
+	} else if tp == reflect.TypeOf(sql.NullTime{}) {
+		var v sql.NullTime
+		return &v
+	} else if tp == reflect.TypeOf(sql.RawBytes{}) {
+		var v []byte
+		return &v
+	} else if tp == reflect.TypeOf((int)(0)) {
+		var v sql.NullInt64
+		return &v
+	} else if tp == reflect.TypeOf((int8)(0)) {
+		var v sql.NullInt64
+		return &v
+	} else if tp == reflect.TypeOf((int16)(0)) {
+		var v sql.NullInt64
+		return &v
+	} else if tp == reflect.TypeOf((int32)(0)) {
+		var v sql.NullInt64
+		return &v
+	} else if tp == reflect.TypeOf((int64)(0)) {
+		var v sql.NullInt64
+		return &v
+	} else if tp == reflect.TypeOf((float32)(0)) {
+		var v sql.NullFloat64
+		return &v
+	} else if tp == reflect.TypeOf((float64)(0)) {
+		var v sql.NullFloat64
+		return &v
+	} else if tp == reflect.TypeOf(time.Time{}) {
+		var v sql.NullTime
+		return &v
+	} else if tp == reflect.TypeOf(true) {
+		var v sql.NullBool
+		return &v
+	} else {
+		var v sql.NullString
+		return &v
+	}
+}
+
+// quotes identifier
+func (a *DefaultAdapter) quoteIdentifier(ident string, auto bool) string {
+	if ident == "" || ident == " " {
+		return ""
+	}
+
+	if !auto || a.AutoQuoteIdentifiers {
+		q := a.QuoteIdentifierSymbol()
+		return q + strings.ReplaceAll(ident, q, q+q) + q
+	}
+
+	return ident
+}
+
+// quotes specifics
+func (a *DefaultAdapter) quoteIdentifierSpec(idents []string, auto bool) string {
+	if !auto || a.AutoQuoteIdentifiers {
+		for key, segment := range idents {
+			if !utils.InSSlice(strings.TrimSpace(segment), a.Unquoteable) && segment != "" && segment != " " {
+				segment = strings.ReplaceAll(segment, a.QuoteIdentifierSymbol(), "")
+				if segment[0:1] == `:` || segment[0:1] == `'` || segment[0:1] == `\\` || segment[0:1] == `{` || utils.InSSlice(segment[0:1], []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}) {
+					idents[key] = segment
+				} else {
+					idents[key] = a.quoteIdentifier(segment, auto)
+				}
+			} else {
+				idents[key] = segment
+			}
+		}
+	}
+
+	return strings.Join(idents, "")
+}
+
+// quoteString qoutes string value
+func (a *DefaultAdapter) quoteString(value string) string {
+	return `'` + utils.Addslashes(value) + `'`
+}
+
+// Convert an array, string, or Expr object into a string to put in a WHERE clause
+func (a *DefaultAdapter) whereExpr(cond interface{}) string {
+	if cond == nil {
+		return ""
+	}
+
+	where := make([]string, 0)
+	switch v := cond.(type) {
+	case string:
+		where = append(where, "( "+v+" )")
+
+	case []string:
+		for _, term := range v {
+			where = append(where, "( "+term+" )")
+		}
+
+	case map[string]interface{}:
+		for cnd, term := range v {
+			where = append(where, "( "+a.QuoteInto(cnd, term, -1)+" )")
+		}
+
+	case []interface{}:
+		for _, term := range v {
+			switch t := term.(type) {
+			case *SQLExpr:
+				where = append(where, "( "+t.ToString()+" )")
+
+			case Select:
+				where = append(where, "( "+t.Assemble()+" )")
+
+			case string:
+				where = append(where, "( "+t+" )")
+			}
+		}
+	}
+
+	return strings.Join(where, " AND ")
 }

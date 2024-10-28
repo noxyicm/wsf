@@ -10,12 +10,17 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 )
 
 var (
-	maxParams = 100
+	maxParams        = 100
+	acceptsHTMLRegex = regexp.MustCompile(ApplicationHTML)
+	acceptsXMLRegex  = regexp.MustCompile(ApplicationXML)
+	acceptsJSONRegex = regexp.MustCompile(ApplicationJSON)
+	acceptsYAMLRegex = regexp.MustCompile(ApplicationYAML)
 )
 
 // WSFRequest operates the http request header, data, cookie and body.

@@ -176,6 +176,7 @@ func NewApplication(environment string, options interface{}, override []string) 
 	}
 	app.options = acfg
 
+	config.AppName = acfg.Name
 	config.AppEnv = acfg.Environment
 	SetRootPath(acfg.RootPath)
 	err = os.Chdir(acfg.RootPath)

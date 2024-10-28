@@ -2,13 +2,16 @@ package request
 
 import (
 	"context"
+	"encoding/json"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"wsf/application/file"
 	"wsf/controller/request/attributes"
+	"wsf/errors"
 	"wsf/utils"
 )
 
@@ -16,9 +19,12 @@ const (
 	defaultMaxMemory = 1 << 26 // 64 MB
 	contentNone      = iota + 900
 	contentStream
+	contentJSON
 	contentMultipart
 	contentFormData
 )
+
+var braketsPattern = regexp.MustCompile(`\[(.)+\]`)
 
 // HTTP maps net/http requests to PSR7 compatible structure and managed state of temporary uploaded files
 type HTTP struct {
@@ -74,9 +80,17 @@ func (r *HTTP) ParseMultipart(rqs *http.Request) error {
 				return err
 			}
 
+			var key string
 			for k, v := range rqs.MultipartForm.File {
 				for i, f := range v {
-					t.Push(k+"["+strconv.Itoa(i)+"]", file.NewUpload(f))
+					m := braketsPattern.FindStringSubmatch(k)
+					if len(m) > 0 {
+						key = k
+					} else {
+						key = k + "[" + strconv.Itoa(i) + "]"
+					}
+
+					t.Push(key, file.NewUpload(f))
 				}
 			}
 
@@ -84,10 +98,24 @@ func (r *HTTP) ParseMultipart(rqs *http.Request) error {
 				return err
 			}
 
-			for k, v := range rqs.MultipartForm.File {
+			for _, k := range t.Uploaded() {
+				f := make([]map[string]interface{}, 0)
+				if fd := t.Get(k); fd != nil {
+					f = append(f, map[string]interface{}{
+						"name":    fd.Name,
+						"size":    fd.Size,
+						"mime":    fd.Mime,
+						"tmpName": fd.TempFilename,
+					})
+
+					r.FormData.Push(k, f)
+				}
+			}
+
+			/*for k, v := range rqs.MultipartForm.File {
 				f := make([]map[string]interface{}, len(v))
 				for i := range v {
-					if fd := t.Get(k + "[" + strconv.Itoa(i) + "]"); fd != nil {
+					if fd := t.Get(key); fd != nil {
 						f[i] = map[string]interface{}{
 							"name":    fd.Name,
 							"size":    fd.Size,
@@ -98,7 +126,7 @@ func (r *HTTP) ParseMultipart(rqs *http.Request) error {
 				}
 
 				r.FormData.Push(k, f)
-			}
+			}*/
 		}
 	}
 
@@ -112,6 +140,21 @@ func (r *HTTP) ParseData(rqs *http.Request) error {
 		for k, v := range rqs.PostForm {
 			r.FormData.Push(k, v)
 		}
+	}
+
+	r.Body = r.FormData
+	return nil
+}
+
+// ParseJSONData parses JSON request into data tree
+func (r *HTTP) ParseJSONData(encoded []byte) error {
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(encoded, &m); err != nil {
+		return errors.Wrap(err, "Unable to parse request")
+	}
+
+	for k, v := range m {
+		r.FormData.Push(k, v)
 	}
 
 	r.Body = r.FormData
@@ -240,6 +283,162 @@ func (r *HTTP) IsPatch() bool {
 	return false
 }
 
+// PostParam returns post parameter
+func (r *Request) PostParam(name string) interface{} {
+	if b, ok := r.Body.(utils.DataTree); ok {
+		return b.Get(name)
+	}
+
+	return nil
+}
+
+// PostParamString returns post parameter as string
+func (r *Request) PostParamString(name string) string {
+	return r.PostParamStringDefault(name, "")
+}
+
+// PostParamInt returns post parameter as int
+func (r *Request) PostParamInt(name string) int {
+	return r.PostParamIntDefault(name, 0)
+}
+
+// PostParamBool returns post parameter as bool
+func (r *Request) PostParamBool(name string) bool {
+	return r.PostParamBoolDefault(name, false)
+}
+
+// PostParamStringDefault returns post parameter as string or d
+func (r *Request) PostParamStringDefault(name string, d string) string {
+	if b, ok := r.Body.(utils.DataTree); ok {
+		vi := b.Get(name)
+		switch v := vi.(type) {
+		case []string:
+			if len(v) > 0 {
+				return v[0]
+			}
+			break
+
+		case string:
+			return v
+		}
+	}
+
+	return d
+}
+
+// PostParamIntDefault returns post parameter as int or d
+func (r *Request) PostParamIntDefault(name string, d int) int {
+	if b, ok := r.Body.(utils.DataTree); ok {
+		vi := b.Get(name)
+		switch v := vi.(type) {
+		case []string:
+			if len(v) > 0 {
+				if ret, err := strconv.Atoi(v[0]); err == nil {
+					return ret
+				}
+			}
+			break
+
+		case string:
+			if ret, err := strconv.Atoi(v); err == nil {
+				return ret
+			}
+			break
+
+		case []float64:
+			if len(v) > 0 {
+				return int(v[0])
+			}
+			break
+
+		case float64:
+			return int(v)
+		}
+	}
+
+	return d
+}
+
+// PostParamBoolDefault returns post parameter as bool or d
+func (r *Request) PostParamBoolDefault(name string, d bool) bool {
+	if b, ok := r.Body.(utils.DataTree); ok {
+		vi := b.Get(name)
+		switch v := vi.(type) {
+		case []string:
+			if len(v) > 0 {
+				if ret, err := strconv.ParseBool(v[0]); err == nil {
+					return ret
+				}
+			}
+			break
+
+		case string:
+			if ret, err := strconv.ParseBool(v); err == nil {
+				return ret
+			}
+			break
+		}
+	}
+
+	return d
+}
+
+// PostParamFloatDefault returns post parameter as int or d
+func (r *Request) PostParamFloatDefault(name string, d float64) float64 {
+	if b, ok := r.Body.(utils.DataTree); ok {
+		vi := b.Get(name)
+		switch v := vi.(type) {
+		case []string:
+			if len(v) > 0 {
+				if ret, err := strconv.ParseFloat(v[0], 64); err == nil {
+					return ret
+				}
+			}
+			break
+
+		case string:
+			if ret, err := strconv.ParseFloat(v, 64); err == nil {
+				return ret
+			}
+			break
+		}
+	}
+
+	return d
+}
+
+// PostParamMapDefault returns post parameter as int or d
+func (r *Request) PostParamMapDefault(name string, d map[string]interface{}) map[string]interface{} {
+	if b, ok := r.Body.(utils.DataTree); ok {
+		switch v := b.Get(name).(type) {
+		case []map[string]interface{}:
+			if len(v) > 0 {
+				return v[0]
+			}
+
+		case map[string]interface{}:
+			return v
+
+		case utils.DataTree:
+			return utils.MapFromDataTree(v)
+		}
+	}
+
+	return d
+}
+
+// PostParams returns post parameters
+func (r *Request) PostParams() map[string]interface{} {
+	p := make(map[string]interface{})
+	if b, ok := r.Body.(utils.DataTree); ok {
+		for k, v := range b {
+			p[k] = v
+		}
+	}
+
+	return p
+}
+
 // AddHeader adds a header to request
 func (r *HTTP) AddHeader(name string, value string) {
 	r.Headers.Add(name, value)
@@ -273,6 +472,10 @@ func (r *HTTP) contentType() int {
 
 	if strings.Contains(ct, "multipart/form-data") {
 		return contentMultipart
+	}
+
+	if strings.Contains(ct, "application/json") {
+		return contentJSON
 	}
 
 	return contentStream
@@ -359,19 +562,31 @@ func NewHTTPRequest(r *http.Request, cfg *file.Config, proxyed bool) (ri Interfa
 		req.Body, err = ioutil.ReadAll(r.Body)
 		return req, err
 
+	case contentJSON:
+		bd, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return req, errors.Wrap(err, "Unable to parse request")
+		}
+
+		if err = req.ParseJSONData(bd); err != nil {
+			return req, errors.Wrap(err, "Unable to parse request")
+		}
+		break
+
 	case contentMultipart:
 		if err = r.ParseMultipartForm(defaultMaxMemory); err != nil {
 			return nil, err
 		}
 
 		req.ParseMultipart(r)
-		fallthrough
+		//fallthrough
 	case contentFormData:
 		if err = r.ParseForm(); err != nil {
 			return nil, err
 		}
 
 		req.ParseData(r)
+		break
 	}
 
 	req.Parsed = true

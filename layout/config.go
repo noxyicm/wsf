@@ -38,8 +38,8 @@ func (c *Config) Defaults() error {
 	c.Layout = "layout"
 	c.ViewScriptPath = "layouts/"
 	c.ViewSuffix = "gohtml"
-	c.HelperName = TYPELayoutActionHelper
-	c.PluginName = TYPELayoutPlugin
+	c.HelperName = TYPEHelperLayout
+	c.PluginName = TYPEPluginLayout
 
 	return nil
 }

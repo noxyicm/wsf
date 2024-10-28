@@ -3,7 +3,6 @@ package session
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
@@ -21,8 +20,10 @@ const (
 	// TYPESessionManagerDefault is a type of session manager
 	TYPESessionManagerDefault = "default"
 
-	IDKey = "sessionID"
-	Key   = "session"
+	IDKey        = "sessionID"
+	Key          = "session"
+	AutostartKey = "autostart"
+	SetCookieKey = "setcookie"
 )
 
 var (
@@ -117,7 +118,6 @@ func (m *Manager) Init(options *ManagerConfig) (bool, error) {
 	if err != nil {
 		return false, errors.Wrap(err, "[DefaultSessionManager] Storage creation error")
 	}
-
 	m.Storage = cch
 
 	if ok, err := m.Storage.Init(ccfg); !ok {
@@ -143,6 +143,10 @@ func (m *Manager) IsStarted() bool {
 
 // GetSID returns a session id if registered
 func (m *Manager) GetSID(rqs request.Interface) (string, error) {
+	if sid := rqs.Context().Value(m.Opts.SessionName); sid != nil {
+		return sid.(string), nil
+	}
+
 	if sid := rqs.Cookie(m.Opts.SessionName); sid != "" {
 		return url.QueryUnescape(sid)
 	}
@@ -179,6 +183,16 @@ func (m *Manager) SessionStart(rqs request.Interface, rsp response.Interface) (I
 		return nil, "", errors.New("[Session] Manager is not initialized")
 	}
 
+	autostart := m.Opts.SessionAutostart
+	if v := rqs.Context().Value(AutostartKey); v != nil {
+		autostart = v.(bool)
+	}
+
+	setcookie := m.Opts.EnableSetCookie
+	if v := rqs.Context().Value(SetCookieKey); v != nil {
+		setcookie = v.(bool)
+	}
+
 	sid, err := m.GetSID(rqs)
 	if err != nil {
 		sid, err = m.NewSID()
@@ -203,14 +217,16 @@ func (m *Manager) SessionStart(rqs request.Interface, rsp response.Interface) (I
 				return nil, "", errors.Wrap(err, "[Session] Unable to start session")
 			}
 		}
-	} else {
+	} else if autostart {
 		sid, err = m.NewSID()
 		if err != nil {
 			return nil, "", errors.Wrap(err, "[Session] Unable to start session")
 		}
+	} else {
+		return nil, "", nil
 	}
 
-	if m.Opts.EnableSetCookie {
+	if setcookie {
 		cookie := &http.Cookie{
 			Name:     m.Opts.SessionName,
 			Value:    url.QueryEscape(sid),
@@ -245,7 +261,6 @@ func (m *Manager) SessionClose(sid string) error {
 
 	if s, ok := m.Sessions.Load(sid); ok {
 		encoded, err := s.(Interface).Marshal()
-		fmt.Println(string(encoded))
 		if err != nil {
 			return errors.Wrap(err, "Unable to save sassion")
 		}

@@ -30,6 +30,7 @@ var errNoConfig = errors.New("No configuration has been provided")
 type Registry interface {
 	Register(name string, typ string, resource Interface)
 	Init(cfg config.Config) error
+	Setup() error
 	Has(name string) bool
 	Get(name string) (resource Interface, status int)
 	Listen(l func(event int, ctx interface{}))
@@ -43,9 +44,10 @@ func NewRegistry() Registry {
 }
 
 type resourceregistry struct {
-	resources []*bus
-	lsn       func(event int, ctx interface{})
-	mu        sync.Mutex
+	resources   []*bus
+	initialized bool
+	lsn         func(event int, ctx interface{})
+	mu          sync.Mutex
 }
 
 // Register add new resource to the registry under given name
@@ -120,6 +122,16 @@ func (r *resourceregistry) Init(cfg config.Config) error {
 		}
 	}
 
+	r.initialized = true
+	return nil
+}
+
+// Setup setups all underlying resources
+func (r *resourceregistry) Setup() error {
+	if !r.initialized {
+		return errors.New("Resource registry is not initialized")
+	}
+
 	for _, rs := range r.resources {
 		if rs.getStatus() == StatusInit {
 			if ok, err := r.setupResource(rs.resource); err != nil {
@@ -190,7 +202,7 @@ func (r *resourceregistry) initResource(rs interface{}, segment config.Config) (
 		return true, nil
 	}
 
-	if err := r.verifySignature(m); err != nil {
+	if err := r.verifyInitSignature(m); err != nil {
 		fmt.Println(err)
 		return false, err
 	}
@@ -217,7 +229,7 @@ func (r *resourceregistry) setupResource(rs interface{}) (bool, error) {
 		return true, nil
 	}
 
-	if err := r.verifySignature(m); err != nil {
+	if err := r.verifySetupSignature(m); err != nil {
 		return false, err
 	}
 
@@ -282,8 +294,8 @@ func (r *resourceregistry) resolveValues(w interface{}, m reflect.Method, cfg co
 	return
 }
 
-// verifySignature checks if Init method has valid signature
-func (r *resourceregistry) verifySignature(m reflect.Method) error {
+// verifyInitSignature checks if Init method has valid signature
+func (r *resourceregistry) verifyInitSignature(m reflect.Method) error {
 	if m.Type.NumOut() != 2 {
 		return errors.New("Method Init must have exact 2 return values")
 	}
@@ -294,6 +306,23 @@ func (r *resourceregistry) verifySignature(m reflect.Method) error {
 
 	if !m.Type.Out(1).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 		return errors.New("Second return value of Init method value must be error type")
+	}
+
+	return nil
+}
+
+// verifySetupSignature checks if Init method has valid signature
+func (r *resourceregistry) verifySetupSignature(m reflect.Method) error {
+	if m.Type.NumOut() != 2 {
+		return errors.New("Method Setup must have exact 2 return values")
+	}
+
+	if m.Type.Out(0).Kind() != reflect.Bool {
+		return errors.New("First return value of Setup method must be bool type")
+	}
+
+	if !m.Type.Out(1).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+		return errors.New("Second return value of Setup method value must be error type")
 	}
 
 	return nil

@@ -47,7 +47,7 @@ func (b *File) Load(id string, testCacheValidity bool) ([]byte, error) {
 	}
 	defer fd.Close()
 
-	fi, err := os.Stat(filePath)
+	fi, err := fd.Stat()
 	if err != nil {
 		return nil, errors.Wrapf(err, "load failed for file '%s'", filePath)
 	}

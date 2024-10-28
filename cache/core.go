@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math/rand"
 	"regexp"
+	"sync"
 	"time"
 	"wsf/cache/backend"
 	"wsf/config"
@@ -31,7 +32,7 @@ type Interface interface {
 	Init(options *Config) (bool, error)
 	Enabled() bool
 	Load(id string, testCacheValidity bool) ([]byte, bool)
-	Read(id string, object *interface{}, testCacheValidity bool) bool
+	Read(id string, object interface{}, testCacheValidity bool) bool
 	Test(id string) bool
 	Save(data []byte, id string, tags []string, specificLifetime int64) bool
 	Remove(id string) bool
@@ -47,6 +48,7 @@ type Core struct {
 	ExtendedBackend bool
 	lastError       error
 	lastID          string
+	mur             sync.RWMutex
 }
 
 // Priority returns resource initialization priority
@@ -58,11 +60,13 @@ func (c *Core) Priority() int {
 func (c *Core) Init(options *Config) (bool, error) {
 	c.Options = options
 
-	lg := registry.GetResource("syslog")
-	if lg == nil {
-		return false, errors.New("Log resource is not configured")
+	if options.Logger == nil {
+		lg := registry.GetResource("syslog")
+		if lg == nil {
+			return false, errors.New("Log resource is not configured")
+		}
+		c.Logger = lg.(*log.Log)
 	}
-	c.Logger = lg.(*log.Log)
 
 	return c.Backend.Init(c.Options.Backend)
 }
@@ -79,7 +83,11 @@ func (c *Core) Load(id string, testCacheValidity bool) ([]byte, bool) {
 	}
 
 	id = c.prepareID(id)
+
+	c.mur.Lock()
 	c.lastID = id
+	c.mur.Unlock()
+
 	if err := c.validateIDOrTag(id); err != nil {
 		c.lastError = err
 		return nil, false
@@ -100,13 +108,17 @@ func (c *Core) Load(id string, testCacheValidity bool) ([]byte, bool) {
 }
 
 // Read loads data from cache and unmarshals it into object
-func (c *Core) Read(id string, object *interface{}, testCacheValidity bool) bool {
+func (c *Core) Read(id string, object interface{}, testCacheValidity bool) bool {
 	if !c.Options.Enable {
 		return false
 	}
 
 	id = c.prepareID(id)
+
+	c.mur.Lock()
 	c.lastID = id
+	c.mur.Unlock()
+
 	if err := c.validateIDOrTag(id); err != nil {
 		c.lastError = err
 		return false
@@ -138,7 +150,11 @@ func (c *Core) Test(id string) bool {
 	}
 
 	id = c.prepareID(id)
+
+	c.mur.Lock()
 	c.lastID = id
+	c.mur.Unlock()
+
 	if err := c.validateIDOrTag(id); err != nil {
 		c.lastError = err
 		return false
@@ -155,7 +171,9 @@ func (c *Core) Save(data []byte, id string, tags []string, specificLifetime int6
 	}
 
 	if id == "" {
+		c.mur.RLock()
 		id = c.lastID
+		c.mur.RUnlock()
 	} else {
 		id = c.prepareID(id)
 	}
@@ -310,14 +328,6 @@ func NewCore(cacheType string, options config.Config) (*Core, error) {
 		return nil, errors.Wrap(err, "[Core] Unable to create underliyng backend")
 	}
 	cc.Backend = adp
-
-	if cc.Logger == nil {
-		logResource := registry.GetResource("syslog")
-		if logResource == nil {
-			return nil, errors.New("Log resource is not provided and syslog is not avaliable")
-		}
-		cc.Logger = logResource.(*log.Log)
-	}
 
 	return cc, nil
 }

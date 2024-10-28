@@ -16,6 +16,9 @@ var (
 	// Verbose defines if
 	Verbose = false
 
+	// AppName holds application name
+	AppName = ""
+
 	// AppRootPath holds application root folder
 	AppRootPath = "/"
 
@@ -54,6 +57,7 @@ type Config interface {
 	GetTime(name string) time.Time
 	GetTimeDefault(name string, def time.Time) time.Time
 	GetStringMap(key string) map[string]interface{}
+	GetStringSlice(key string) []string
 	GetKeys() []string
 	GetAll() map[string]interface{}
 	Set(key string, value interface{}) error
@@ -165,6 +169,11 @@ func (c *Bridge) GetTimeDefault(key string, def time.Time) time.Time {
 // GetStringMap returns a map[string]interface{} value
 func (c *Bridge) GetStringMap(key string) map[string]interface{} {
 	return c.v.GetStringMap(key)
+}
+
+// GetStringSlice returns a []string value
+func (c *Bridge) GetStringSlice(key string) []string {
+	return c.v.GetStringSlice(key)
 }
 
 // GetKeys returns config keys

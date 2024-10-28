@@ -2,8 +2,7 @@ package rpc
 
 import (
 	"wsf/config"
-
-	"github.com/pkg/errors"
+	"wsf/errors"
 )
 
 const (
@@ -61,7 +60,11 @@ func (c *Config) ListenTo() string {
 
 // Address returns listen whole string
 func (c *Config) Address() string {
-	s := c.Host
+	s := ""
+	if c.Host != "127.0.0.1" && c.Host != "localhost" {
+		s = c.Host
+	}
+
 	if c.Port != "" {
 		s += ":" + c.Port
 	}

@@ -10,6 +10,7 @@ import (
 type ManagerConfig struct {
 	Type                    string `json:"type"`
 	Priority                int
+	SessionAutostart        bool                `json:"sessionAutostart"`
 	SessionName             string              `json:"sessionName"`
 	SessionIDLength         int                 `json:"sessionIDLength"`
 	SessionIDPrefix         string              `json:"sessionIDPrefix"`
@@ -65,6 +66,7 @@ func (c *ManagerConfig) Populate(cfg config.Config) error {
 func (c *ManagerConfig) Defaults() error {
 	c.Type = "default"
 	c.Priority = 15
+	c.SessionAutostart = false
 	c.SessionName = "WSFSESS"
 	c.EnableSetCookie = false
 	c.EnableSidInHTTPHeader = false

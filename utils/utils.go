@@ -110,6 +110,22 @@ func (d DataTree) Unmount(i []string) interface{} {
 	return nil
 }
 
+// MapFromDataTree recursievly converts DataTree to map
+func MapFromDataTree(d DataTree) map[string]interface{} {
+	m := make(map[string]interface{})
+	for key := range d {
+		switch v := d.Get(key).(type) {
+		case DataTree:
+			m[key] = MapFromDataTree(v)
+
+		default:
+			m[key] = v
+		}
+	}
+
+	return m
+}
+
 // Less determines wherethere a is less than b
 func Less(a, b interface{}) bool {
 	switch a.(type) {
@@ -338,42 +354,94 @@ func MapSSKeys(m map[string]string) []string {
 }
 
 // MapSMerge merges two maps with string keys
-func MapSMerge(c interface{}, b interface{}) map[string]interface{} {
-	a := make(map[string]interface{})
+func MapSMerge(a interface{}, b interface{}) map[string]interface{} {
+	c := make(map[string]interface{})
+	z := make(map[string]interface{})
+	x := make(map[string]interface{})
 
-	bV, bOk := b.(map[string]interface{})
-	cV, cOk := c.(map[string]interface{})
-	if cOk && bOk {
-		for key, value := range cV {
-			a[key] = value
+	switch v := a.(type) {
+	case map[string]string:
+		for key, val := range v {
+			z[key] = val
 		}
 
-		for key, value := range bV {
-			if _, ok := a[key]; ok {
-				if v, ok := a[key].(map[string]interface{}); ok {
-					a[key] = MapSMerge(v, value)
-				} else {
-					a[key] = value
-				}
+	case map[string]int:
+		for key, val := range v {
+			z[key] = val
+		}
+
+	case []interface{}:
+		for key, val := range v {
+			z[strconv.Itoa(key)] = val
+		}
+
+	case []string:
+		for key, val := range v {
+			z[strconv.Itoa(key)] = val
+		}
+
+	case []int:
+		for key, val := range v {
+			z[strconv.Itoa(key)] = val
+		}
+
+	case map[string]interface{}:
+		z = v
+
+	default:
+		z[strconv.Itoa(len(z))] = v
+	}
+
+	switch v := b.(type) {
+	case map[string]string:
+		for key, val := range v {
+			x[key] = val
+		}
+
+	case map[string]int:
+		for key, val := range v {
+			x[key] = val
+		}
+
+	case []interface{}:
+		for key, val := range v {
+			x[strconv.Itoa(key)] = val
+		}
+
+	case []string:
+		for key, val := range v {
+			x[strconv.Itoa(key)] = val
+		}
+
+	case []int:
+		for key, val := range v {
+			x[strconv.Itoa(key)] = val
+		}
+
+	case map[string]interface{}:
+		x = v
+
+	default:
+		x[strconv.Itoa(len(z))] = v
+	}
+
+	for key, value := range z {
+		c[key] = value
+	}
+
+	for key, value := range x {
+		if _, ok := c[key]; ok {
+			if v, ok := c[key].(map[string]interface{}); ok {
+				c[key] = MapSMerge(v, value)
 			} else {
-				a[key] = value
+				c[key] = value
 			}
-		}
-	} else if cOk {
-		for key, value := range cV {
-			a[key] = value
-		}
-
-		a[strconv.Itoa(len(a))] = b
-	} else if bOk {
-		a[strconv.Itoa(len(a))] = c
-
-		for key, value := range bV {
-			a[key] = value
+		} else {
+			c[key] = value
 		}
 	}
 
-	return a
+	return c
 }
 
 // MapSCopy creates a copy of a map
@@ -661,6 +729,34 @@ func IntersectSSlice(a, b []string) ([]string, bool) {
 	}
 
 	return s, has
+}
+
+// UniqueISlice filters duplicatest from slice
+func UniqueISlice(a []int) []int {
+	keys := make(map[int]bool)
+	list := []int{}
+	for _, entry := range a {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+
+	return list
+}
+
+// UniqueSSlice filters duplicatest from slice
+func UniqueSSlice(a []string) []string {
+	keys := make(map[string]bool)
+	list := []string{}
+	for _, entry := range a {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+
+	return list
 }
 
 // Addslashes quote string with slashes

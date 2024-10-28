@@ -44,10 +44,15 @@ type Context interface {
 	ParamString(key string) string
 	ParamInt(key string) int
 	Params() map[string]interface{}
+	AddError(msg string)
+	Errors() []string
 	SetRequest(req request.Interface) error
 	Request() request.Interface
 	SetResponse(rsp response.Interface) error
 	Response() response.Interface
+	SetCurrentRoute(*RouteMatch) error
+	CurrentRoute() *RouteMatch
+	CurrentRouteName() string
 	Destroy()
 	Cancel()
 }
@@ -58,27 +63,29 @@ type DefaultContext struct {
 	cancel   context.CancelFunc
 	request  request.Interface
 	response response.Interface
+	route    *RouteMatch
 	params   map[string]interface{}
 	data     map[string]interface{}
+	errors   []string
 	mu       sync.Mutex
 }
 
 // WithCancel returns a new context with cancel function
 func WithCancel(parent Context) (ctx Context, cancelFunc context.CancelFunc) {
 	c, cFunc := context.WithCancel(parent)
-	return &DefaultContext{context: c, cancel: cFunc, params: parent.Params(), data: parent.Data()}, cFunc
+	return &DefaultContext{context: c, cancel: cFunc, params: parent.Params(), data: parent.Data(), errors: parent.Errors()}, cFunc
 }
 
 // WithDeadline returns a new context with deadline and cancel function
 func WithDeadline(parent Context, d time.Time) (ctx Context, cancelFunc context.CancelFunc) {
 	c, cFunc := context.WithDeadline(parent, d)
-	return &DefaultContext{context: c, cancel: cFunc, params: parent.Params(), data: parent.Data()}, cFunc
+	return &DefaultContext{context: c, cancel: cFunc, params: parent.Params(), data: parent.Data(), errors: parent.Errors()}, cFunc
 }
 
 // WithTimeout returns a new context with timeout and cancel function
 func WithTimeout(parent Context, timeout time.Duration) (ctx Context, cancelFunc context.CancelFunc) {
 	c, cFunc := context.WithTimeout(parent, timeout)
-	return &DefaultContext{context: c, cancel: cFunc, params: parent.Params(), data: parent.Data()}, cFunc
+	return &DefaultContext{context: c, cancel: cFunc, params: parent.Params(), data: parent.Data(), errors: parent.Errors()}, cFunc
 }
 
 // Background returns not-nil, empty context
@@ -243,6 +250,32 @@ func (c *DefaultContext) Params() map[string]interface{} {
 	return c.params
 }
 
+// AddError adds an error mesage to context
+func (c *DefaultContext) AddError(msg string) {
+	c.errors = append(c.errors, msg)
+}
+
+// Errors returns stack of context error messages
+func (c *DefaultContext) Errors() []string {
+	return c.errors
+}
+
+// SetCurrentRoute sets current route values
+func (c *DefaultContext) SetCurrentRoute(match *RouteMatch) error {
+	c.route = match
+	return nil
+}
+
+// CurrentRoute returns current route values
+func (c *DefaultContext) CurrentRoute() *RouteMatch {
+	return c.route
+}
+
+// CurrentRouteName returns current route name
+func (c *DefaultContext) CurrentRouteName() string {
+	return c.route.Name
+}
+
 // Destroy the context
 func (c *DefaultContext) Destroy() {
 	c.response.Destroy()
@@ -254,6 +287,7 @@ func (c *DefaultContext) Destroy() {
 	c.response = nil
 	c.params = make(map[string]interface{})
 	c.data = make(map[string]interface{})
+	c.errors = make([]string, 0)
 }
 
 // Cancel context
@@ -268,6 +302,7 @@ func NewContext(ctx context.Context) (Context, error) {
 	c := &DefaultContext{
 		params: make(map[string]interface{}),
 		data:   make(map[string]interface{}),
+		errors: make([]string, 0),
 	}
 
 	if ctx == nil {
@@ -276,4 +311,12 @@ func NewContext(ctx context.Context) (Context, error) {
 
 	c.context, c.cancel = context.WithCancel(ctx)
 	return c, nil
+}
+
+// RouteMatch is a matched route values
+type RouteMatch struct {
+	Values       map[string]string
+	WildcardData map[string]string
+	Name         string
+	Match        bool
 }

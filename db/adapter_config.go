@@ -24,6 +24,8 @@ type AdapterConfig struct {
 	AutoQuoteIdentifiers  bool
 	Transaction           *TransactionConfig
 	Connection            *ConnectionConfig
+	Profiler              config.Config
+	Logger                config.Config
 }
 
 // Populate populates Config values using given Config source

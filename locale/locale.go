@@ -3,6 +3,7 @@ package locale
 import (
 	"strings"
 	"wsf/errors"
+	"wsf/registry"
 	"wsf/utils"
 )
 
@@ -1052,6 +1053,11 @@ func (l *Locale) SetLocale(locale string) error {
 	return nil
 }
 
+// Locale returns locale string
+func (l *Locale) Locale() string {
+	return l.locale
+}
+
 // Language returns the language part of the locale
 func (l *Locale) Language() string {
 	locale := strings.Split(l.locale, "_")
@@ -1120,6 +1126,16 @@ func (l *Locale) prepareLocale(locale string, strict bool) (string, error) {
 
 	locale = strings.Join(parts, "_")
 	return locale, nil
+}
+
+// NewLocale create a new locale
+func NewLocale(locale string) (*Locale, error) {
+	l := &Locale{}
+	if err := l.SetLocale(locale); err != nil {
+		return nil, errors.Wrap(err, "Unable to create locale")
+	}
+
+	return l, nil
 }
 
 // Browser return a map of all accepted languages of the client
@@ -1225,4 +1241,131 @@ func Environment() (map[string]string, error) {
 	self::$_environment = $languagearray;
 	return $languagearray;*/
 	return make(map[string]string), nil
+}
+
+// FindLocale finds the proper locale based on the input
+func FindLocale(locale string) (string, error) {
+	if locale == "" {
+		var l *Locale
+		lcl := registry.Get("WSFLocale")
+		if lcl == nil {
+			var err error
+			l, err = NewLocale("")
+			if err != nil {
+				return "", err
+			}
+		} else {
+			l = lcl.(*Locale)
+		}
+
+		locale = l.Locale()
+	}
+
+	if IsLocale(locale, true) {
+		if !IsLocale(locale, false) {
+			locale = ToTerritory(locale)
+
+			if locale == "" {
+				return "", errors.Errorf("The locale '%s' is no known locale", locale)
+			}
+		} else {
+			lcl, err := NewLocale(locale)
+			if err != nil {
+				return "", err
+			}
+			locale = lcl.Locale()
+		}
+	}
+
+	return prepareLocale(locale, false)
+}
+
+// ToTerritory returns teritorial locale
+func ToTerritory(territory string) string {
+	territory = strings.ToUpper(territory)
+	if v, ok := territoryData[territory]; ok {
+		return v
+	}
+
+	return ""
+}
+
+// IsLocale returns true if loc is a valid locale
+func IsLocale(loc string, strict bool) bool {
+	if loc == "" {
+		return false
+	}
+
+	// Is it an alias?
+	if _, ok := localeAliases[loc]; ok {
+		return true
+	}
+
+	var err error
+	loc, err = prepareLocale(loc, strict)
+	if err != nil {
+		return false
+	}
+
+	if _, ok := localeData[loc]; ok {
+		return true
+	} else if !strict {
+		parts := strings.Split(loc, "_")
+		if _, ok := localeData[parts[0]]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+func prepareLocale(locale string, strict bool) (string, error) {
+	/*if len(auto) == 0 {
+		browser     = Browser()
+		environment = Environment()
+		breakChain  = true
+		auto        = self::getBrowser() + self::getEnvironment() + self::getDefault();
+	}
+
+	lcl := make(map[string]string)
+	if !strict {
+		if locale == "browser" {
+			lcl = browser
+		}
+
+		if locale == "environment" {
+			lcl = environment
+		}
+
+		if locale == "default" {
+			lcl = def
+		}
+
+		if locale == "auto" || locale == "" {
+			lcl = auto
+		}
+	}
+
+	if (strpos($locale, '-') !== false) {
+		$locale = strtr($locale, '-', '_');
+	}
+
+	$parts = explode('_', $locale);
+	if (!isset(self::$_localeData[$parts[0]])) {
+		if ((count($parts) === 1) && array_key_exists($parts[0], self::$_territoryData)) {
+			return self::$_territoryData[$parts[0]];
+		}
+
+		return '';
+	}
+
+	foreach($parts as $key => $value) {
+		if ((strlen($value) < 2) || (strlen($value) > 3)) {
+			unset($parts[$key]);
+		}
+	}
+
+	$locale = implode('_', $parts);
+	return (string) $locale;*/
+	return locale, nil
 }

@@ -42,7 +42,7 @@ func (c *Config) Populate(cfg config.Config) error {
 // Defaults sets configuration default values
 func (c *Config) Defaults() error {
 	c.Priority = 1
-	c.Enable = true
+	c.Enable = false
 	c.Verbose = false
 	c.TimestampFormat = time.RFC3339
 

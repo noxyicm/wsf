@@ -1,7 +1,9 @@
 package rpc
 
 import (
+	"fmt"
 	"net"
+	"net/http"
 	"net/rpc"
 	"sync"
 	"syscall"
@@ -12,11 +14,32 @@ import (
 	"wsf/transporter/codec"
 )
 
-// ID of service
-const ID = "rpc"
+const (
+	// EventDebug thrown if there is something insegnificant to say
+	EventDebug = iota + 500
+
+	// EventInfo thrown if there is something to say
+	EventInfo
+
+	// EventError thrown on any non job error provided
+	EventError
+
+	// EventInitSSL describes TLS initialization
+	EventInitSSL
+
+	// EventHTTPResponse thrown after the http request has been processed
+	EventHTTPResponse
+
+	// EventHTTPError thrown after the http request has been processed with error
+	EventHTTPError
+
+	// ID of service
+	ID = "rpc"
+)
 
 // Service is RPC service
 type Service struct {
+	Name     string
 	options  *Config
 	stop     chan interface{}
 	rpc      *rpc.Server
@@ -68,17 +91,21 @@ func (s *Service) Serve(ctx context.Context) error {
 	s.stop = make(chan interface{})
 	s.mu.Unlock()
 
+	rpc.HandleHTTP()
 	ln, err := s.Listener()
 	if err != nil {
 		return err
 	}
 	defer ln.Close()
 
-	go func() {
+	go http.Serve(ln, nil)
+
+	/*go func() {
 		for {
 			select {
 			case <-s.stop:
 				return
+
 			default:
 				conn, err := ln.Accept()
 				if err != nil {
@@ -88,7 +115,7 @@ func (s *Service) Serve(ctx context.Context) error {
 				go s.rpc.ServeCodec(codec.NewServer(conn))
 			}
 		}
-	}()
+	}()*/
 
 	<-s.stop
 
@@ -111,10 +138,11 @@ func (s *Service) Stop() {
 
 // Register publishes in the server the set of methods of the
 // receiver value that satisfy the following conditions:
-//	- exported method of exported type
-//	- two arguments, both of exported type
-//	- the second argument is a pointer
-//	- one return value, of type error
+//   - exported method of exported type
+//   - two arguments, both of exported type
+//   - the second argument is a pointer
+//   - one return value, of type error
+//
 // It returns an error if the receiver is not an exported type or has
 // no suitable methods. It also logs the error using package log.
 func (s *Service) Register(name string, svc interface{}) error {
@@ -142,13 +170,14 @@ func (s *Service) Client() (*rpc.Client, error) {
 // Listener creates new rpc socket Listener
 func (s *Service) Listener() (net.Listener, error) {
 	if s.options.Protocol != SocketTypeTCP && s.options.Protocol != SocketTypeUNIX {
-		return nil, errors.Errorf("Invalid socket type \"%v\"", s.options.Protocol)
+		return nil, errors.Errorf("[%s] Invalid socket type \"%v\"", s.Name, s.options.Protocol)
 	}
 
 	if s.options.Protocol == SocketTypeUNIX {
 		syscall.Unlink(s.options.Address())
 	}
 
+	s.throw(EventInfo, service.InfoEvent(fmt.Sprintf("[%s] Starting: Listening on %s:%s...", s.Name, s.options.Protocol, s.options.Address())))
 	return net.Listen(s.options.Protocol, s.options.Address())
 }
 
@@ -164,6 +193,7 @@ func (s *Service) Dialer() (net.Conn, error) {
 // NewService creates a new service of type RPC
 func NewService(options config.Config) (service.Interface, error) {
 	return &Service{
+		Name:     "RPC Server",
 		serving:  false,
 		priority: 1,
 	}, nil

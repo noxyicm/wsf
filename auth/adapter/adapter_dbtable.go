@@ -1,12 +1,11 @@
 package adapter
 
 import (
+	"github.com/jamesruan/sodium"
 	"github.com/noxyicm/wsf/auth"
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/db"
 	"github.com/noxyicm/wsf/errors"
-
-	"github.com/jamesruan/sodium"
 )
 
 // Public constants
@@ -95,7 +94,7 @@ func (a *DbTableAdapter) Authenticate(ctx context.Context) auth.Result {
 
 	resultIdentities, err := a.Db.Query(ctx, dbSelect)
 	if err != nil {
-		res.AddError(errors.Wrap(err, "The supplied parameters to github.com/noxyicm/wsf.auth.DbTable failed to produce a valid sql statement, please check table and column names for validity"))
+		res.AddError(errors.Wrap(err, "The supplied parameters to wsf.auth.DbTable failed to produce a valid sql statement, please check table and column names for validity"))
 		return res
 	}
 

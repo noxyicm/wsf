@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/noxyicm/wsf/errors"
-
 	"github.com/spf13/viper"
 )
 

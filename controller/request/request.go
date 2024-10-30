@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+
 	"github.com/noxyicm/wsf/utils"
 )
 
@@ -13,6 +14,7 @@ import (
 type Interface interface {
 	Context() context.Context
 	SetContext(ctx context.Context)
+	GetRequest() *http.Request
 	SetParam(name string, value interface{}) error
 	Param(name string) interface{}
 	ParamString(name string) string
@@ -68,6 +70,11 @@ type Request struct {
 	Cks        map[string]*http.Cookie
 	RemoteAddr string
 	Body       interface{}
+}
+
+// GetRequest returns underlying request
+func (r *Request) GetRequest() *http.Request {
+	return nil
 }
 
 // SetParam sets request parameter

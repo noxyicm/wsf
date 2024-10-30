@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
 	"github.com/noxyicm/wsf/application/file"
 	"github.com/noxyicm/wsf/controller/request/attributes"
 	"github.com/noxyicm/wsf/errors"
@@ -54,6 +55,11 @@ func (r *HTTP) Context() context.Context {
 // SetContext sets request context
 func (r *HTTP) SetContext(ctx context.Context) {
 	r.original = r.original.WithContext(ctx)
+}
+
+// GetRequest returns underlying request
+func (r *HTTP) GetRequest() *http.Request {
+	return r.original
 }
 
 // IsDispatched returns true if request was dispatched

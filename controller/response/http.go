@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
 	"github.com/noxyicm/wsf/errors"
 	"github.com/noxyicm/wsf/utils/stack"
 )
@@ -248,6 +249,11 @@ func (r *HTTP) IsSendRequested() bool {
 // RequestSend sets the response in emmidiet send state
 func (r *HTTP) RequestSend(flag bool) {
 	r.SendRequested = flag
+}
+
+// GetWriter returns underliying writer
+func (r *HTTP) GetWriter() http.ResponseWriter {
+	return r.Writer
 }
 
 // Write writes response headers, status and body into ResponseWriter

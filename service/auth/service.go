@@ -47,7 +47,6 @@ func (s *Auth) Init(options *Config, h *wsfhttp.Service) (bool, error) {
 	}
 
 	s.options = options
-	h.AddMiddleware(s.middleware)
 	return true, nil
 }
 

@@ -29,7 +29,6 @@ func (s *Service) Init(options *Config, h *wsfhttp.Service) (bool, error) {
 
 	s.options = options
 	s.root = http.Dir(s.options.Dir)
-	h.AddMiddleware(s.middleware)
 	return true, nil
 }
 

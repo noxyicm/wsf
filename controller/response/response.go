@@ -22,6 +22,7 @@ type Interface interface {
 	Cookie(key string) string
 	SetRedirect(url string, code int) error
 	IsRedirect() bool
+	GetWriter() http.ResponseWriter
 	Write() error
 	Destroy()
 	SetException(err error)

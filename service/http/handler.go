@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/controller"
 	"github.com/noxyicm/wsf/controller/request"
@@ -22,6 +23,7 @@ import (
 // Handler serves http connections
 type Handler struct {
 	options *Config
+	mdwr    []Middleware
 	ctrl    controller.Interface
 	lsns    []func(event int, ctx service.Event)
 	mu      sync.RWMutex
@@ -33,6 +35,16 @@ func (h *Handler) AddListener(l func(event int, ctx service.Event)) {
 	defer h.mu.Unlock()
 
 	h.lsns = append(h.lsns, l)
+}
+
+// AddMiddleware adds new net/http middleware
+func (h *Handler) AddMiddleware(m Middleware) {
+	h.mdwr = append(h.mdwr, m)
+}
+
+// SetMiddlewares adds new net/http middlewares
+func (h *Handler) SetMiddlewares(mdwrs []Middleware) {
+	h.mdwr = mdwrs
 }
 
 // throw invokes event handler if any

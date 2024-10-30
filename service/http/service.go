@@ -237,11 +237,12 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// chaining middleware
 	for _, m := range s.mdwr {
-		if !m.Handle(s, req, rsp) {
+		if m.Handle(s, req, rsp) {
 			return
 		}
 	}
-	s.handler.ServeHTTP(w, r)
+
+	s.handler.ServeHTTP(req, rsp)
 }
 
 // Init https server.

@@ -23,7 +23,7 @@ type Config struct {
 	Uploads            *file.Config
 	AccessLogger       config.Config
 	Headers            map[string]string
-	Middleware         []*MiddlewareConfig
+	Middleware         map[string]*MiddlewareConfig
 }
 
 // EnableTLS returns true if server must listen TLS connections
@@ -65,7 +65,7 @@ func (c *Config) Defaults() error {
 	c.Port = 8080
 	c.MaxRequestSize = 1 << 26
 	c.Headers = make(map[string]string)
-	c.Middleware = make([]*MiddlewareConfig, 0)
+	c.Middleware = make(map[string]*MiddlewareConfig)
 
 	if c.AccessLogger == nil {
 		c.AccessLogger = config.NewBridge()

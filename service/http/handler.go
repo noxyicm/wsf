@@ -2,7 +2,6 @@ package http
 
 import (
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,50 +57,38 @@ func (h *Handler) throw(event int, ctx service.Event) {
 }
 
 // ServeHTTP Serves a HTTP request
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h.throw(EventDebug, service.InfoEvent(fmt.Sprintf("Serving HTTP request: %s", r.RequestURI)))
+func (h *Handler) ServeHTTP(r request.Interface, w response.Interface) {
+	h.throw(EventDebug, service.InfoEvent(fmt.Sprintf("Serving HTTP request: %s", r.PathInfo())))
 	start := time.Now()
-	defer h.recover(w, r, start)
+	defer h.recover(r, w, start)
 
 	if h.options.MaxRequestSize != 0 {
-		if length := r.Header.Get("content-length"); length != "" {
+		if length := r.Header("content-length"); length != "" {
 			if size, err := strconv.ParseInt(length, 10, 64); err != nil {
-				h.handleError(w, r, err, start)
+				h.handleError(r, w, err, start)
 				return
 			} else if size > h.options.MaxRequestSize {
-				h.handleError(w, r, errors.New("Request body max size is exceeded"), start)
+				h.handleError(r, w, errors.New("Request body max size is exceeded"), start)
 				return
 			}
 		}
 	}
 
-	req, err := request.NewHTTPRequest(r, h.options.Uploads, h.options.Proxy)
+	s, sid, err := session.Start(r, w)
 	if err != nil {
-		h.handleError(w, r, err, start)
-		return
-	}
-
-	rsp, err := response.NewHTTPResponse(w)
-	if err != nil {
-		h.handleError(w, r, err, start)
-		return
-	}
-
-	s, sid, err := session.Start(req, rsp)
-	if err != nil {
-		h.handleError(w, r, err, start)
+		h.handleError(r, w, err, start)
 		return
 	} else if sid == "" {
-		if strings.Contains(req.Header("Accept"), "application/json") {
-			rsp.SetResponseCode(401)
-			rsp.AddHeader("Content-Type", "application-json")
-			rsp.AppendBody([]byte("{\"error\":\"invalid_token\",\"error_description\":\"Invalid token\"}"), "")
+		if strings.Contains(r.Header("Accept"), "application/json") {
+			w.SetResponseCode(401)
+			w.AddHeader("Content-Type", "application-json")
+			w.AppendBody([]byte("{\"error\":\"invalid_token\",\"error_description\":\"Invalid token\"}"), "")
 		} else {
-			rsp.SetResponseCode(401)
-			rsp.AppendBody([]byte("Invalid token"), "")
+			w.SetResponseCode(401)
+			w.AppendBody([]byte("Invalid token"), "")
 		}
 
-		h.handleResponse(req, rsp, nil, start)
+		h.handleResponse(r, w, nil, start)
 		return
 	}
 
@@ -109,70 +96,70 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, err := context.NewContext(r.Context())
 	if err != nil {
 		session.Close(sid)
-		h.handleError(w, r, err, start)
+		h.handleError(r, w, err, start)
 		return
 	}
 
-	ctx.SetRequest(req)
-	ctx.SetResponse(rsp)
+	ctx.SetRequest(r)
+	ctx.SetResponse(w)
 	ctx.SetValue(context.SessionIDKey, sid)
 	ctx.SetValue(context.SessionKey, s)
-	if err := h.ctrl.Dispatch(ctx, req, rsp); err != nil {
+	if err := h.ctrl.Dispatch(ctx, r, w); err != nil {
 		session.Close(sid)
-		h.handleResponse(req, rsp, err, start)
+		h.handleResponse(r, w, err, start)
 		return
 	}
 
 	session.Close(sid)
-	h.handleResponse(req, rsp, nil, start)
+	h.handleResponse(r, w, nil, start)
 }
 
 // handleError sends error response to client
-func (h *Handler) handleError(w http.ResponseWriter, r *http.Request, err error, start time.Time) {
+func (h *Handler) handleError(r request.Interface, w response.Interface, err error, start time.Time) {
 	for hdr, val := range h.options.Headers {
-		w.Header().Add(hdr, val)
+		w.SetHeader(hdr, val)
 	}
 
-	w.WriteHeader(500)
+	w.SetResponseCode(500)
 
-	h.throw(EventHTTPError, event.NewError(r, err, start))
-	w.Write([]byte(err.Error()))
+	h.throw(EventHTTPError, event.NewError(r.GetRequest(), err, start))
+	w.SetBody([]byte(err.Error()))
+	w.Write()
 }
 
 // handleResponse triggers response event
-func (h *Handler) handleResponse(req request.Interface, rsp response.Interface, err error, start time.Time) {
+func (h *Handler) handleResponse(r request.Interface, w response.Interface, err error, start time.Time) {
 	for hdr, val := range h.options.Headers {
-		rsp.SetHeader(hdr, val)
+		w.SetHeader(hdr, val)
 	}
 
 	if err != nil {
 		switch err.(type) {
 		case *errors.HTTPError:
-			rsp.SetResponseCode(err.(*errors.HTTPError).Code())
+			w.SetResponseCode(err.(*errors.HTTPError).Code())
 
 		default:
-			rsp.SetResponseCode(500)
-			rsp.SetBody([]byte(err.Error()))
+			w.SetResponseCode(500)
+			w.SetBody([]byte(err.Error()))
 		}
-	} else if rsp.ResponseCode() == 0 {
-		rsp.SetResponseCode(200)
+	} else if w.ResponseCode() == 0 {
+		w.SetResponseCode(200)
 	}
 
-	h.throw(EventHTTPResponse, event.NewResponse(req, rsp, err, start))
-	rsp.Write()
+	h.throw(EventHTTPResponse, event.NewResponse(r, w, err, start))
+	w.Write()
 }
 
-func (h *Handler) recover(w http.ResponseWriter, r *http.Request, start time.Time) {
+func (h *Handler) recover(r request.Interface, w response.Interface, start time.Time) {
 	if rec := recover(); rec != nil {
 		switch err := rec.(type) {
 		case error:
 			utils.DebugBacktrace()
-			h.handleError(w, r, errors.Wrap(err, "[HTTP Server] Unxpected error equired"), start)
-			break
+			h.handleError(r, w, errors.Wrap(err, "[HTTP Server] Unxpected error equired"), start)
 
 		default:
 			utils.DebugBacktrace()
-			h.handleError(w, r, errors.Errorf("[HTTP Server] Unxpected error equired: %v", err), start)
+			h.handleError(r, w, errors.Errorf("[HTTP Server] Unxpected error equired: %v", err), start)
 		}
 	}
 }

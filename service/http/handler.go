@@ -3,7 +3,6 @@ package http
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -74,43 +73,48 @@ func (h *Handler) ServeHTTP(r request.Interface, w response.Interface) {
 		}
 	}
 
-	s, sid, err := session.Start(r, w)
-	if err != nil {
-		h.handleError(r, w, err, start)
-		return
-	} else if sid == "" {
-		if strings.Contains(r.Header("Accept"), "application/json") {
-			w.SetResponseCode(401)
-			w.AddHeader("Content-Type", "application-json")
-			w.AppendBody([]byte("{\"error\":\"invalid_token\",\"error_description\":\"Invalid token\"}"), "")
-		} else {
-			w.SetResponseCode(401)
-			w.AppendBody([]byte("Invalid token"), "")
+	var s session.Interface
+	var sid string
+	var err error
+	if session.Created() {
+		s, sid, err = session.Start(r, w)
+		if err != nil {
+			h.handleError(r, w, err, start)
+			return
 		}
-
-		h.handleResponse(r, w, nil, start)
-		return
 	}
 
 	//ctx, err := context.NewContext(context.Background())
 	ctx, err := context.NewContext(r.Context())
 	if err != nil {
-		session.Close(sid)
+		if session.Created() {
+			session.Close(sid)
+		}
+
 		h.handleError(r, w, err, start)
 		return
 	}
 
 	ctx.SetRequest(r)
 	ctx.SetResponse(w)
-	ctx.SetValue(context.SessionIDKey, sid)
-	ctx.SetValue(context.SessionKey, s)
+	if session.Created() {
+		ctx.SetValue(context.SessionIDKey, sid)
+		ctx.SetValue(context.SessionKey, s)
+	}
+
 	if err := h.ctrl.Dispatch(ctx, r, w); err != nil {
-		session.Close(sid)
+		if session.Created() {
+			session.Close(sid)
+		}
+
 		h.handleResponse(r, w, err, start)
 		return
 	}
 
-	session.Close(sid)
+	if session.Created() {
+		session.Close(sid)
+	}
+
 	h.handleResponse(r, w, nil, start)
 }
 

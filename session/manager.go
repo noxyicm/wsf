@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
 	"github.com/noxyicm/wsf/cache"
 	"github.com/noxyicm/wsf/config"
 	"github.com/noxyicm/wsf/controller/request"
@@ -329,8 +330,6 @@ func (m *Manager) SessionDestroy(rqs request.Interface, rsp response.Interface) 
 		rqs.RemoveHeader(m.Opts.SessionNameInHTTPHeader)
 		rsp.RemoveHeader(m.Opts.SessionNameInHTTPHeader)
 	}
-
-	return
 }
 
 // SessionExist returns true if session by id exists
@@ -400,6 +399,11 @@ func SetInstance(s ManagerInterface) {
 // Instance returns a session instance
 func Instance() ManagerInterface {
 	return ses
+}
+
+// Created returns true if session instance was created
+func Created() bool {
+	return ses != nil
 }
 
 // Start new session

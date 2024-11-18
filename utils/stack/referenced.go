@@ -121,8 +121,8 @@ func (s *Referenced) Stack() []interface{} {
 
 // Value returns value by key
 func (s *Referenced) Value(key string) interface{} {
-	if v, ok := s.refs[key]; ok {
-		return v
+	if i, ok := s.refs[key]; ok {
+		return s.stack[i]
 	}
 
 	return nil

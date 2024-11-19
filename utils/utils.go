@@ -72,6 +72,16 @@ func (d DataTree) Get(k string) interface{} {
 	return nil
 }
 
+// Has returns true if key exists in a tree
+func (d DataTree) Has(k string) bool {
+	keys := FetchIndexes(k)
+	if len(keys) > 0 {
+		return true
+	}
+
+	return false
+}
+
 // Mount mounts data tree recursively
 func (d DataTree) Mount(i []string, v interface{}) {
 	if len(i) == 1 {

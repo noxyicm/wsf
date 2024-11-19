@@ -2,6 +2,7 @@ package controller
 
 import (
 	"strings"
+
 	"github.com/noxyicm/wsf/config"
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/controller/request"
@@ -195,7 +196,9 @@ func (r *DefaultRouter) StripLanguage(uri string, lang string) string {
 // SetRequestParams sets matched parameters to request
 func (r *DefaultRouter) SetRequestParams(req request.Interface, params *context.RouteMatch) error {
 	for param, value := range params.Values {
-		req.SetParam(param, value)
+		if !req.HasParam(param) {
+			req.SetParam(param, value)
+		}
 
 		if param == req.ModuleKey() {
 			req.SetModuleName(value)

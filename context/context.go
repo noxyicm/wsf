@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"time"
+
 	"github.com/noxyicm/wsf/controller/request"
 	"github.com/noxyicm/wsf/controller/response"
 )
@@ -37,6 +38,7 @@ type Context interface {
 	SetValue(key interface{}, value interface{}) error
 	SetDataValue(key string, value interface{}) error
 	DataValue(key string) interface{}
+	SetData(d map[string]interface{}) error
 	Data() map[string]interface{}
 	SetParam(key string, value interface{}) error
 	Param(key string) interface{}
@@ -159,6 +161,12 @@ func (c *DefaultContext) DataValue(key string) interface{} {
 		return v
 	}
 
+	return nil
+}
+
+// SetData sets data object
+func (c *DefaultContext) SetData(d map[string]interface{}) error {
+	c.data = d
 	return nil
 }
 

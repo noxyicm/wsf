@@ -16,6 +16,7 @@ type Interface interface {
 	SetContext(ctx context.Context)
 	GetRequest() *http.Request
 	SetParam(name string, value interface{}) error
+	HasParam(name string) bool
 	Param(name string) interface{}
 	ParamString(name string) string
 	ParamInt(name string) int
@@ -92,6 +93,17 @@ func (r *Request) Param(name string) interface{} {
 	}
 
 	return nil
+}
+
+// HasParam return true if parameter is set
+func (r *Request) HasParam(name string) bool {
+	if _, ok := r.Prms[name]; ok {
+		return true
+	} else if b, ok := r.Body.(utils.DataTree); ok {
+		return b.Has(name)
+	}
+
+	return false
 }
 
 // ParamString returns request parameter as string

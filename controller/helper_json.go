@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/errors"
 )
@@ -9,6 +10,9 @@ import (
 const (
 	// TYPEHelperJSON represents JSON action helper
 	TYPEHelperJSON = "json"
+	// JSONResponseKey is a string key in context data structure
+	// that contains data to encode
+	JSONResponseKey = "jsonresponse"
 )
 
 func init() {
@@ -39,7 +43,7 @@ func (h *JSON) PreDispatch(ctx context.Context) error {
 // PostDispatch do dispatch aftermath
 func (h *JSON) PostDispatch(ctx context.Context) error {
 	if h.shouldRender(ctx) {
-		encoded, err := h.Encode(ctx.Data(), true)
+		encoded, err := h.Encode(ctx.DataValue(JSONResponseKey), true)
 		if err != nil {
 			return err
 		}

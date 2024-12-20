@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/noxyicm/wsf/controller/request"
@@ -36,15 +37,45 @@ func (m *StaticMiddleware) Handle(s *wsfhttp.Service, r request.Interface, w res
 
 	var forbid []string
 	if uforbid, ok := m.Options.Params["forbid"]; ok {
-		if forbid, ok = uforbid.([]string); !ok {
-			return false
+		switch uforbid.(type) {
+		case []string:
+			forbid = uforbid.([]string)
+
+		case []interface{}:
+			for _, uv := range uforbid.([]interface{}) {
+				switch v := uv.(type) {
+				case string:
+					forbid = append(forbid, v)
+
+				case int:
+					forbid = append(forbid, strconv.Itoa(v))
+
+				case bool:
+					forbid = append(forbid, strconv.FormatBool(v))
+				}
+			}
 		}
 	}
 
 	var always []string
 	if ualways, ok := m.Options.Params["always"]; ok {
-		if always, ok = ualways.([]string); !ok {
-			return false
+		switch ualways.(type) {
+		case []string:
+			always = ualways.([]string)
+
+		case []interface{}:
+			for _, uv := range ualways.([]interface{}) {
+				switch v := uv.(type) {
+				case string:
+					always = append(forbid, v)
+
+				case int:
+					always = append(forbid, strconv.Itoa(v))
+
+				case bool:
+					always = append(forbid, strconv.FormatBool(v))
+				}
+			}
 		}
 	}
 

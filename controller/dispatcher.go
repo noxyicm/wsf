@@ -3,6 +3,7 @@ package controller
 import (
 	"reflect"
 	"strings"
+
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/controller/request"
 	"github.com/noxyicm/wsf/controller/response"
@@ -123,7 +124,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, rqs request.Interface,
 			return true, err
 		}
 
-		err = ctrl.HelperBroker().SetHelper(-80, vr, nil)
+		err = ctrl.HelperBroker().SetHelper(-80, vr, false, nil)
 		if err != nil {
 			return true, err
 		}

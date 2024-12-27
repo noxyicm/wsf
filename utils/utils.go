@@ -120,6 +120,39 @@ func (d DataTree) Unmount(i []string) interface{} {
 	return nil
 }
 
+func (d DataTree) Keys(k string) []string {
+	keys := FetchIndexes(k)
+	if len(keys) <= MaxTreeLevel {
+		outkeys := make([]string, 0)
+
+		if k == "" {
+			for k := range d {
+				outkeys = append(outkeys, k)
+			}
+		} else {
+			for k := range d.Unmount(keys).(DataTree) {
+				outkeys = append(outkeys, k)
+			}
+		}
+
+		return outkeys
+	}
+
+	return make([]string, 0)
+}
+
+// AsMapSS converts all posible values of DataTree into strings and returns map
+func (d DataTree) AsMapSS() (map[string]string, bool) {
+	m := make(map[string]string)
+	for k, v := range d {
+		if vs, ok := v.(string); ok {
+			m[k] = vs
+		}
+	}
+
+	return m, len(m) > 0
+}
+
 // MapFromDataTree recursievly converts DataTree to map
 func MapFromDataTree(d DataTree) map[string]interface{} {
 	m := make(map[string]interface{})
@@ -339,6 +372,19 @@ func MapSKeys(m map[string]interface{}) []string {
 
 // MapISKeys returns slice that contains keys of the map
 func MapISKeys(m map[int]string) []int {
+	keys := make([]int, len(m))
+
+	i := 0
+	for k := range m {
+		keys[i] = k
+		i++
+	}
+
+	return keys
+}
+
+// MapIIKeys returns slice that contains keys of the map
+func MapIIKeys(m map[int]int) []int {
 	keys := make([]int, len(m))
 
 	i := 0

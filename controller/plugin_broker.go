@@ -145,7 +145,7 @@ func (b *PluginBroker) DispatchLoopShutdown(ctx context.Context, rqs request.Int
 	return true, err
 }
 
-func (b *PluginBroker) recover(_ context.Context, _ request.Interface, _ response.Interface) (ok bool, err error) {
+func (b *PluginBroker) recover(ctx context.Context, rqs request.Interface, rsp response.Interface) (ok bool, err error) {
 	if r := recover(); r != nil {
 		switch err := r.(type) {
 		case error:

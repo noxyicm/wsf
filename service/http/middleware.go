@@ -13,6 +13,7 @@ var (
 // Middleware for reauest manipulation
 // type Middleware func(f http.HandlerFunc) http.HandlerFunc
 type Middleware interface {
+	Init(options *MiddlewareConfig) (bool, error)
 	Handle(s *Service, r request.Interface, w response.Interface) bool
 }
 

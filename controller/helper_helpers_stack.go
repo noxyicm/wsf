@@ -1,7 +1,10 @@
 package controller
 
 import (
+	"sync"
+
 	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/utils"
 )
 
 // HelpersStack holds helpers stack sorted by priority
@@ -10,11 +13,13 @@ type HelpersStack struct {
 	helpersByPriority   map[int]int
 	helpersByName       map[string]int
 	nextDefaultPriority int
+
+	mur sync.RWMutex
 }
 
 // Push adds helper into stack
 func (s *HelpersStack) Push(h HelperInterface) *HelpersStack {
-	s.Set(s.NextFreeHigherPriority(s.nextDefaultPriority), h)
+	s.Set(s.NextFreeHigherPriority(s.nextDefaultPriority), h, false)
 	return s
 }
 
@@ -40,10 +45,17 @@ func (s *HelpersStack) Get(name string) HelperInterface {
 }
 
 // Set sets helper to priority
-func (s *HelpersStack) Set(priority int, h HelperInterface) error {
+func (s *HelpersStack) Set(priority int, h HelperInterface, replace bool) error {
 	if s.Has(h.Name()) {
-		s.Unset(h.Name())
+		if replace {
+			s.Unset(h.Name())
+		} else {
+			return nil
+		}
 	}
+
+	s.mur.RLock()
+	defer s.mur.RUnlock()
 
 	if s.HasPriority(priority) {
 		priority = s.NextFreeHigherPriority(priority)
@@ -65,6 +77,13 @@ func (s *HelpersStack) Set(priority int, h HelperInterface) error {
 		s.helpers = append(s.helpers[:key], append([]HelperInterface{h}, s.helpers[key:]...)...)
 	}
 
+	priorities := utils.MapIIKeys(s.helpersByPriority)
+	for p := range priorities {
+		if p >= priority {
+			s.helpersByPriority[p]++
+		}
+	}
+
 	s.helpersByPriority[priority] = key
 	s.helpersByName[h.Name()] = key
 
@@ -77,17 +96,25 @@ func (s *HelpersStack) Set(priority int, h HelperInterface) error {
 
 // Unset removes helper from stack by name
 func (s *HelpersStack) Unset(name string) error {
+	s.mur.RLock()
+	defer s.mur.RUnlock()
+
 	if !s.Has(name) {
 		return errors.Errorf("A helper with name '%s' does not exist", name)
 	}
 
 	key := s.helpersByName[name]
-	priority, err := s.FindPriority(s.helpers[key])
+	priority, err := s.FindPriorityByKey(key)
 	if err != nil {
 		return err
 	}
 
-	s.helpers = append(s.helpers[:key-1], s.helpers[key:]...)
+	if key+1 == len(s.helpers) {
+		s.helpers = s.helpers[:key]
+	} else {
+		s.helpers = append(s.helpers[:key], s.helpers[key+1:]...)
+	}
+
 	delete(s.helpersByName, name)
 	delete(s.helpersByPriority, priority)
 	return nil
@@ -95,6 +122,9 @@ func (s *HelpersStack) Unset(name string) error {
 
 // UnsetPriority removes helper from stack by priority
 func (s *HelpersStack) UnsetPriority(priority int) error {
+	s.mur.RLock()
+	defer s.mur.RUnlock()
+
 	if !s.HasPriority(priority) {
 		return errors.Errorf("A helper with priority '%v' does not exist", priority)
 	}
@@ -119,10 +149,22 @@ func (s *HelpersStack) FindPriority(h HelperInterface) (int, error) {
 	return 0, errors.Errorf("A helper with name '%s' does not exist", h.Name())
 }
 
+// FindPriorityByKey returns helper priority by its key
+func (s *HelpersStack) FindPriorityByKey(key int) (int, error) {
+	for k, v := range s.helpersByPriority {
+		if v == key {
+			return k, nil
+		}
+	}
+
+	return 0, errors.Errorf("A helper with key '%s' does not exist", key)
+}
+
 // NextFreeHigherPriority finds the next free higher priority. If an index is given, it will
 // find the next free highest priority after it.
 func (s *HelpersStack) NextFreeHigherPriority(priority int) int {
 	priorities := make([]int, len(s.helpersByPriority))
+
 	i := 0
 	for k := range s.helpersByPriority {
 		priorities[i] = k
@@ -226,6 +268,9 @@ func (s *HelpersStack) HelpersByName() map[string]HelperInterface {
 
 // Clear clears the stack
 func (s *HelpersStack) Clear() {
+	s.mur.RLock()
+	defer s.mur.RUnlock()
+
 	s.helpers = make([]HelperInterface, 0)
 	s.helpersByName = make(map[string]int)
 	s.helpersByPriority = make(map[int]int)

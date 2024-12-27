@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
 	"github.com/noxyicm/wsf/config"
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/controller/request"
@@ -116,6 +117,7 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *context.Route
 
 			name := r.Vars[pos]
 			part, _ = url.QueryUnescape(part)
+
 			// Translate value if required
 			routePart := r.Parts[pos]
 			if r.IsTranslated && (strings.Index(routePart, "@") == 0 && strings.Index(routePart, "@@") != 0 && name == "") || name != "" && utils.InSSlice(name, r.Translatable) {

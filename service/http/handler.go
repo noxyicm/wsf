@@ -61,6 +61,11 @@ func (h *Handler) ServeHTTP(r request.Interface, w response.Interface) {
 	start := time.Now()
 	defer h.recover(r, w, start)
 
+	if err := r.ParseBody(); err != nil {
+		h.handleError(r, w, err, start)
+		return
+	}
+
 	if h.options.MaxRequestSize != 0 {
 		if length := r.Header("content-length"); length != "" {
 			if size, err := strconv.ParseInt(length, 10, 64); err != nil {
@@ -160,6 +165,7 @@ func (h *Handler) recover(r request.Interface, w response.Interface, start time.
 		case error:
 			utils.DebugBacktrace()
 			h.handleError(r, w, errors.Wrap(err, "[HTTP Server] Unxpected error equired"), start)
+			break
 
 		default:
 			utils.DebugBacktrace()

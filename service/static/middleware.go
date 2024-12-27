@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/noxyicm/wsf/controller/request"
 	"github.com/noxyicm/wsf/controller/response"
+	"github.com/noxyicm/wsf/errors"
 	wsfhttp "github.com/noxyicm/wsf/service/http"
 	"github.com/noxyicm/wsf/utils"
 )
@@ -23,66 +23,60 @@ func init() {
 }
 
 type StaticMiddleware struct {
-	Options *wsfhttp.MiddlewareConfig
+	Options   *wsfhttp.MiddlewareConfig
+	Directory string
+	Forbiden  []string
+	Always    []string
 }
 
-// Handle middleware
-func (m *StaticMiddleware) Handle(s *wsfhttp.Service, r request.Interface, w response.Interface) bool {
-	var dr string
+// Init initializes middleware
+func (m *StaticMiddleware) Init(options *wsfhttp.MiddlewareConfig) (bool, error) {
+	m.Options = options
+
 	if udr, ok := m.Options.Params["dir"]; ok {
-		if dr, ok = udr.(string); !ok {
-			return false
+		if m.Directory, ok = udr.(string); !ok || m.Directory == "" {
+			return false, errors.New("Directory must be specified")
 		}
 	}
 
-	var forbid []string
 	if uforbid, ok := m.Options.Params["forbid"]; ok {
 		switch uforbid.(type) {
 		case []string:
-			forbid = uforbid.([]string)
+			m.Forbiden = uforbid.([]string)
 
 		case []interface{}:
 			for _, uv := range uforbid.([]interface{}) {
 				switch v := uv.(type) {
 				case string:
-					forbid = append(forbid, v)
-
-				case int:
-					forbid = append(forbid, strconv.Itoa(v))
-
-				case bool:
-					forbid = append(forbid, strconv.FormatBool(v))
+					m.Forbiden = append(m.Forbiden, v)
 				}
 			}
 		}
 	}
 
-	var always []string
 	if ualways, ok := m.Options.Params["always"]; ok {
 		switch ualways.(type) {
 		case []string:
-			always = ualways.([]string)
+			m.Always = ualways.([]string)
 
 		case []interface{}:
 			for _, uv := range ualways.([]interface{}) {
 				switch v := uv.(type) {
 				case string:
-					always = append(forbid, v)
-
-				case int:
-					always = append(forbid, strconv.Itoa(v))
-
-				case bool:
-					always = append(forbid, strconv.FormatBool(v))
+					m.Always = append(m.Always, v)
 				}
 			}
 		}
 	}
+	return true, nil
+}
 
+// Handle middleware
+func (m *StaticMiddleware) Handle(s *wsfhttp.Service, r request.Interface, w response.Interface) bool {
 	fPath := path.Clean(r.PathInfo())
-	_, err := filepath.Rel(dr, fPath)
+	_, err := filepath.Rel(m.Directory, fPath)
 	if err != nil {
-		if m.AlwaysServe(fPath, always) {
+		if m.AlwaysServe(fPath, m.Always) {
 			w.SetResponseCode(404)
 			w.AppendBody([]byte("This page does not exists"), "")
 			w.Write()
@@ -92,17 +86,17 @@ func (m *StaticMiddleware) Handle(s *wsfhttp.Service, r request.Interface, w res
 		return false
 	}
 
-	if m.AlwaysForbid(fPath, forbid) {
+	if m.AlwaysForbid(fPath, m.Forbiden) {
 		w.SetResponseCode(404)
 		w.AppendBody([]byte("This page does not exists"), "")
 		w.Write()
 		return true
 	}
 
-	root := http.Dir(dr)
+	root := http.Dir(m.Directory)
 	f, err := root.Open(fPath)
 	if err != nil {
-		if m.AlwaysServe(fPath, always) {
+		if m.AlwaysServe(fPath, m.Always) {
 			w.SetResponseCode(404)
 			w.AppendBody([]byte("This page does not exists"), "")
 			w.Write()
@@ -115,7 +109,7 @@ func (m *StaticMiddleware) Handle(s *wsfhttp.Service, r request.Interface, w res
 
 	d, err := f.Stat()
 	if err != nil {
-		if m.AlwaysServe(fPath, always) {
+		if m.AlwaysServe(fPath, m.Always) {
 			w.SetResponseCode(404)
 			w.AppendBody([]byte("This page does not exists"), "")
 			w.Write()
@@ -126,7 +120,7 @@ func (m *StaticMiddleware) Handle(s *wsfhttp.Service, r request.Interface, w res
 	}
 
 	if d.IsDir() {
-		if m.AlwaysServe(fPath, always) {
+		if m.AlwaysServe(fPath, m.Always) {
 			w.SetResponseCode(404)
 			w.AppendBody([]byte("This page does not exists"), "")
 			w.Write()
@@ -162,7 +156,10 @@ func (m *StaticMiddleware) AlwaysServe(filename string, s []string) bool {
 
 // NewStaticMiddleware creates new static middleware
 func NewStaticMiddleware(cfg *wsfhttp.MiddlewareConfig) (mi wsfhttp.Middleware, err error) {
-	c := &StaticMiddleware{}
+	c := &StaticMiddleware{
+		Forbiden: make([]string, 0),
+		Always:   make([]string, 0),
+	}
 	c.Options = cfg
 	return c, nil
 }

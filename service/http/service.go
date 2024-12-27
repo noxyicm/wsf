@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/noxyicm/wsf/application/file"
 	"github.com/noxyicm/wsf/config"
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/controller/request"
@@ -62,6 +63,7 @@ type Service struct {
 	handler      *Handler
 	http         *http.Server
 	https        *http.Server
+	filetransfer file.TransferInterface
 	signalChan   chan os.Signal
 	externalChan chan interface{}
 	priority     int
@@ -119,6 +121,11 @@ func (s *Service) Init(options *Config, env environment.Interface) (bool, error)
 	}
 	s.Logger = logResource.(*log.Log)
 
+	s.filetransfer, err = file.NewTransfer(s.Options.Uploads.GetString("type"), s.Options.Uploads)
+	if err != nil {
+		return false, errors.Wrapf(err, "[%s] Unable to create file transfer instance", s.Name)
+	}
+
 	for _, mc := range s.Options.Middleware {
 		if !mc.Enable {
 			continue
@@ -129,7 +136,15 @@ func (s *Service) Init(options *Config, env environment.Interface) (bool, error)
 			return false, errors.Wrapf(err, "[%s] Unable to add middleware", s.Name)
 		}
 
-		s.AddMiddleware(mdlw)
+		if ok, err := mdlw.Init(mc); !ok || err != nil {
+			if err != nil {
+				s.Logger.Warning(errors.Wrapf(err, "[%s] Initialization warning: Unable to initialize middleware '%s'", s.Name, mc.Type), map[string]string{})
+			} else {
+				s.Logger.Warning(errors.Errorf("[%s] Initialization warning: Unable to initialize middleware '%s'", s.Name, mc.Type), map[string]string{})
+			}
+		} else {
+			s.AddMiddleware(mdlw)
+		}
 	}
 
 	return true, nil
@@ -203,7 +218,7 @@ func (s *Service) Stop() {
 	go serviceHTTP.Shutdown(context.Background())
 }
 
-// ServeHTTP handles connection using set of middleware and rr PSR-7 server.
+// ServeHTTP handles connection using set of middleware and.
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.throw(EventDebug, service.InfoEvent(fmt.Sprintf("Serving HTTP request: %s", r.RequestURI)))
 	start := time.Now()
@@ -222,8 +237,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r = attributes.Init(r)
-
-	req, err := request.NewHTTPRequest(r, s.Options.Uploads, s.Options.Proxy)
+	req, err := request.NewHTTPRequest(r, s.filetransfer, s.Options.Proxy, s.Options.MaxRequestSize, s.Options.MaxFormSize)
 	if err != nil {
 		s.handleError(w, r, err, start)
 		return
@@ -310,11 +324,13 @@ func (s *Service) recover(w http.ResponseWriter, r *http.Request, start time.Tim
 	if rec := recover(); rec != nil {
 		switch err := rec.(type) {
 		case error:
+			s.throw(EventError, service.ErrorEvent(errors.Wrap(err, "[HTTP Server] Unxpected error equired")))
 			utils.DebugBacktrace()
 			s.handleError(w, r, errors.Wrap(err, "[HTTP Server] Unxpected error equired"), start)
 			break
 
 		default:
+			s.throw(EventError, service.ErrorEvent(errors.Errorf("[HTTP Server] Unxpected error equired: %v", err)))
 			utils.DebugBacktrace()
 			s.handleError(w, r, errors.Errorf("[HTTP Server] Unxpected error equired: %v", err), start)
 		}

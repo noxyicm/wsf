@@ -115,6 +115,7 @@ func (c *Default) Dispatch(ctx context.Context, rqs request.Interface, rsp respo
 		}
 
 		// Notify plugins of dispatch completion
+
 		ok, err = c.plugins.PostDispatch(ctx, rqs, rsp)
 		if !ok && c.ThrowExceptions() {
 			return err

@@ -24,6 +24,12 @@ type AuthMiddleware struct {
 	Options *wsfhttp.MiddlewareConfig
 }
 
+// Init initializes middleware
+func (m *AuthMiddleware) Init(options *wsfhttp.MiddlewareConfig) (bool, error) {
+	m.Options = options
+	return true, nil
+}
+
 // Handle middleware
 func (m *AuthMiddleware) Handle(s *wsfhttp.Service, r request.Interface, w response.Interface) bool {
 	var tp string

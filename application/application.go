@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
 	"github.com/noxyicm/wsf/application/bootstrap"
 	"github.com/noxyicm/wsf/config"
 	"github.com/noxyicm/wsf/context"
@@ -199,6 +200,7 @@ func NewApplication(environment string, options interface{}, override []string) 
 		return nil, errors.Wrap(err, "Unable to crate application")
 	}
 	app.logger = lg
+	log.SetInstance(lg)
 
 	app.bootstrap, err = bootstrap.NewBootstrap(cfg)
 	if err != nil {

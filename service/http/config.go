@@ -5,7 +5,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/noxyicm/wsf/application/file"
 	"github.com/noxyicm/wsf/config"
 	"github.com/noxyicm/wsf/errors"
 )
@@ -18,9 +17,10 @@ type Config struct {
 	Port               int
 	SSL                SSLConfig
 	MaxRequestSize     int64
+	MaxFormSize        int64
 	MaxRequestTimeout  int64
 	MaxResponseTimeout int64
-	Uploads            *file.Config
+	Uploads            config.Config
 	AccessLogger       config.Config
 	Headers            map[string]string
 	Middleware         map[string]*MiddlewareConfig
@@ -41,15 +41,23 @@ func (c *Config) Populate(cfg config.Config) error {
 		c.AccessLogger = config.NewBridge()
 	}
 
-	if c.Uploads == nil {
-		c.Uploads = &file.Config{}
-	}
+	//if c.Uploads == nil {
+	//	c.Uploads = &file.Config{}
+	//}
 
 	if c.SSL.Port == 0 {
 		c.SSL.Port = 443
 	}
 
-	c.Uploads.Defaults()
+	//c.Uploads.Defaults()
+	//c.Uploads.Populate(cfg.Get("uploads"))
+	if ucfg := cfg.Get("uploads"); ucfg != nil {
+		c.Uploads = ucfg
+	}
+
+	if c.Uploads == nil {
+		c.Uploads = config.NewBridge()
+	}
 
 	if err := cfg.Unmarshal(c); err != nil {
 		return err
@@ -62,7 +70,8 @@ func (c *Config) Populate(cfg config.Config) error {
 func (c *Config) Defaults() error {
 	c.Enable = true
 	c.Host = "127.0.0.1"
-	c.Port = 8080
+	c.Port = 80
+	c.MaxFormSize = 1000
 	c.MaxRequestSize = 1 << 26
 	c.Headers = make(map[string]string)
 	c.Middleware = make(map[string]*MiddlewareConfig)

@@ -3,9 +3,11 @@ package request
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
+	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/noxyicm/wsf/application/file"
 	"github.com/noxyicm/wsf/controller/request/attributes"
 	"github.com/noxyicm/wsf/errors"
+	"github.com/noxyicm/wsf/log"
 	"github.com/noxyicm/wsf/utils"
 )
 
@@ -23,6 +26,8 @@ const (
 	contentJSON
 	contentMultipart
 	contentFormData
+	contentApplication
+	contentText
 )
 
 var braketsPattern = regexp.MustCompile(`\[(.)+\]`)
@@ -41,10 +46,24 @@ type HTTP struct {
 	Referer    string                 `json:"referer"`
 	UserAgent  string                 `json:"userAgent"`
 	Parsed     bool                   `json:"parsed"`
-	Uploads    *file.Transfer         `json:"uploads"`
 	Attributes map[string]interface{} `json:"attributes"`
-	FormData   utils.DataTree
-	fileCfg    *file.Config
+	Form       utils.DataTree         `json:"form"`
+	PostForm   utils.DataTree         `json:"postForm"`
+	Uploads    file.TransferInterface
+}
+
+// ParseBody reads request body and parses it into structures
+func (r *HTTP) ParseBody() (err error) {
+	if r.Parsed {
+		return nil
+	}
+
+	if err := r.parseForm(r.original); err != nil {
+		return err
+	}
+
+	r.Parsed = true
+	return nil
 }
 
 // Context returns request context
@@ -75,95 +94,16 @@ func (r *HTTP) SetDispatched(is bool) error {
 
 // ParseMultipart parses request uploads into file transfer structure
 func (r *HTTP) ParseMultipart(rqs *http.Request) error {
-	if rqs.MultipartForm != nil {
-		for k, v := range rqs.MultipartForm.Value {
-			r.FormData.Push(k, v)
-		}
-
-		if len(rqs.MultipartForm.File) > 0 {
-			t, err := file.NewTransfer(r.fileCfg)
-			if err != nil {
-				return err
-			}
-
-			var key string
-			for k, v := range rqs.MultipartForm.File {
-				for i, f := range v {
-					m := braketsPattern.FindStringSubmatch(k)
-					if len(m) > 0 {
-						key = k
-					} else {
-						key = k + "[" + strconv.Itoa(i) + "]"
-					}
-
-					t.Push(key, file.NewUpload(f))
-				}
-			}
-
-			if err := t.Upload(); err != nil {
-				return err
-			}
-
-			for _, k := range t.Uploaded() {
-				f := make([]map[string]interface{}, 0)
-				if fd := t.Get(k); fd != nil {
-					f = append(f, map[string]interface{}{
-						"name":    fd.Name,
-						"size":    fd.Size,
-						"mime":    fd.Mime,
-						"tmpName": fd.TempFilename,
-					})
-
-					r.FormData.Push(k, f)
-				}
-			}
-
-			/*for k, v := range rqs.MultipartForm.File {
-				f := make([]map[string]interface{}, len(v))
-				for i := range v {
-					if fd := t.Get(key); fd != nil {
-						f[i] = map[string]interface{}{
-							"name":    fd.Name,
-							"size":    fd.Size,
-							"mime":    fd.Mime,
-							"tmpName": fd.TempFilename,
-						}
-					}
-				}
-
-				r.FormData.Push(k, f)
-			}*/
-		}
-	}
-
-	r.Body = r.FormData
 	return nil
 }
 
 // ParseData parses request into data tree
 func (r *HTTP) ParseData(rqs *http.Request) error {
-	if rqs.PostForm != nil {
-		for k, v := range rqs.PostForm {
-			r.FormData.Push(k, v)
-		}
-	}
-
-	r.Body = r.FormData
 	return nil
 }
 
 // ParseJSONData parses JSON request into data tree
 func (r *HTTP) ParseJSONData(encoded []byte) error {
-	m := make(map[string]interface{})
-	if err := json.Unmarshal(encoded, &m); err != nil {
-		return errors.Wrap(err, "Unable to parse request")
-	}
-
-	for k, v := range m {
-		r.FormData.Push(k, v)
-	}
-
-	r.Body = r.FormData
 	return nil
 }
 
@@ -210,8 +150,10 @@ func (r *HTTP) Destroy() {
 	r.Parsed = false
 	r.Uploads = nil
 	r.Attributes = make(map[string]interface{})
-	r.fileCfg = nil
-	r.FormData = make(utils.DataTree)
+	r.Form = nil
+	r.PostForm = nil
+	r.MaxRequestSize = 0
+	r.MaxFormSize = 0
 
 	r.Clear()
 }
@@ -222,8 +164,37 @@ func (r *HTTP) AddCookie(cookie *http.Cookie) {
 		return
 	}
 
-	r.Cks[cookie.Name] = cookie
 	r.original.AddCookie(cookie)
+}
+
+// Cookie returns a cookie value by key
+func (r *HTTP) Cookie(key string) string {
+	if v, err := r.original.Cookie(key); err == nil {
+		if c, err := url.QueryUnescape(v.Value); err == nil {
+			return c
+		}
+	}
+
+	return ""
+}
+
+// RawCookie returns a Cookie by key
+func (r *HTTP) RawCookie(key string) *http.Cookie {
+	if v, err := r.original.Cookie(key); err == nil {
+		return v
+	}
+
+	return nil
+}
+
+// Cookies returns all cookies
+func (r *HTTP) Cookies() map[string]*http.Cookie {
+	m := make(map[string]*http.Cookie)
+	for _, c := range r.original.Cookies() {
+		m[c.Name] = c
+	}
+
+	return m
 }
 
 // IsPost Was the request made by POST?
@@ -290,156 +261,140 @@ func (r *HTTP) IsPatch() bool {
 }
 
 // PostParam returns post parameter
-func (r *Request) PostParam(name string) interface{} {
-	if b, ok := r.Body.(utils.DataTree); ok {
-		return b.Get(name)
-	}
-
-	return nil
+func (r *HTTP) PostParam(name string) interface{} {
+	return r.PostForm.Get(name)
 }
 
 // PostParamString returns post parameter as string
-func (r *Request) PostParamString(name string) string {
+func (r *HTTP) PostParamString(name string) string {
 	return r.PostParamStringDefault(name, "")
 }
 
 // PostParamInt returns post parameter as int
-func (r *Request) PostParamInt(name string) int {
+func (r *HTTP) PostParamInt(name string) int {
 	return r.PostParamIntDefault(name, 0)
 }
 
 // PostParamBool returns post parameter as bool
-func (r *Request) PostParamBool(name string) bool {
+func (r *HTTP) PostParamBool(name string) bool {
 	return r.PostParamBoolDefault(name, false)
 }
 
 // PostParamStringDefault returns post parameter as string or d
-func (r *Request) PostParamStringDefault(name string, d string) string {
-	if b, ok := r.Body.(utils.DataTree); ok {
-		vi := b.Get(name)
-		switch v := vi.(type) {
-		case []string:
-			if len(v) > 0 {
-				return v[0]
-			}
-			break
-
-		case string:
-			return v
+func (r *HTTP) PostParamStringDefault(name string, d string) string {
+	vi := r.PostForm.Get(name)
+	switch v := vi.(type) {
+	case []string:
+		if len(v) > 0 {
+			return v[0]
 		}
+		break
+
+	case string:
+		return v
 	}
 
 	return d
 }
 
 // PostParamIntDefault returns post parameter as int or d
-func (r *Request) PostParamIntDefault(name string, d int) int {
-	if b, ok := r.Body.(utils.DataTree); ok {
-		vi := b.Get(name)
-		switch v := vi.(type) {
-		case []string:
-			if len(v) > 0 {
-				if ret, err := strconv.Atoi(v[0]); err == nil {
-					return ret
-				}
-			}
-			break
-
-		case string:
-			if ret, err := strconv.Atoi(v); err == nil {
+func (r *HTTP) PostParamIntDefault(name string, d int) int {
+	vi := r.PostForm.Get(name)
+	switch v := vi.(type) {
+	case []string:
+		if len(v) > 0 {
+			if ret, err := strconv.Atoi(v[0]); err == nil {
 				return ret
 			}
-			break
-
-		case []float64:
-			if len(v) > 0 {
-				return int(v[0])
-			}
-			break
-
-		case float64:
-			return int(v)
 		}
+		break
+
+	case string:
+		if ret, err := strconv.Atoi(v); err == nil {
+			return ret
+		}
+		break
+
+	case []float64:
+		if len(v) > 0 {
+			return int(v[0])
+		}
+		break
+
+	case float64:
+		return int(v)
 	}
 
 	return d
 }
 
 // PostParamBoolDefault returns post parameter as bool or d
-func (r *Request) PostParamBoolDefault(name string, d bool) bool {
-	if b, ok := r.Body.(utils.DataTree); ok {
-		vi := b.Get(name)
-		switch v := vi.(type) {
-		case []string:
-			if len(v) > 0 {
-				if ret, err := strconv.ParseBool(v[0]); err == nil {
-					return ret
-				}
-			}
-			break
-
-		case string:
-			if ret, err := strconv.ParseBool(v); err == nil {
+func (r *HTTP) PostParamBoolDefault(name string, d bool) bool {
+	vi := r.PostForm.Get(name)
+	switch v := vi.(type) {
+	case []string:
+		if len(v) > 0 {
+			if ret, err := strconv.ParseBool(v[0]); err == nil {
 				return ret
 			}
-			break
 		}
+		break
+
+	case string:
+		if ret, err := strconv.ParseBool(v); err == nil {
+			return ret
+		}
+		break
 	}
 
 	return d
 }
 
 // PostParamFloatDefault returns post parameter as int or d
-func (r *Request) PostParamFloatDefault(name string, d float64) float64 {
-	if b, ok := r.Body.(utils.DataTree); ok {
-		vi := b.Get(name)
-		switch v := vi.(type) {
-		case []string:
-			if len(v) > 0 {
-				if ret, err := strconv.ParseFloat(v[0], 64); err == nil {
-					return ret
-				}
-			}
-			break
-
-		case string:
-			if ret, err := strconv.ParseFloat(v, 64); err == nil {
+func (r *HTTP) PostParamFloatDefault(name string, d float64) float64 {
+	vi := r.PostForm.Get(name)
+	switch v := vi.(type) {
+	case []string:
+		if len(v) > 0 {
+			if ret, err := strconv.ParseFloat(v[0], 64); err == nil {
 				return ret
 			}
-			break
 		}
+		break
+
+	case string:
+		if ret, err := strconv.ParseFloat(v, 64); err == nil {
+			return ret
+		}
+		break
 	}
 
 	return d
 }
 
 // PostParamMapDefault returns post parameter as int or d
-func (r *Request) PostParamMapDefault(name string, d map[string]interface{}) map[string]interface{} {
-	if b, ok := r.Body.(utils.DataTree); ok {
-		switch v := b.Get(name).(type) {
-		case []map[string]interface{}:
-			if len(v) > 0 {
-				return v[0]
-			}
-
-		case map[string]interface{}:
-			return v
-
-		case utils.DataTree:
-			return utils.MapFromDataTree(v)
+func (r *HTTP) PostParamMapDefault(name string, d map[string]interface{}) map[string]interface{} {
+	switch v := r.PostForm.Get(name).(type) {
+	case []map[string]interface{}:
+		if len(v) > 0 {
+			return v[0]
 		}
+
+	case map[string]interface{}:
+		return v
+
+	case utils.DataTree:
+		return utils.MapFromDataTree(v)
 	}
 
 	return d
 }
 
 // PostParams returns post parameters
-func (r *Request) PostParams() map[string]interface{} {
+func (r *HTTP) PostParams() map[string]interface{} {
 	p := make(map[string]interface{})
-	if b, ok := r.Body.(utils.DataTree); ok {
-		for k, v := range b {
-			p[k] = v
-		}
+	for k, v := range r.PostForm {
+		p[k] = v
 	}
 
 	return p
@@ -465,26 +420,210 @@ func (r *HTTP) GetHeaders() http.Header {
 	return r.Headers
 }
 
+func (r *HTTP) SetFileTransfer(t file.TransferInterface) {
+	r.Uploads = t
+}
+
+func (r HTTP) FileTransfer() file.TransferInterface {
+	return r.Uploads
+}
+
 // contentType returns the payload content type
 func (r *HTTP) contentType() int {
-	if r.Method == "GET" || r.Method == "HEAD" || r.Method == "OPTIONS" {
-		return contentNone
+	ct, _, err := mime.ParseMediaType(r.Header("Content-Type"))
+	if err != nil {
+		return contentText
 	}
 
-	ct := r.Headers.Get("content-type")
-	if strings.Contains(ct, "application/x-www-form-urlencoded") {
+	if ct == "" || strings.Contains(ct, "application/octet-stream") {
+		return contentStream
+	} else if strings.Contains(ct, "application/x-www-form-urlencoded") {
 		return contentFormData
-	}
-
-	if strings.Contains(ct, "multipart/form-data") {
+	} else if strings.Contains(ct, "multipart/form-data") {
 		return contentMultipart
-	}
-
-	if strings.Contains(ct, "application/json") {
+	} else if strings.Contains(ct, "application/json") {
 		return contentJSON
 	}
 
-	return contentStream
+	return contentText
+}
+
+func (r *HTTP) parseForm(rqs *http.Request) error {
+	var err error
+	if r.PostForm == nil {
+		if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" {
+			r.PostForm, err = r.parsePostForm(rqs)
+		}
+
+		if r.PostForm == nil {
+			r.PostForm = make(utils.DataTree)
+		}
+	}
+
+	if r.PostForm == nil {
+		if len(r.PostForm) > 0 {
+			r.Form = make(utils.DataTree)
+			copyValues(r.Form, r.PostForm)
+		}
+
+		newValues := make(utils.DataTree)
+		if rqs.URL != nil {
+			er := parseQuery(newValues, rqs.URL.RawQuery)
+			if err == nil {
+				err = er
+			}
+		}
+
+		if r.Form == nil {
+			r.Form = newValues
+		} else {
+			copyValues(r.Form, newValues)
+		}
+	}
+
+	return err
+}
+
+func (r *HTTP) parsePostForm(rqs *http.Request) (pf utils.DataTree, err error) {
+	pf = make(utils.DataTree)
+	if rqs.Body == nil {
+		err = errors.New("Missing form body")
+		return
+	}
+
+	rqs.Body = struct {
+		io.Reader
+		io.Closer
+	}{
+		Reader: io.LimitReader(rqs.Body, r.MaxRequestSize),
+		Closer: rqs.Body,
+	}
+
+	switch r.contentType() {
+	case contentFormData:
+		b, er := io.ReadAll(rqs.Body)
+		if er != nil {
+			if err == nil {
+				err = er
+			}
+			break
+		}
+
+		if int64(len(b)) > r.MaxRequestSize {
+			err = errors.New("Request is too large")
+			return
+		}
+
+		er = parseQuery(pf, string(b))
+		if err == nil {
+			err = er
+		}
+
+	case contentMultipart:
+		reader, er := rqs.MultipartReader()
+		if er != nil {
+			if err == nil {
+				err = errors.Wrap(er, "Unable to parse request body")
+				return
+			}
+			break
+		}
+
+		c := int64(0)
+	ReadBodyLoop:
+		for {
+			c++
+			if c > r.MaxFormSize {
+				log.Instance().Warning(errors.New("Form has too many values"), map[string]string{})
+				break ReadBodyLoop
+			}
+
+			p, er := reader.NextPart()
+			if er == io.EOF {
+				break ReadBodyLoop
+			} else if er == io.ErrUnexpectedEOF {
+				err = errors.New("Request is too large")
+				return
+			} else if er != nil {
+				log.Instance().Warning(errors.Wrap(err, "Error parsing multipart form data"), map[string]string{})
+				continue
+			}
+
+			if p.FileName() != "" {
+				f := file.NewUpload(p.FileName(), p)
+				if er = r.Uploads.UploadFile(f); er != nil {
+					log.Instance().Warning(errors.Wrap(err, "Error parsing multipart form data"), map[string]string{})
+					continue
+				}
+
+				pf.Push(p.FormName(), f)
+				if er == io.EOF {
+					break ReadBodyLoop
+				}
+			} else {
+				value, er := io.ReadAll(p)
+				if er == io.EOF {
+					break ReadBodyLoop
+				} else if er == io.ErrUnexpectedEOF {
+					err = errors.New("Request is too large")
+					return
+				} else if er != nil {
+					log.Instance().Warning(errors.Wrap(er, "Error parsing multipart form data"), map[string]string{})
+					continue
+				}
+
+				pf.Push(p.FormName(), string(value))
+			}
+		}
+
+	case contentStream:
+		b, er := io.ReadAll(rqs.Body)
+		if er != nil {
+			if err == nil {
+				err = er
+			}
+			break
+		}
+
+		if int64(len(b)) > r.MaxRequestSize {
+			err = errors.New("Request is too large")
+			return
+		}
+
+		er = parseQuery(pf, string(b))
+		if err == nil {
+			err = er
+		}
+
+	case contentJSON:
+		b, er := io.ReadAll(rqs.Body)
+		if er != nil {
+			if err == nil {
+				err = er
+			}
+			break
+		}
+
+		if int64(len(b)) > r.MaxRequestSize {
+			err = errors.New("Request is too large")
+			return
+		}
+
+		m := make(map[string]interface{})
+		if er := json.Unmarshal(b, &m); er != nil {
+			if err == nil {
+				err = errors.Wrap(er, "Unable to parse request")
+				return
+			}
+		}
+
+		for k, v := range m {
+			pf.Push(k, v)
+		}
+		break
+	}
+
+	return
 }
 
 // clientIP method returns client IP address from HTTP request
@@ -520,7 +659,7 @@ func (r *HTTP) clientIP() string {
 }
 
 // NewHTTPRequest creates new PSR7 compatible request using net/http request
-func NewHTTPRequest(r *http.Request, cfg *file.Config, proxyed bool) (ri Interface, err error) {
+func NewHTTPRequest(r *http.Request, ft file.TransferInterface, proxyed bool, maxsize int64, maxform int64) (ri Interface, err error) {
 	req := &HTTP{
 		Request:    &Request{},
 		original:   r,
@@ -533,8 +672,7 @@ func NewHTTPRequest(r *http.Request, cfg *file.Config, proxyed bool) (ri Interfa
 		Referer:    r.Referer(),
 		UserAgent:  r.UserAgent(),
 		Attributes: attributes.All(r),
-		fileCfg:    cfg,
-		FormData:   make(utils.DataTree),
+		Uploads:    ft,
 	}
 
 	req.Cks = make(map[string]*http.Cookie)
@@ -545,6 +683,8 @@ func NewHTTPRequest(r *http.Request, cfg *file.Config, proxyed bool) (ri Interfa
 	req.Prms = make(map[string]interface{})
 	req.RemoteAddr = req.clientIP()
 	req.Secure = r.URL.Scheme == "https"
+	req.MaxRequestSize = maxsize
+	req.MaxFormSize = maxform
 
 	if r.URL.RawPath != "" {
 		req.Path = r.URL.RawPath
@@ -556,45 +696,46 @@ func NewHTTPRequest(r *http.Request, cfg *file.Config, proxyed bool) (ri Interfa
 		req.Prms[k] = v[0]
 	}
 
-	for _, c := range r.Cookies() {
-		req.Cks[c.Name] = c
-	}
-
-	switch req.contentType() {
-	case contentNone:
-		return req, nil
-
-	case contentStream:
-		req.Body, err = ioutil.ReadAll(r.Body)
-		return req, err
-
-	case contentJSON:
-		bd, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			return req, errors.Wrap(err, "Unable to parse request")
-		}
-
-		if err = req.ParseJSONData(bd); err != nil {
-			return req, errors.Wrap(err, "Unable to parse request")
-		}
-		break
-
-	case contentMultipart:
-		if err = r.ParseMultipartForm(defaultMaxMemory); err != nil {
-			return nil, err
-		}
-
-		req.ParseMultipart(r)
-		//fallthrough
-	case contentFormData:
-		if err = r.ParseForm(); err != nil {
-			return nil, err
-		}
-
-		req.ParseData(r)
-		break
-	}
-
-	req.Parsed = true
 	return req, nil
+}
+
+func copyValues(dst, src utils.DataTree) {
+	for k, v := range src {
+		dst.Push(k, v)
+	}
+}
+
+func parseQuery(m utils.DataTree, query string) (err error) {
+	for query != "" {
+		var key string
+		key, query, _ = strings.Cut(query, "&")
+		if strings.Contains(key, ";") {
+			err = errors.Errorf("Invalid semicolon separator in query")
+			continue
+		}
+
+		if key == "" {
+			continue
+		}
+
+		key, value, _ := strings.Cut(key, "=")
+		key, err1 := url.QueryUnescape(key)
+		if err1 != nil {
+			if err == nil {
+				err = err1
+			}
+			continue
+		}
+		value, err1 = url.QueryUnescape(value)
+		if err1 != nil {
+			if err == nil {
+				err = err1
+			}
+			continue
+		}
+
+		m.Push(key, value)
+	}
+
+	return err
 }

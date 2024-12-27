@@ -7,11 +7,13 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/noxyicm/wsf/application/file"
 	"github.com/noxyicm/wsf/utils"
 )
 
 // Interface represents a net/http request maped to PSR7 compatible structure
 type Interface interface {
+	ParseBody() error
 	Context() context.Context
 	SetContext(ctx context.Context)
 	GetRequest() *http.Request
@@ -38,6 +40,8 @@ type Interface interface {
 	ActionName() string
 	SetPathInfo(path string) error
 	PathInfo() string
+	SetFileTransfer(file.TransferInterface)
+	FileTransfer() file.TransferInterface
 	Upload()
 	Clear() error
 	Destroy()
@@ -56,21 +60,28 @@ type Interface interface {
 
 // Request is a abstrackt request struct
 type Request struct {
-	Path       string
-	Proxyed    bool
-	Dispatched bool
-	MdlKey     string
-	Mdl        string
-	CtrlKey    string
-	Ctrl       string
-	ActKey     string
-	Act        string
-	SessID     string
-	Secure     bool
-	Prms       map[string]interface{}
-	Cks        map[string]*http.Cookie
-	RemoteAddr string
-	Body       interface{}
+	Path           string
+	Proxyed        bool
+	Dispatched     bool
+	MdlKey         string
+	Mdl            string
+	CtrlKey        string
+	Ctrl           string
+	ActKey         string
+	Act            string
+	SessID         string
+	Secure         bool
+	Prms           map[string]interface{}
+	Cks            map[string]*http.Cookie
+	RemoteAddr     string
+	Body           interface{}
+	MaxRequestSize int64
+	MaxFormSize    int64
+}
+
+// ParseBody reads request body and parses it into structures
+func (r *Request) ParseBody() error {
+	return nil
 }
 
 // GetRequest returns underlying request

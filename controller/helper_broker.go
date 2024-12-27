@@ -19,8 +19,8 @@ func (h *HelperBroker) AddHelper(hlp HelperInterface) error {
 }
 
 // SetHelper sets helper into stack with priority
-func (h *HelperBroker) SetHelper(priority int, hlp HelperInterface, options map[string]interface{}) error {
-	err := h.stack.Set(priority, hlp)
+func (h *HelperBroker) SetHelper(priority int, hlp HelperInterface, replace bool, options map[string]interface{}) error {
+	err := h.stack.Set(priority, hlp, replace)
 	if err != nil {
 		return err
 	}

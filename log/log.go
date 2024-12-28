@@ -2,9 +2,11 @@ package log
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
 	"github.com/noxyicm/wsf/config"
 	"github.com/noxyicm/wsf/errors"
 	"github.com/noxyicm/wsf/log/event"
@@ -183,7 +185,7 @@ func (l *Log) Logf(message interface{}, priority int, extras map[string]string, 
 	case int:
 		m = fmt.Sprintf(strconv.Itoa(msg), f...)
 	default:
-		m = "--- bad message format ---"
+		m = fmt.Sprintf("Bad message type. Expect: error, string, int. Got: %s", reflect.TypeOf(msg))
 	}
 
 	return l.Log(m, priority, extras)
@@ -300,7 +302,7 @@ func (l *Log) packEvent(message interface{}, priority int) (*event.Event, error)
 	case int:
 		e.Message = strconv.Itoa(msg)
 	default:
-		e.Message = "--- bad message format ---"
+		e.Message = fmt.Sprintf("Bad message type. Expect: error, string, int. Got: %s", reflect.TypeOf(msg))
 	}
 
 	return e, nil

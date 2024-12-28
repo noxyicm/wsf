@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/errors"
 
@@ -46,6 +47,9 @@ func (a *MySQL) Setup() {
 	a.driverConfig.Loc = a.Options.TimeFormat
 	a.driverConfig.Collation = a.Options.Charset
 	//TLSConfig
+	if a.Options.Port > 0 {
+		a.driverConfig.Addr = a.driverConfig.Addr + ":" + strconv.Itoa(a.Options.Port)
+	}
 
 	a.Unquoteable = []string{
 		"BETWEEN",

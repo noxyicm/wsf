@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -76,7 +77,25 @@ func (d DataTree) Get(k string) interface{} {
 func (d DataTree) Has(k string) bool {
 	keys := FetchIndexes(k)
 	if len(keys) > 0 {
-		return true
+		if len(keys) == 1 {
+			if _, ok := d[keys[0]]; ok {
+				return true
+			} else {
+				return false
+			}
+		}
+
+		if len(keys) == 2 && keys[1] == "" {
+			if _, ok := d[keys[0]]; ok {
+				return true
+			} else {
+				return false
+			}
+		}
+
+		if p, ok := d[keys[0]]; ok {
+			return p.(DataTree).Has(strings.Join(keys[1:], ""))
+		}
 	}
 
 	return false
@@ -85,12 +104,11 @@ func (d DataTree) Has(k string) bool {
 // Mount mounts data tree recursively
 func (d DataTree) Mount(i []string, v interface{}) {
 	if len(i) == 1 {
-		d[i[0]] = v
-		return
-	}
-
-	if len(i) == 2 && i[1] == "" {
-		d[i[0]] = v
+		if i[0] == "" {
+			d[strconv.Itoa(len(d))] = v
+		} else {
+			d[i[0]] = v
+		}
 		return
 	}
 
@@ -106,10 +124,6 @@ func (d DataTree) Mount(i []string, v interface{}) {
 // Unmount retrives data from tree recursively
 func (d DataTree) Unmount(i []string) interface{} {
 	if len(i) == 1 {
-		return d[i[0]]
-	}
-
-	if len(i) == 2 && i[1] == "" {
 		return d[i[0]]
 	}
 

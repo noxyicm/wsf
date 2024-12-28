@@ -534,7 +534,7 @@ func (r *HTTP) parsePostForm(rqs *http.Request) (pf utils.DataTree, err error) {
 		for {
 			c++
 			if c > r.MaxFormSize {
-				log.Instance().Warning(errors.New("Form has too many values"), map[string]string{})
+				log.Instance().Warning(errors.New("Form has too many values"), nil)
 				break ReadBodyLoop
 			}
 
@@ -545,18 +545,19 @@ func (r *HTTP) parsePostForm(rqs *http.Request) (pf utils.DataTree, err error) {
 				err = errors.New("Request is too large")
 				return
 			} else if er != nil {
-				log.Instance().Warning(errors.Wrap(err, "Error parsing multipart form data"), map[string]string{})
+				log.Instance().Warning(errors.Wrap(er, "Error parsing multipart form data"), nil)
 				continue
 			}
 
 			if p.FileName() != "" {
 				f := file.NewUpload(p.FileName(), p)
 				if er = r.Uploads.UploadFile(f); er != nil {
-					log.Instance().Warning(errors.Wrap(err, "Error parsing multipart form data"), map[string]string{})
+					log.Instance().Warning(errors.Wrap(er, "Error parsing multipart form data"), nil)
 					continue
 				}
 
 				pf.Push(p.FormName(), f)
+
 				if er == io.EOF {
 					break ReadBodyLoop
 				}
@@ -568,7 +569,7 @@ func (r *HTTP) parsePostForm(rqs *http.Request) (pf utils.DataTree, err error) {
 					err = errors.New("Request is too large")
 					return
 				} else if er != nil {
-					log.Instance().Warning(errors.Wrap(er, "Error parsing multipart form data"), map[string]string{})
+					log.Instance().Warning(errors.Wrap(er, "Error parsing multipart form data"), nil)
 					continue
 				}
 

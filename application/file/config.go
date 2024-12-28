@@ -73,7 +73,7 @@ func (c *Config) Populate(cfg config.Config) error {
 			mode := dirInfo.Mode()
 			if mode&os.ModeDir != os.ModeDir {
 				log.Warning(fmt.Sprintf("%s is not a directory", filepath.Join(config.StaticPath, c.Directory)), map[string]string{})
-			} else if mode&OS_USER_W != OS_USER_W || mode&OS_GROUP_W != OS_GROUP_W {
+			} else if mode&OS_USER_W != OS_USER_W {
 				log.Warning(fmt.Sprintf("Directory %s is not writable", filepath.Join(config.StaticPath, c.Directory)), map[string]string{})
 			}
 		}

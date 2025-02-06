@@ -10,10 +10,12 @@ type Config struct {
 	Priority                       int
 	BaseDir                        string
 	ViewBasePathSpec               string
-	ViewScriptPathSpec             string
-	ViewScriptPathNoControllerSpec string
+	ViewActionPathSpec             string
+	ViewActionPathNoControllerSpec string
+	ViewHelperPathSpec             string
 	ViewSuffix                     string
-	LayoutContentKey               string
+	SegmentContentKey              string
+	DefaultLayout                  string
 	Doctype                        string
 	Charset                        string
 	ContentType                    string
@@ -34,11 +36,13 @@ func (c *Config) Defaults() error {
 	c.Type = "default"
 	c.Priority = 5
 	c.BaseDir = ""
-	c.ViewBasePathSpec = "views/:module/"
-	c.ViewScriptPathSpec = "views/:module/:controller/:action.:suffix"
-	c.ViewScriptPathNoControllerSpec = "views/:module/:action.:suffix"
+	c.ViewBasePathSpec = "views/actions/:module/"
+	c.ViewActionPathSpec = "views/actions/:module/:controller/:action.:suffix"
+	c.ViewActionPathNoControllerSpec = "views/actions/:module/:action.:suffix"
+	c.ViewHelperPathSpec = "views/helpers/"
 	c.ViewSuffix = "gohtml"
-	c.LayoutContentKey = "content"
+	c.SegmentContentKey = "content"
+	c.DefaultLayout = "default"
 	c.Assign = make(map[string]interface{})
 	return nil
 }

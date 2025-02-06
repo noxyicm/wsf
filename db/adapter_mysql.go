@@ -445,6 +445,10 @@ func (a *MySQL) Dereference(v interface{}) interface{} {
 		return *t
 	case *mysql.NullTime:
 		return t.Time
+	case *sql.NullTime:
+		return t.Time
+	case sql.NullTime:
+		return t.Time
 	default:
 		return nil
 	}

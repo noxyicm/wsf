@@ -15,8 +15,6 @@ type Config struct {
 	ViewScriptPath  string
 	ViewBasePath    string
 	ViewSuffix      string
-	HelperName      string
-	PluginName      string
 }
 
 // Populate populates Config values using given Config source
@@ -38,8 +36,6 @@ func (c *Config) Defaults() error {
 	c.Layout = "layout"
 	c.ViewScriptPath = "layouts/"
 	c.ViewSuffix = "gohtml"
-	c.HelperName = TYPEHelperLayout
-	c.PluginName = TYPEPluginLayout
 
 	return nil
 }

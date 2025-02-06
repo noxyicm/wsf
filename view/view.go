@@ -3,11 +3,10 @@ package view
 import (
 	"html/template"
 	"path/filepath"
+
 	"github.com/noxyicm/wsf/config"
-	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/errors"
 	"github.com/noxyicm/wsf/log"
-	"github.com/noxyicm/wsf/view/helper"
 )
 
 var (
@@ -18,22 +17,24 @@ var (
 type Interface interface {
 	Priority() int
 	GetOptions() *Config
-	Render(ctx context.Context, script string, tpl string) ([]byte, error)
+	Render(data map[string]interface{}, script string, tpl string) ([]byte, error)
 	GetPaths() map[string]map[string]string
 	AddBasePath(path string, prefix string) error
 	GetBasePath() string
-	SetScriptPath(path string) error
-	GetScriptPath() string
-	SetScriptPathNoController(path string) error
-	GetScriptPathNoController() string
+	SetActionPath(path string) error
+	GetActionPath() string
+	SetActionPathNoController(path string) error
+	GetActionPathNoController() string
+	SetHelperPath(path string) error
+	GetHelperPath() string
 	SetSuffix(suffix string) error
 	GetSuffix() string
 	AddTemplatePath(path string) error
 	GetTemplatePaths() map[string]string
 	AddLayoutPath(path string) error
 	GetLayoutPaths() map[string]string
-	RegisterHelper(name string, hlp helper.Interface) error
-	Helper(name string) helper.Interface
+	RegisterHelper(name string, hlp HelperInterface) error
+	Helper(name string) HelperInterface
 	Assign(params map[string]interface{}) error
 	SetParam(key string, value interface{}) error
 	Param(key string) interface{}
@@ -42,6 +43,7 @@ type Interface interface {
 	ParamInt(key string, def int) int
 	AddTemplateFunc(string, interface{}) error
 	SetTemplateFunc(string, interface{}) error
+	TemplateFunctions() map[string]interface{}
 	RemoveTemplateFunc(string) error
 	PrepareLayouts() error
 	PrepareTemplates() error
@@ -53,14 +55,15 @@ type view struct {
 	Logger                         *log.Log
 	BaseDir                        string
 	ViewBasePathSpec               string
-	ViewScriptPathSpec             string
-	ViewScriptPathNoControllerSpec string
+	ViewActionPathSpec             string
+	ViewActionPathNoControllerSpec string
+	ViewHelperPathSpec             string
 	ViewSuffix                     string
 	paths                          map[string]map[string]string
-	helpers                        map[string]helper.Interface
+	helpers                        map[string]HelperInterface
 	params                         map[string]interface{}
 	templates                      map[string]*template.Template
-	layouts                        map[string]*TemplateData
+	layouts                        map[string]*template.Template
 	template                       *template.Template
 }
 
@@ -83,26 +86,37 @@ func (v *view) GetBasePath() string {
 	return v.ViewBasePathSpec
 }
 
-// SetScriptPath sets script path pattern
-func (v *view) SetScriptPath(path string) error {
-	v.ViewScriptPathSpec = path
+// SetActionPath sets script path pattern
+func (v *view) SetActionPath(path string) error {
+	v.ViewActionPathSpec = path
 	return nil
 }
 
-// GetScriptPath returns script path pattern
-func (v *view) GetScriptPath() string {
-	return v.ViewScriptPathSpec
+// GetActionPath returns script path pattern
+func (v *view) GetActionPath() string {
+	return v.ViewActionPathSpec
 }
 
-// SetScriptPathNoController sets script path pattern without controller specification
-func (v *view) SetScriptPathNoController(path string) error {
-	v.ViewScriptPathNoControllerSpec = path
+// SetActionPathNoController sets script path pattern without controller specification
+func (v *view) SetActionPathNoController(path string) error {
+	v.ViewActionPathNoControllerSpec = path
 	return nil
 }
 
-// SetScriptPathNoController returns script path pattern
-func (v *view) GetScriptPathNoController() string {
-	return v.ViewScriptPathNoControllerSpec
+// SetActionPathNoController returns script path pattern
+func (v *view) GetActionPathNoController() string {
+	return v.ViewActionPathNoControllerSpec
+}
+
+// SetHelperPath sets view helper path pattern
+func (v *view) SetHelperPath(path string) error {
+	v.ViewHelperPathSpec = path
+	return nil
+}
+
+// GetHelperPath returns view helper path pattern
+func (v *view) GetHelperPath() string {
+	return v.ViewHelperPathSpec
 }
 
 // SetSuffix sets path file suffix
@@ -148,7 +162,11 @@ func (v *view) GetLayoutPaths() map[string]string {
 
 // AddHelperPath adds a path to helpers
 func (v *view) AddHelperPath(path string, prefix string) error {
-	v.paths["helper"][filepath.FromSlash(path)] = prefix
+	if _, ok := v.paths["helpers"]; !ok {
+		v.paths["helpers"] = make(map[string]string)
+	}
+
+	v.paths["helpers"][filepath.FromSlash(path)] = prefix
 	return nil
 }
 
@@ -219,7 +237,7 @@ func (v *view) ParamInt(key string, def int) int {
 }
 
 // RegisterHelper registers a view helper
-func (v *view) RegisterHelper(name string, hlp helper.Interface) error {
+func (v *view) RegisterHelper(name string, hlp HelperInterface) error {
 	if _, ok := v.helpers[name]; ok {
 		return errors.Errorf("View helper by name '%s' is already registered", name)
 	}
@@ -229,7 +247,7 @@ func (v *view) RegisterHelper(name string, hlp helper.Interface) error {
 }
 
 // Helper returns view helper by its name
-func (v *view) Helper(name string) helper.Interface {
+func (v *view) Helper(name string) HelperInterface {
 	if hlp, ok := v.helpers[name]; ok {
 		return hlp
 	}

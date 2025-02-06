@@ -67,7 +67,7 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *context.Route
 
 	path := req.PathInfo()
 	if r.Options.ModulePrefix != "" {
-		if strings.Index(path, r.Options.ModulePrefix) >= 0 {
+		if strings.Contains(path, r.Options.ModulePrefix) {
 			path = strings.Replace(path, r.Options.ModulePrefix, "", 1)
 			//path = r.Options.ModulePrefix + path
 		} else {
@@ -163,8 +163,8 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *context.Route
 		return false, nil
 	}
 
-	//values = utils.MapSSMerge(values, wildcardData)
-	values = utils.MapSSMerge(r.Defs, values)
+	// values = utils.MapSSMerge(values, wildcardData)
+	// values = utils.MapSSMerge(r.Defs, values)
 
 	for _, value := range r.Vars {
 		if _, ok := values[value]; !ok {
@@ -174,10 +174,12 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *context.Route
 		}
 	}
 
-	return true, &context.RouteMatch{Values: values, WildcardData: wildcardData, Name: r.Name(), Match: true}
+	return true, &context.RouteMatch{Defaults: r.Defs, Values: values, WildcardData: wildcardData, Name: r.Name(), Match: true}
 }
 
 // Assemble assembles user submitted parameters forming a URL path defined by this route
+// TODO
+// Make posible to use current route params for assembly
 func (r *Route) Assemble(data map[string]interface{}, reset bool, encode bool) (string, error) {
 	partial := false
 	//var locale string
@@ -195,7 +197,6 @@ func (r *Route) Assemble(data map[string]interface{}, reset bool, encode bool) (
 	urlParts := make([]string, 0)
 	wildcardData := make(map[string]string)
 	flag := false
-
 	for key, part := range r.Parts {
 		name := r.Vars[key]
 		useDefault := false
@@ -204,7 +205,7 @@ func (r *Route) Assemble(data map[string]interface{}, reset bool, encode bool) (
 		}
 
 		if name != "" {
-			if !reset && !useDefault && utils.MapSKeyExists(name, data) && data[name] != "" && data[name] != nil {
+			if !useDefault && utils.MapSKeyExists(name, data) && data[name] != "" && data[name] != nil {
 				value, err = utils.InterfaceToString(data[name])
 				if err != nil {
 					return "", errors.Wrapf(err, "Unable to assemble route '%s': Value '%s' can not be converted to string", r.RouteName, name)

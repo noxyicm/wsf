@@ -11,6 +11,7 @@ import (
 	"github.com/noxyicm/wsf/log"
 	"github.com/noxyicm/wsf/registry"
 	"github.com/noxyicm/wsf/utils"
+	"github.com/noxyicm/wsf/view"
 )
 
 const (
@@ -115,6 +116,13 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, rqs request.Interface,
 	mtd, ok := reflect.TypeOf(ctrl).MethodByName(act)
 	if !ok {
 		return true, errors.Errorf("Action '%s' does not exists", act)
+	}
+
+	vw := registry.GetResource("view")
+	if vw != nil {
+		if err := ctrl.SetView(vw.(view.Interface)); err != nil {
+			d.Logger().Notice(err, nil)
+		}
 	}
 
 	ctrl.SetHelperBroker(GetHelperBroker())

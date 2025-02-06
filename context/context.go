@@ -2,7 +2,6 @@ package context
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -46,8 +45,9 @@ type Context interface {
 	ParamString(key string) string
 	ParamInt(key string) int
 	Params() map[string]interface{}
-	AddError(msg string)
-	Errors() []string
+	AddError(err error)
+	Error() error
+	Errors() []error
 	SetRequest(req request.Interface) error
 	Request() request.Interface
 	SetResponse(rsp response.Interface) error
@@ -68,7 +68,7 @@ type DefaultContext struct {
 	route    *RouteMatch
 	params   map[string]interface{}
 	data     map[string]interface{}
-	errors   []string
+	errors   []error
 	mu       sync.Mutex
 }
 
@@ -129,19 +129,19 @@ func (c *DefaultContext) SetValue(key interface{}, value interface{}) error {
 
 // SetDataValue injects a data value into context
 func (c *DefaultContext) SetDataValue(key string, value interface{}) error {
-	/*var d map[string]interface{}
-	sd := c.context.Value(ContextData)
-	if v, ok := sd.(map[string]interface{}); ok {
-		d = v
-	} else {
-		d = make(map[string]interface{})
-	}
+	// var d map[string]interface{}
+	// sd := c.context.Value(ContextData)
+	// if v, ok := sd.(map[string]interface{}); ok {
+	// 	d = v
+	// } else {
+	// 	d = make(map[string]interface{})
+	// }
 
-	d[key] = value
-	c.context = context.WithValue(c.context, ContextData, d)*/
-	if _, ok := c.data[key]; ok {
-		return errors.New("Overloading of existing data keys is not allowed")
-	}
+	// d[key] = value
+	// c.context = context.WithValue(c.context, ContextData, d)
+	// if _, ok := c.data[key]; ok {
+	// 	return errors.New("Overloading of existing data keys is not allowed")
+	// }
 
 	c.data[key] = value
 	return nil
@@ -149,14 +149,14 @@ func (c *DefaultContext) SetDataValue(key string, value interface{}) error {
 
 // DataValue returns a stored data value
 func (c *DefaultContext) DataValue(key string) interface{} {
-	/*d := c.context.Value(ContextData)
-	if v, ok := d.(map[string]interface{}); ok {
-		if v, ok := v[key]; ok {
-			return v
-		}
-	}
+	// d := c.context.Value(ContextData)
+	// if v, ok := d.(map[string]interface{}); ok {
+	// 	if v, ok := v[key]; ok {
+	// 		return v
+	// 	}
+	// }
 
-	return nil*/
+	// return nil
 	if v, ok := c.data[key]; ok {
 		return v
 	}
@@ -259,12 +259,23 @@ func (c *DefaultContext) Params() map[string]interface{} {
 }
 
 // AddError adds an error mesage to context
-func (c *DefaultContext) AddError(msg string) {
-	c.errors = append(c.errors, msg)
+func (c *DefaultContext) AddError(err error) {
+	c.errors = append(c.errors, err)
+}
+
+// Error extracts and returns first error in the queue
+func (c *DefaultContext) Error() error {
+	if len(c.errors) == 0 {
+		return nil
+	}
+
+	err := c.errors[0]
+	c.errors = append([]error{}, c.errors[1:]...)
+	return err
 }
 
 // Errors returns stack of context error messages
-func (c *DefaultContext) Errors() []string {
+func (c *DefaultContext) Errors() []error {
 	return c.errors
 }
 
@@ -295,7 +306,7 @@ func (c *DefaultContext) Destroy() {
 	c.response = nil
 	c.params = make(map[string]interface{})
 	c.data = make(map[string]interface{})
-	c.errors = make([]string, 0)
+	c.errors = make([]error, 0)
 }
 
 // Cancel context
@@ -310,7 +321,7 @@ func NewContext(ctx context.Context) (Context, error) {
 	c := &DefaultContext{
 		params: make(map[string]interface{}),
 		data:   make(map[string]interface{}),
-		errors: make([]string, 0),
+		errors: make([]error, 0),
 	}
 
 	if ctx == nil {
@@ -323,6 +334,7 @@ func NewContext(ctx context.Context) (Context, error) {
 
 // RouteMatch is a matched route values
 type RouteMatch struct {
+	Defaults     map[string]string
 	Values       map[string]string
 	WildcardData map[string]string
 	Name         string

@@ -1,13 +1,17 @@
 package layout
 
 import (
+	"bytes"
 	"html/template"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/noxyicm/wsf/config"
-	"github.com/noxyicm/wsf/context"
-	"github.com/noxyicm/wsf/controller"
 	"github.com/noxyicm/wsf/errors"
 	"github.com/noxyicm/wsf/filter"
 	"github.com/noxyicm/wsf/registry"
+	"github.com/noxyicm/wsf/utils"
 	"github.com/noxyicm/wsf/view"
 	"github.com/noxyicm/wsf/view/helper/placeholder"
 	"github.com/noxyicm/wsf/view/helper/placeholder/container"
@@ -34,8 +38,6 @@ type Interface interface {
 	Priority() int
 	SetView(v view.Interface) error
 	GetView() view.Interface
-	InitMvc() error
-	InitPlugin() error
 	SetViewBasePath(path string) error
 	GetViewBasePath() string
 	SetViewScriptPath(path string) error
@@ -56,7 +58,8 @@ type Interface interface {
 	Assign(key string, value interface{}) error
 	Get(key string) interface{}
 	Populate(data map[string]interface{})
-	Render(ctx context.Context, script string) ([]byte, error)
+	Render(data map[string]interface{}, script string) ([]byte, error)
+	GetOptions() *Config
 }
 
 // NewLayout creates a new layout
@@ -103,6 +106,7 @@ type DefaultLayout struct {
 	PluginName      string
 	Values          map[string]interface{}
 	Templates       map[string]*template.Template
+	paths           map[string]map[string]string
 }
 
 // Init the layout
@@ -113,14 +117,8 @@ func (l *DefaultLayout) Init(options *Config) (b bool, err error) {
 	l.ViewScriptPath = options.ViewScriptPath
 	l.ViewSuffix = options.ViewSuffix
 	l.ContentKey = options.ContentKey
-	l.HelperName = options.HelperName
-	l.PluginName = options.PluginName
 	l.InflectorTarget = options.InflectorTarget
 	l.Container = placeholder.GetRegistry().GetContainer(l.Options.ContentKey)
-
-	if err := l.InitMvc(); err != nil {
-		return false, err
-	}
 
 	SetInstance(l)
 	return true, nil
@@ -137,12 +135,79 @@ func (l *DefaultLayout) Setup() (bool, error) {
 		return false, errors.New("[Layout] View resource is not configured")
 	}
 
+	if err := l.AddLayoutPath(l.ViewScriptPath); err != nil {
+		return false, errors.Wrapf(err, "[Layout] Unable to add layout path")
+	}
+
+	err := l.prepareLayouts()
+	if err != nil {
+		return false, err
+	}
+
 	return true, nil
 }
 
 // Priority of the resource
 func (l *DefaultLayout) Priority() int {
 	return l.Options.Priority
+}
+
+func (l *DefaultLayout) GetOptions() *Config {
+	return l.Options
+}
+
+// prepareLayouts parses a layout templates files
+func (l *DefaultLayout) prepareLayouts() error {
+	for _, path := range l.paths["layouts"] {
+		err := utils.WalkDirectoryDeep(filepath.Join(config.AppPath, filepath.FromSlash(path)), filepath.Join(config.AppPath, filepath.FromSlash(path)), l.readLayouts)
+		if err != nil {
+			switch err.(type) {
+			case *os.PathError:
+				return errors.Wrap(err, "[Layout] Unable to read layout directory")
+
+			default:
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// readLayouts loads and parses layout template into memory, extending
+// all existing templates
+func (l *DefaultLayout) readLayouts(path string, info os.FileInfo, err error) error {
+	if err != nil {
+		return errors.Errorf("Scanning source '%s' failed: %v", path, err)
+	}
+
+	if info.IsDir() || strings.HasPrefix(info.Name(), ".") {
+		return nil
+	}
+
+	tplFile, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer tplFile.Close()
+
+	tplRaw := make([]byte, info.Size())
+	_, err = tplFile.Read(tplRaw)
+	if err != nil {
+		return err
+	}
+
+	relPath, err := filepath.Rel(config.AppPath, path)
+	if err != nil {
+		return err
+	}
+
+	l.Templates[relPath], err = template.New(l.ContentKey).Funcs(template.FuncMap(l.View.TemplateFunctions())).Parse(string(tplRaw))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // SetView sets a reference for view to layout
@@ -154,41 +219,6 @@ func (l *DefaultLayout) SetView(v view.Interface) error {
 // GetView returns assosiated view
 func (l *DefaultLayout) GetView() view.Interface {
 	return l.View
-}
-
-// InitMvc initialize MVC
-func (l *DefaultLayout) InitMvc() error {
-	viewResource := registry.GetResource("view")
-	if v, ok := viewResource.(view.Interface); ok {
-		if err := v.AddLayoutPath(l.GetViewScriptPath()); err != nil {
-			return err
-		}
-	}
-
-	// if err := l.InitPlugin(); err != nil {
-	// 	return err
-	// }
-
-	if err := l.InitHelper(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// InitPlugin initialize layout plugin
-func (l *DefaultLayout) InitPlugin() error {
-	if !controller.HasPlugin(l.Options.PluginName) {
-		plg, err := NewLayoutPlugin()
-		if err != nil {
-			return err
-		}
-
-		plg.(*Plugin).SetLayout(l)
-		controller.RegisterPlugin(plg, 99)
-	}
-
-	return nil
 }
 
 // InitHelper initialize layout helper
@@ -314,6 +344,21 @@ func (l *DefaultLayout) GetMvcSuccessfulActionOnly() bool {
 	return false
 }
 
+// AddLayoutPath adds a path to layout templates
+func (l *DefaultLayout) AddLayoutPath(path string) error {
+	if _, ok := l.paths["layouts"]; !ok {
+		l.paths["layouts"] = make(map[string]string)
+	}
+
+	l.paths["layouts"][filepath.FromSlash(path)] = filepath.FromSlash(path)
+	return nil
+}
+
+// GetLayoutPaths returns registered layout template paths
+func (l *DefaultLayout) GetLayoutPaths() map[string]string {
+	return l.paths["layouts"]
+}
+
 // Assign variable to layout
 func (l *DefaultLayout) Assign(key string, value interface{}) error {
 
@@ -333,7 +378,7 @@ func (l *DefaultLayout) Populate(data map[string]interface{}) {
 }
 
 // Render layout
-func (l *DefaultLayout) Render(ctx context.Context, name string) ([]byte, error) {
+func (l *DefaultLayout) Render(data map[string]interface{}, name string) ([]byte, error) {
 	if name == "" {
 		name = l.Options.Layout
 	}
@@ -344,12 +389,24 @@ func (l *DefaultLayout) Render(ctx context.Context, name string) ([]byte, error)
 		}
 	}
 
-	view := l.GetView()
-	if view == nil {
-		return nil, errors.New("[Layout] view is not set")
+	script := l.GetViewScriptPath() + name
+	if t, ok := l.Templates[script]; ok {
+		wr := &bytes.Buffer{}
+		err := t.ExecuteTemplate(wr, l.ContentKey, data)
+		if err != nil {
+			return nil, errors.Wrapf(err, "[Layout] Unable to execute template '%s'", script)
+		}
+
+		b := make([]byte, wr.Len())
+		_, err = wr.Read(b)
+		if err != nil {
+			return nil, errors.Wrapf(err, "[Layout] Unable to execute template '%s'", script)
+		}
+
+		return b, nil
 	}
 
-	return view.Render(ctx, l.GetViewScriptPath()+name, name)
+	return nil, errors.Errorf("[Layout] Template by name '%s' not found", script)
 }
 
 // NewLayoutDefault creates a new default layout
@@ -358,5 +415,6 @@ func NewLayoutDefault(options *Config) (Interface, error) {
 		Options:   options,
 		Values:    make(map[string]interface{}),
 		Templates: make(map[string]*template.Template),
+		paths:     make(map[string]map[string]string),
 	}, nil
 }

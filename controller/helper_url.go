@@ -16,8 +16,9 @@ func init() {
 
 // URL is a action helper that handles urls
 type URL struct {
-	name string
-	View view.Interface
+	name            string
+	View            view.Interface
+	throwExceptions bool
 }
 
 // Name returns helper name
@@ -41,18 +42,19 @@ func (h *URL) PostDispatch(ctx context.Context) error {
 }
 
 // Assemble returns an url
-func (h *URL) Assemble(ctx context.Context, params map[string]interface{}, name string, reset bool, encode bool) (string, error) {
+func (h *URL) Assemble(ctx context.Context, params map[string]interface{}, name string, reset bool, encode bool) string {
 	url, err := Router().Assemble(ctx, params, name, reset, encode)
-	if err != nil {
+	if err != nil && h.throwExceptions {
 		panic(err)
 	}
 
-	return url, nil
+	return url
 }
 
 // NewURLHelper creates new URL action helper
 func NewURLHelper() (HelperInterface, error) {
 	return &URL{
-		name: "URL",
+		name:            "URL",
+		throwExceptions: false,
 	}, nil
 }

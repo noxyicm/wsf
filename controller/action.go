@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"reflect"
+
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/controller/request"
 	"github.com/noxyicm/wsf/controller/response"
@@ -68,6 +69,8 @@ func (c *ActionControllerBase) Dispatch(ctx context.Context, ctrl ActionControll
 	err := c.Hlpr.NotifyPreDispatch(ctx)
 	if err != nil {
 		return err
+	} else if err := ctx.Error(); err != nil {
+		return err
 	}
 
 	err = c.PreDispatch(ctx)
@@ -80,6 +83,8 @@ func (c *ActionControllerBase) Dispatch(ctx context.Context, ctrl ActionControll
 		if !ctx.Response().IsRedirect() {
 			err = c.Invoke(ctx, ctrl, m)
 			if err != nil {
+				return err
+			} else if err := ctx.Error(); err != nil {
 				return err
 			}
 		}
@@ -95,6 +100,8 @@ func (c *ActionControllerBase) Dispatch(ctx context.Context, ctrl ActionControll
 	// state
 	err = c.Hlpr.NotifyPostDispatch(ctx)
 	if err != nil {
+		return err
+	} else if err := ctx.Error(); err != nil {
 		return err
 	}
 
@@ -232,6 +239,8 @@ func (c *ActionControllerBase) View() view.Interface {
 
 // Invoke calls an action
 func (c *ActionControllerBase) Invoke(ctx context.Context, ctrl ActionControllerInterface, m reflect.Method) error {
+	defer c.invokeRecover(ctx)
+
 	if err := c.verifySignature(m); err != nil {
 		return err
 	}
@@ -251,7 +260,7 @@ func (c *ActionControllerBase) Invoke(ctx context.Context, ctrl ActionController
 
 // ViewScript returns path to view script
 func (c *ActionControllerBase) ViewScript(ctx context.Context, action string, noController bool) (string, error) {
-	if !c.ParamBool("noViewRenderer") && c.Hlpr.HasHelper("viewRenderer") {
+	if !c.ParamBool("noViewRenderer") && c.Hlpr.HasHelper("ViewRenderer") {
 		viewRenderer, err := c.Hlpr.GetHelper("viewRenderer")
 		if err != nil {
 			return "", err
@@ -259,6 +268,14 @@ func (c *ActionControllerBase) ViewScript(ctx context.Context, action string, no
 
 		if noController {
 			viewRenderer.(*ViewRenderer).SetNoController(noController)
+		}
+
+		if action != "" {
+			return viewRenderer.(*ViewRenderer).ViewScript(map[string]string{
+				"module":     ctx.Request().ModuleName(),
+				"controller": ctx.Request().ControllerName(),
+				"action":     action,
+			})
 		}
 
 		return viewRenderer.(*ViewRenderer).ViewScript(map[string]string{
@@ -394,6 +411,18 @@ func (c *ActionControllerBase) resolveValue(v reflect.Type, arg interface{}) (re
 	registry.Set("view", c.Vw)
 	return c.Vw, nil
 }*/
+
+func (c *ActionControllerBase) invokeRecover(ctx context.Context) {
+	if r := recover(); r != nil {
+		switch er := r.(type) {
+		case error:
+			ctx.AddError(errors.Wrap(er, "Unxpected error equired"))
+
+		default:
+			ctx.AddError(errors.Errorf("Unxpected error equired: %v", er))
+		}
+	}
+}
 
 // NewActionControllerBase creates an instance of action controller
 func NewActionControllerBase() (c *ActionControllerBase, err error) {

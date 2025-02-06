@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/controller"
 	"github.com/noxyicm/wsf/controller/request"
@@ -43,6 +44,7 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *context.Route
 	} else {
 		return false, nil
 	}
+
 	path = strings.Trim(path, r.Options.URIDelimiter)
 	params := rqs.Params()
 	values := make(map[string]string)
@@ -58,7 +60,6 @@ func (r *Route) Match(req request.Interface, partial bool) (bool, *context.Route
 		values[rqs.ActionKey()] = "get"
 
 		pathElementCount := len(parts)
-
 		// Check for "special get" URI's
 		var specialGetTarget string
 		if pathElementCount > 0 && (parts[0] == "index" || parts[0] == "new") {

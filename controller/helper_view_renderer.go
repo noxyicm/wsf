@@ -1,12 +1,14 @@
 package controller
 
 import (
+	"html/template"
 	"regexp"
 
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/errors"
 	"github.com/noxyicm/wsf/filter"
 	"github.com/noxyicm/wsf/filter/word"
+	"github.com/noxyicm/wsf/layout"
 	"github.com/noxyicm/wsf/registry"
 	"github.com/noxyicm/wsf/utils"
 	"github.com/noxyicm/wsf/view"
@@ -29,15 +31,14 @@ func init() {
 // ViewRenderer is a action helper that handles render
 type ViewRenderer struct {
 	name                           string
-	moduleDir                      string
-	inflectorTarget                string
-	viewScriptPathNoControllerSpec string
-	viewScriptPathSpec             string
+	viewActionPathNoControllerSpec string
+	viewActionPathSpec             string
 	viewBasePathSpec               string
 	neverController                bool
 	neverRender                    bool
 	noController                   bool
 	noRender                       bool
+	ignoreLayoutErrors             bool
 	responseSegment                string
 	scriptAction                   string
 	viewSuffix                     string
@@ -64,11 +65,11 @@ func (vr *ViewRenderer) PostDispatch(ctx context.Context) error {
 	if vr.shouldRender(ctx) {
 		if ctx.ParamBool(context.LayoutEnabledKey) {
 			if layout := ctx.ParamString(context.LayoutKey); layout != "" {
-				return vr.Render(ctx, layout, false)
+				return vr.Render(ctx, layout, vr.View.GetOptions().SegmentContentKey, false)
 			}
-		}
 
-		return vr.Render(ctx, vr.View.GetOptions().LayoutContentKey, false)
+			return vr.Render(ctx, vr.View.GetOptions().DefaultLayout, vr.View.GetOptions().SegmentContentKey, false)
+		}
 	}
 
 	return nil
@@ -149,9 +150,9 @@ func (vr *ViewRenderer) ViewScript(params map[string]string) (string, error) {
 
 	var inflectorTarget string
 	if vr.noController || vr.neverController {
-		inflectorTarget = vr.viewScriptPathNoControllerSpec
+		inflectorTarget = vr.viewActionPathNoControllerSpec
 	} else {
-		inflectorTarget = vr.viewScriptPathSpec
+		inflectorTarget = vr.viewActionPathSpec
 	}
 
 	inflector.SetTarget(inflectorTarget)
@@ -164,28 +165,38 @@ func (vr *ViewRenderer) ViewScript(params map[string]string) (string, error) {
 	return filtered.(string), nil
 }
 
-// RenderScript renders script
-func (vr *ViewRenderer) RenderScript(ctx context.Context, script string, name string) error {
-	if name == "" {
-		name = vr.GetResponseSegment()
-	}
-
+// RenderAction renders script
+func (vr *ViewRenderer) RenderAction(data map[string]interface{}, script string, name string) ([]byte, error) {
 	if vr.View == nil {
-		return errors.New("View is not initialized")
+		return []byte{}, errors.New("View is not initialized")
 	}
 
-	rendered, err := vr.View.Render(ctx, script, name)
+	rendered, err := vr.View.Render(data, script, name)
 	if err != nil {
-		return err
+		return []byte{}, err
 	}
 
-	ctx.Response().AppendBody(rendered, vr.GetResponseSegment())
-	ctx.SetParam("noRender", true)
-	return nil
+	return rendered, nil
+}
+
+// RenderLayout renders layout script
+func (vr *ViewRenderer) RenderLayout(data map[string]interface{}, script string) ([]byte, error) {
+	l := registry.GetResource("layout")
+	if l == nil {
+		return []byte{}, errors.New("Layout resource is not itialized")
+	}
+	layoutResource := l.(layout.Interface)
+
+	rendered, err := layoutResource.Render(data, script)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	return rendered, nil
 }
 
 // Render the script for action
-func (vr *ViewRenderer) Render(ctx context.Context, name string, noController bool) error {
+func (vr *ViewRenderer) Render(ctx context.Context, name string, segment string, noController bool) error {
 	path, err := vr.ViewScript(map[string]string{
 		"module":     ctx.Request().ModuleName(),
 		"controller": ctx.Request().ControllerName(),
@@ -195,7 +206,33 @@ func (vr *ViewRenderer) Render(ctx context.Context, name string, noController bo
 		return errors.Wrap(err, "[ViewRenderer] Render error")
 	}
 
-	return vr.RenderScript(ctx, path, name)
+	rendered, err := vr.RenderAction(ctx.Data(), path, segment)
+	if err != nil {
+		return errors.Wrap(err, "[ViewRenderer] Render error1")
+	}
+
+	l := registry.GetResource("layout")
+	if l == nil && !vr.ignoreLayoutErrors {
+		return errors.New("Layout resource is not itialized")
+	} else if l == nil && vr.ignoreLayoutErrors {
+		ctx.Response().AppendBody(rendered, segment)
+		ctx.SetParam("noRender", true)
+		return nil
+	}
+	layoutResource := l.(layout.Interface)
+
+	rsp := ctx.Response()
+	body := rsp.GetBody()
+	data := utils.MapSMerge(ctx.Data(), body)
+	data[segment] = template.HTML(rendered)
+	rendered, err = layoutResource.Render(data, name)
+	if err != nil {
+		return errors.Wrap(err, "[ViewRenderer] Render error2")
+	}
+
+	ctx.Response().SetBody(rendered)
+	ctx.SetParam("noRender", true)
+	return nil
 }
 
 // ViewSuffix retrives view suffix
@@ -236,8 +273,8 @@ func (vr *ViewRenderer) initView(options map[string]interface{}) (err error) {
 		"scriptAction":                   "",
 		"responseSegment":                "",
 		"viewBasePathSpec":               vr.View.GetBasePath(),
-		"viewScriptPathSpec":             vr.View.GetScriptPath(),
-		"viewScriptPathNoControllerSpec": vr.View.GetScriptPathNoController(),
+		"viewActionPathSpec":             vr.View.GetActionPath(),
+		"viewActionPathNoControllerSpec": vr.View.GetActionPathNoController(),
 		"viewSuffix":                     vr.View.GetSuffix(),
 	}
 
@@ -275,7 +312,7 @@ func (vr *ViewRenderer) setOptions(options map[string]interface{}) error {
 				vr.noRender = param
 			}
 
-		case "responseSegment", "scriptAction", "viewBasePathSpec", "viewScriptPathSpec", "viewScriptPathNoControllerSpec", "viewSuffix":
+		case "responseSegment", "scriptAction", "viewBasePathSpec", "viewActionPathSpec", "viewActionPathNoControllerSpec", "viewSuffix":
 			param := ""
 			if v, ok := value.(string); ok {
 				param = v
@@ -291,11 +328,11 @@ func (vr *ViewRenderer) setOptions(options map[string]interface{}) error {
 			case "viewBasePathSpec":
 				vr.viewBasePathSpec = param
 
-			case "viewScriptPathSpec":
-				vr.viewScriptPathSpec = param
+			case "viewActionPathSpec":
+				vr.viewActionPathSpec = param
 
-			case "viewScriptPathNoControllerSpec":
-				vr.viewScriptPathNoControllerSpec = param
+			case "viewActionPathNoControllerSpec":
+				vr.viewActionPathNoControllerSpec = param
 
 			case "viewSuffix":
 				vr.viewSuffix = param

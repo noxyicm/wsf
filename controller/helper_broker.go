@@ -79,6 +79,8 @@ func (h *HelperBroker) ResetHelpers() {
 
 // NotifyPreDispatch notifyes action helpers of preDispatch state
 func (h *HelperBroker) NotifyPreDispatch(ctx context.Context) error {
+	defer h.dispatchRecover(ctx)
+
 	for _, v := range h.stack.Helpers() {
 		err := v.PreDispatch(ctx)
 		if err != nil {
@@ -91,6 +93,8 @@ func (h *HelperBroker) NotifyPreDispatch(ctx context.Context) error {
 
 // NotifyPostDispatch notifyes action helpers of postDispatch state
 func (h *HelperBroker) NotifyPostDispatch(ctx context.Context) error {
+	defer h.dispatchRecover(ctx)
+
 	for _, v := range h.stack.Helpers() {
 		err := v.PostDispatch(ctx)
 		if err != nil {
@@ -103,6 +107,18 @@ func (h *HelperBroker) NotifyPostDispatch(ctx context.Context) error {
 
 func (h *HelperBroker) normalizeHelperName(name string) string {
 	return name
+}
+
+func (h *HelperBroker) dispatchRecover(ctx context.Context) {
+	if r := recover(); r != nil {
+		switch er := r.(type) {
+		case error:
+			ctx.AddError(errors.Wrap(er, "Unxpected error equired"))
+
+		default:
+			ctx.AddError(errors.Errorf("Unxpected error equired: %v", er))
+		}
+	}
 }
 
 // NewHelperBroker creates new HelperBroker

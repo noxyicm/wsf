@@ -184,11 +184,6 @@ func (m *Manager) SessionStart(rqs request.Interface, rsp response.Interface) (I
 		return nil, "", errors.New("[Session] Manager is not initialized")
 	}
 
-	autostart := m.Opts.SessionAutostart
-	if v := rqs.Context().Value(AutostartKey); v != nil {
-		autostart = v.(bool)
-	}
-
 	setcookie := m.Opts.EnableSetCookie
 	if v := rqs.Context().Value(SetCookieKey); v != nil {
 		setcookie = v.(bool)
@@ -200,9 +195,7 @@ func (m *Manager) SessionStart(rqs request.Interface, rsp response.Interface) (I
 		if err != nil {
 			return nil, "", errors.Wrap(err, "[Session] Unable to start session")
 		}
-	}
-
-	if s, ok := m.Sessions.Load(sid); ok {
+	} else if s, ok := m.Sessions.Load(sid); ok {
 		return s.(Interface), sid, nil
 	}
 
@@ -218,13 +211,11 @@ func (m *Manager) SessionStart(rqs request.Interface, rsp response.Interface) (I
 				return nil, "", errors.Wrap(err, "[Session] Unable to start session")
 			}
 		}
-	} else if autostart {
+	} else {
 		sid, err = m.NewSID()
 		if err != nil {
 			return nil, "", errors.Wrap(err, "[Session] Unable to start session")
 		}
-	} else {
-		return nil, "", nil
 	}
 
 	if setcookie {

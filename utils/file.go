@@ -30,7 +30,7 @@ func WalkDirectoryDeep(bPath string, rPath string, walkFn filepath.WalkFunc) err
 		}
 
 		path = filepath.Join(rPath, name)
-		if err == nil && info.Mode() == os.ModeSymlink {
+		if info.Mode() == os.ModeSymlink {
 			var symlinkPath string
 			symlinkPath, err = filepath.EvalSymlinks(path)
 			if err != nil {

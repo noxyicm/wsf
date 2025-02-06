@@ -2,7 +2,6 @@ package resource
 
 import (
 	"github.com/noxyicm/wsf/auth"
-	_ "github.com/noxyicm/wsf/auth/adapter"
 	"github.com/noxyicm/wsf/config"
 )
 

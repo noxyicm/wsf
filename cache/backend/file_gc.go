@@ -50,7 +50,6 @@ func (g *FileGC) Init(options config.Config) (bool, error) {
 // Start the gc
 func (g *FileGC) Start() {
 	go g.startRoutine()
-	return
 }
 
 // Check filepath, read file and remove it if needed

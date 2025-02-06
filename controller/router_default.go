@@ -107,10 +107,11 @@ func (r *DefaultRouter) Match(ctx context.Context, req request.Interface) (bool,
 func (r *DefaultRouter) Assemble(ctx context.Context, params map[string]interface{}, name string, reset bool, encode bool) (string, error) {
 	if name == "" {
 		name = ctx.CurrentRouteName()
-		//params = utils.MapSMerge(ctx.CurrentRoute().Values, params)
-		//if !reset {
-		//	params = utils.MapSMerge(params, ctx.CurrentRoute().WildcardData)
-		//}
+	}
+
+	if !reset {
+		params = utils.MapSMerge(ctx.CurrentRoute().Values, params)
+		params = utils.MapSMerge(ctx.CurrentRoute().WildcardData, params)
 	}
 
 	params = utils.MapSMerge(params, r.GlobalParams)
@@ -195,7 +196,8 @@ func (r *DefaultRouter) StripLanguage(uri string, lang string) string {
 
 // SetRequestParams sets matched parameters to request
 func (r *DefaultRouter) SetRequestParams(req request.Interface, params *context.RouteMatch) error {
-	for param, value := range params.Values {
+	combined := utils.MapSSMerge(params.Defaults, params.Values)
+	for param, value := range combined {
 		if !req.HasParam(param) {
 			req.SetParam(param, value)
 		}

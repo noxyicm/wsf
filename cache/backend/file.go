@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	// TYPEFile represents file backend cache
+	// TYPEFile is a name of backend cache
 	TYPEFile = "file"
 )
 

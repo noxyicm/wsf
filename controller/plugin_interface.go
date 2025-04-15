@@ -4,6 +4,11 @@ import (
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/controller/request"
 	"github.com/noxyicm/wsf/controller/response"
+	"github.com/noxyicm/wsf/errors"
+)
+
+var (
+	buildPluginHandlers = map[string]func(string) (PluginInterface, error){}
 )
 
 // PluginInterface represents controller plugin
@@ -22,6 +27,20 @@ type WithExceptionInterface interface {
 	SetThrowExceptions(bool)
 	ThrowExceptions() bool
 	ErrorHandling()
+}
+
+// NewPluginType creates a new controller plugin from given type and options
+func NewPlugin(pluginType string, pluginName string) (pi PluginInterface, err error) {
+	if f, ok := buildPluginHandlers[pluginType]; ok {
+		return f(pluginName)
+	}
+
+	return nil, errors.Errorf("Unrecognized controller plugin type \"%v\"", pluginType)
+}
+
+// RegisterPluginType registers a handler for controller plugin creation
+func RegisterPluginType(pluginType string, handler func(string) (PluginInterface, error)) {
+	buildPluginHandlers[pluginType] = handler
 }
 
 // PluginAbstract is a extendable plugin base
@@ -65,8 +84,8 @@ func (p *PluginAbstract) DispatchLoopShutdown(ctx context.Context, rqs request.I
 }
 
 // NewPluginAbstract creates a plugin abstract instance
-func NewPluginAbstract(name string) *PluginAbstract {
+func NewPluginAbstract(name string) (*PluginAbstract, error) {
 	return &PluginAbstract{
 		name: name,
-	}
+	}, nil
 }

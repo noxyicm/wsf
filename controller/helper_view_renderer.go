@@ -374,8 +374,8 @@ func (vr *ViewRenderer) getBasePath(params map[string]string) (string, error) {
 }
 
 // NewViewRendererHelper creates new ViewRenderer action helper
-func NewViewRendererHelper() (HelperInterface, error) {
+func NewViewRendererHelper(name string) (HelperInterface, error) {
 	return &ViewRenderer{
-		name: "ViewRenderer",
+		name: name,
 	}, nil
 }

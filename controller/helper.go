@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	buildHelperHandlers = map[string]func() (HelperInterface, error){}
+	buildHelperHandlers = map[string]func(string) (HelperInterface, error){}
 )
 
 // HelperInterface represents action helper interface
@@ -43,12 +43,12 @@ func (h *AbstractHelper) PostDispatch(ctx context.Context) error {
 }
 
 // NewHelper creates a new action helper specified by type
-func NewHelper(helperType string) (HelperInterface, error) {
+func NewHelper(helperType string, name string) (HelperInterface, error) {
 	if f, ok := buildHelperHandlers[helperType]; ok {
-		return f()
+		return f(name)
 	}
 
-	return nil, errors.Errorf("Unrecognized helper type \"%v\"", helperType)
+	return nil, errors.Errorf("Unrecognized controller helper type \"%v\"", helperType)
 }
 
 // NewHelperAbstract creates new instance of AbstractHelper
@@ -59,6 +59,6 @@ func NewHelperAbstract(name string) *AbstractHelper {
 }
 
 // RegisterHelper registers a handler for action helper creation
-func RegisterHelper(helperType string, handler func() (HelperInterface, error)) {
+func RegisterHelper(helperType string, handler func(string) (HelperInterface, error)) {
 	buildHelperHandlers[helperType] = handler
 }

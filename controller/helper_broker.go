@@ -34,29 +34,11 @@ func (h *HelperBroker) HasHelper(name string) bool {
 	return h.stack.Has(name)
 }
 
-// GetExistingHelper returns a registered action helper by name
-func (h *HelperBroker) GetExistingHelper(name string) (HelperInterface, error) {
-	name = h.normalizeHelperName(name)
-	if h.stack.Has(name) {
-		return h.stack.Get(name), nil
-	}
-
-	return nil, errors.Errorf("Helper by name %s does not exists", name)
-}
-
-// GetHelper returns a registered action helper by name and initializes if needed
+// GetHelper returns a registered action helper by name
 func (h *HelperBroker) GetHelper(name string) (HelperInterface, error) {
 	name = h.normalizeHelperName(name)
 	if h.stack.Has(name) {
 		return h.stack.Get(name), nil
-	}
-
-	if hlpr, err := NewHelper(name); err == nil {
-		if err := h.AddHelper(hlpr); err != nil {
-			return nil, err
-		}
-
-		return hlpr, nil
 	}
 
 	return nil, errors.Errorf("Helper by name %s does not exists", name)

@@ -52,9 +52,9 @@ func (h *URL) Assemble(ctx context.Context, params map[string]interface{}, name 
 }
 
 // NewURLHelper creates new URL action helper
-func NewURLHelper() (HelperInterface, error) {
+func NewURLHelper(name string) (HelperInterface, error) {
 	return &URL{
-		name:            "URL",
+		name:            name,
 		throwExceptions: false,
 	}, nil
 }

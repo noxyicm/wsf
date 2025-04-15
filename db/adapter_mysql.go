@@ -32,7 +32,7 @@ type MySQL struct {
 
 // Setup the adapter
 func (a *MySQL) Setup() {
-	a.identifierSymbol = "`"
+	a.IdentifierSymbol = "`"
 	a.AutoQuoteIdentifiers = true
 	a.PingTimeout = time.Duration(a.Options.PingTimeout) * time.Second
 	a.QueryTimeout = time.Duration(a.Options.QueryTimeout) * time.Second

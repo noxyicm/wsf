@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
 	"github.com/noxyicm/wsf/config"
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/errors"
@@ -115,13 +116,13 @@ type DefaultAdapter struct {
 	ConnectionMaxLifeTime      int
 	MaxIdleConnections         int
 	MaxOpenConnections         int
-	inTransaction              bool
-	identifierSymbol           string
+	InTransaction              bool
+	IdentifierSymbol           string
 	AutoQuoteIdentifiers       bool
 	AllowSerialization         bool
 	AutoReconnectOnUnserialize bool
-	lastInsertID               int
-	lastInsertUUID             string
+	LastInsertID               int
+	LastInsertUUID             string
 
 	Unquoteable          []string
 	Spliters             []string
@@ -351,10 +352,10 @@ func (a *DefaultAdapter) Insert(ctx context.Context, table string, data map[stri
 
 	lastInsertID, err := result.LastInsertId()
 	if err == nil {
-		a.lastInsertID = int(lastInsertID)
+		a.LastInsertID = int(lastInsertID)
 	}
 
-	return a.lastInsertID, nil
+	return a.LastInsertID, nil
 }
 
 // Update updates rows into table be condition
@@ -697,7 +698,7 @@ func (a *DefaultAdapter) QuoteIdentifierAs(ident interface{}, alias string, auto
 
 // QuoteIdentifierSymbol returns symbol of identifier quote
 func (a *DefaultAdapter) QuoteIdentifierSymbol() string {
-	return a.identifierSymbol
+	return a.IdentifierSymbol
 }
 
 // QuoteColumnAs quote a column identifier and alias

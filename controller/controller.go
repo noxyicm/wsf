@@ -30,10 +30,12 @@ type Interface interface {
 	RegisterPlugin(plugin PluginInterface, priority int) error
 	HasPlugin(name string) bool
 	Plugin(name string) PluginInterface
+	IncludePlugin(tp string, name string, priority int) (PluginInterface, error)
 	SetHelperBroker(broker *HelperBroker) error
 	HelperBroker() *HelperBroker
 	HasHelper(name string) bool
 	Helper(name string) HelperInterface
+	IncludeHelper(tp string, name string, priority int, options map[string]interface{}) (HelperInterface, error)
 }
 
 // Controller base struct
@@ -104,6 +106,24 @@ func (c *Controller) Plugin(name string) PluginInterface {
 	return c.plugins.Get(name)
 }
 
+// IncludePlugin registers a plugin to controller if not exists and returns its instance
+func (c *Controller) IncludePlugin(tp string, name string, priority int) (PluginInterface, error) {
+	if c.plugins.Has(name) {
+		return c.plugins.Get(name), nil
+	}
+
+	p, err := NewPlugin(tp, name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "Unable to include controller plugin of type '%s'", tp)
+	}
+
+	if err = c.plugins.Register(p, priority); err != nil {
+		return nil, errors.Wrapf(err, "Unable to include controller plugin of type '%s'", tp)
+	}
+
+	return p, nil
+}
+
 // SetHelperBroker sets helper broker
 func (c *Controller) SetHelperBroker(broker *HelperBroker) (err error) {
 	if broker != nil {
@@ -132,6 +152,24 @@ func (c *Controller) HasHelper(name string) bool {
 func (c *Controller) Helper(name string) HelperInterface {
 	h, _ := c.helpers.GetHelper(name)
 	return h
+}
+
+// IncludeHelper returns controller Halper, creates and initializes if not exists
+func (c *Controller) IncludeHelper(tp string, name string, priority int, options map[string]interface{}) (HelperInterface, error) {
+	if c.helpers.HasHelper(name) {
+		return c.helpers.GetHelper(name)
+	}
+
+	h, err := NewHelper(tp, name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "Unable to include controller helper of type '%s'", tp)
+	}
+
+	if err = c.helpers.SetHelper(priority, h, false, options); err != nil {
+		return nil, errors.Wrapf(err, "Unable to include controller helper of type '%s'", tp)
+	}
+
+	return h, nil
 }
 
 // NewController creates a new controller specified by type
@@ -217,6 +255,11 @@ func Plugin(name string) PluginInterface {
 	return main.Plugin(name)
 }
 
+// IncludePlugin registers a plugin to controller if not exists and returns its instance
+func IncludePlugin(tp string, name string, priority int) (PluginInterface, error) {
+	return main.IncludePlugin(tp, name, priority)
+}
+
 // GetHelperBroker returns controller helper broker
 func GetHelperBroker() *HelperBroker {
 	return main.HelperBroker()
@@ -230,4 +273,9 @@ func HasHelper(name string) bool {
 // Helper returns a helper by its name
 func Helper(name string) HelperInterface {
 	return main.Helper(name)
+}
+
+// IncludeHelper returns controller Halper, creates and initializes if not exists
+func IncludeHelper(tp string, name string, priority int, options map[string]interface{}) (HelperInterface, error) {
+	return main.IncludeHelper(tp, name, priority, options)
 }

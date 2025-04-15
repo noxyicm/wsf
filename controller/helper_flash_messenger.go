@@ -287,10 +287,10 @@ func (h *FlashMessenger) dispatchRecover(ctx context.Context) {
 }
 
 // NewFlashMessengerHelper creates new FlashMessenger action helper
-func NewFlashMessengerHelper() (HelperInterface, error) {
+func NewFlashMessengerHelper(name string) (HelperInterface, error) {
 	return &FlashMessenger{
 		enabled:   false,
-		name:      "FlashMessenger",
+		name:      name,
 		Namespace: "default",
 	}, nil
 }

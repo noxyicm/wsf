@@ -84,9 +84,9 @@ func (h *JSON) Encode(data interface{}, encodeData bool) (encoded []byte, err er
 }
 
 // NewJSONHelper creates new JSON action helper
-func NewJSONHelper() (HelperInterface, error) {
+func NewJSONHelper(name string) (HelperInterface, error) {
 	js := &JSON{
-		name:         "JSON",
+		name:         name,
 		suppressExit: false,
 	}
 

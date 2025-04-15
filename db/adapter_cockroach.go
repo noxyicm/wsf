@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/errors"
 
@@ -41,7 +42,7 @@ type Cockroach struct {
 
 // Setup the adapter
 func (a *Cockroach) Setup() {
-	a.identifierSymbol = `"`
+	a.IdentifierSymbol = `"`
 	a.AutoQuoteIdentifiers = true
 	a.PingTimeout = time.Duration(a.Options.PingTimeout) * time.Second
 	a.QueryTimeout = time.Duration(a.Options.QueryTimeout) * time.Second
@@ -228,12 +229,12 @@ func (a *Cockroach) Insert(ctx context.Context, table string, data map[string]in
 	qctx, cancel := goctx.WithTimeout(ctx, time.Duration(a.QueryTimeout)*time.Second)
 	defer cancel()
 
-	err = stmt.QueryRowContext(qctx, binds...).Scan(&a.lastInsertID)
+	err = stmt.QueryRowContext(qctx, binds...).Scan(&a.LastInsertID)
 	if err != nil {
 		return 0, errors.Wrap(err, "CockroachDB insert Error")
 	}
 
-	return a.lastInsertID, nil
+	return a.LastInsertID, nil
 }
 
 // Update updates rows into table be condition

@@ -7,6 +7,15 @@ import (
 	"github.com/noxyicm/wsf/errors"
 )
 
+const (
+	// TYPEControllerPluginTypeErrorHandler name of the type of the plugin
+	TYPEControllerPluginTypeErrorHandler = "ErrorHandler"
+)
+
+func init() {
+	RegisterPluginType(TYPEControllerPluginTypeErrorHandler, NewErrorHandlerPlugin)
+}
+
 // ErrorHandler is a plugin for handling errors
 type ErrorHandler struct {
 	name                           string
@@ -126,7 +135,7 @@ func (p *ErrorHandler) handleError(ctx context.Context, rqs request.Interface, r
 		return true, nil
 	}
 
-	encounteredError := rqs.Param("ErrorHandler")
+	encounteredError := rqs.Param(p.name)
 	if encounteredError != nil {
 		if len(rsp.Exceptions()) > encounteredError.(*errors.Exception).Encountered {
 			return false, rsp.Exceptions()[len(rsp.Exceptions())-1]
@@ -146,7 +155,7 @@ func (p *ErrorHandler) handleError(ctx context.Context, rqs request.Interface, r
 		err.Encountered = len(exceptions)
 
 		// Forward to the error handler
-		rqs.SetParam("ErrorHandler", err)
+		rqs.SetParam(p.name, err)
 		rqs.SetModuleName(p.ErrorHandlerModule())
 		rqs.SetControllerName(p.ErrorHandlerController())
 		rqs.SetActionName(p.ErrorHandlerAction())
@@ -157,9 +166,9 @@ func (p *ErrorHandler) handleError(ctx context.Context, rqs request.Interface, r
 }
 
 // NewErrorHandlerPlugin creates a new error handling plugin
-func NewErrorHandlerPlugin() (PluginInterface, error) {
+func NewErrorHandlerPlugin(name string) (PluginInterface, error) {
 	return &ErrorHandler{
-		name:         "ErrorHandler",
+		name:         name,
 		module:       "index",
 		controller:   "error",
 		action:       "error",

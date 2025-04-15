@@ -163,8 +163,8 @@ func (vl *ViewLayout) shouldRender(ctx context.Context) bool {
 }
 
 // NewViewLayoutHelper creates new ViewLayout action helper
-func NewViewLayoutHelper() (HelperInterface, error) {
+func NewViewLayoutHelper(name string) (HelperInterface, error) {
 	return &ViewLayout{
-		name: "ViewLayout",
+		name: name,
 	}, nil
 }

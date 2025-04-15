@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
 	"github.com/noxyicm/wsf/context"
 	"github.com/noxyicm/wsf/controller/request"
 	"github.com/noxyicm/wsf/errors"
@@ -173,9 +174,9 @@ func (h *Redirector) checkCode(code int) bool {
 }
 
 // NewRedirectorHelper creates new Redirector action helper
-func NewRedirectorHelper() (HelperInterface, error) {
+func NewRedirectorHelper(name string) (HelperInterface, error) {
 	return &Redirector{
-		name:           "Redirector",
+		name:           name,
 		Code:           302,
 		UseAbsoluteURI: false,
 	}, nil

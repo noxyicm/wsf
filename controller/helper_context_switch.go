@@ -611,9 +611,9 @@ func (h *ContextSwitch) ViewRenderer() *ViewRenderer {
 }
 
 // NewContextSwitchHelper creates a new context switch helper
-func NewContextSwitchHelper() (HelperInterface, error) {
+func NewContextSwitchHelper(name string) (HelperInterface, error) {
 	cs := &ContextSwitch{
-		name:           "ContextSwitch",
+		name:           name,
 		Contexts:       make(map[string]*SwitchableContext),
 		ContextKey:     "contexts",
 		ContextParam:   "format",

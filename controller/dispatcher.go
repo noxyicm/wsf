@@ -126,8 +126,8 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, rqs request.Interface,
 	}
 
 	ctrl.SetHelperBroker(GetHelperBroker())
-	if !d.ParamBool("noViewRenderer") && !ctrl.HelperBroker().HasHelper("ViewRenderer") {
-		vr, err := NewViewRendererHelper()
+	if !d.ParamBool("noViewRenderer") && !ctrl.HelperBroker().HasHelper(TYPEHelperViewRenderer) {
+		vr, err := NewViewRendererHelper(TYPEHelperViewRenderer)
 		if err != nil {
 			return true, err
 		}

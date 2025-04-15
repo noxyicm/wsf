@@ -49,8 +49,8 @@ func (c *Default) Dispatcher() DispatcherInterface {
 
 // Dispatch dispatches the reauest into the dispatcher loop
 func (c *Default) Dispatch(ctx context.Context, rqs request.Interface, rsp response.Interface) error {
-	if c.ErrorHandling() && !c.plugins.Has("ErrorHandler") {
-		p, err := NewErrorHandlerPlugin()
+	if c.ErrorHandling() && !c.plugins.Has(TYPEControllerPluginTypeErrorHandler) {
+		p, err := NewErrorHandlerPlugin(TYPEControllerPluginTypeErrorHandler)
 		if err != nil {
 			return err
 		}
